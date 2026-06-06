@@ -14,6 +14,8 @@
 - `src/lib/validation.ts`: frontend validation.
 - `src/lib/migrations.ts`: frontend migration/export preparation.
 - `src/lib/lorebookCompat.ts`: SillyTavern embedded world book memo and `entry.extensions.*` compatibility helpers.
+- `src/lib/tokenEstimate.ts`: lightweight heuristic token estimator for UI labels and statistics.
+- `src/lib/tokenStats.ts`: card-wide estimated token statistics for text fields, prompt previews, lorebook entries, and counted asset references.
 - `src/lib/tauri.ts`: frontend Tauri command wrappers.
 - `src/lib/ai.ts`: AI settings, model fetch, chat wrappers, stream handling.
 - `src/lib/aiAgent.ts`: normalized AI editing surface and patch application.

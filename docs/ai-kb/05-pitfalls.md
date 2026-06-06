@@ -32,6 +32,8 @@ Backend CHARX export supports asset entries, but README says the UI does not yet
 
 Asset image `data:` URIs can be very large. Do not render them into controlled `<input>` fields by default on tab mount; this can block the resources page when switching tabs. Use the folded summary/edit-on-demand pattern in `AssetsPanel`.
 
+Do not feed inline image `data:` URI payloads into token statistics. Count ordinary external/embed references, but skip data URI bytes and surface a skipped count instead; otherwise a cover image can swamp the card text estimate and slow the stats page.
+
 ## Asset Uploads After Deletes
 
 Asset uploads read files asynchronously. Do not append uploaded assets using a captured `assets` array from the component render, because deletes or other edits can make that snapshot stale before `FileReader` finishes. Use store append helpers that read the latest card state, and keep cover upload separate from ordinary image upload.

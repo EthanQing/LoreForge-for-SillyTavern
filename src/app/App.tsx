@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   BookOpen,
+  BarChart3,
   CheckCircle2,
   FileBox,
   FileText,
@@ -26,6 +27,7 @@ import { LorebookPanel } from "../features/lorebook/LorebookPanel";
 import { AssetsPanel } from "../features/assets/AssetsPanel";
 import { PreviewPanel } from "../features/card-editor/PreviewPanel";
 import { ValidationPanel } from "../features/card-editor/ValidationPanel";
+import { TokenStatsPanel } from "../features/card-editor/TokenStatsPanel";
 import { SettingsPanel } from "../features/settings/SettingsPanel";
 import { AiChatDrawer } from "../features/ai-chat/AiChatDrawer";
 import { ContextMenu } from "../components/ContextMenu";
@@ -42,6 +44,7 @@ const tabs = [
   { id: "lorebook", labelKey: "nav.lorebook", icon: BookOpen },
   { id: "assets", labelKey: "nav.assets", icon: Image },
   { id: "preview", labelKey: "nav.preview", icon: Sparkles },
+  { id: "tokenStats", labelKey: "nav.tokenStats", icon: BarChart3 },
   { id: "validation", labelKey: "nav.validation", icon: CheckCircle2 },
   { id: "settings", labelKey: "nav.settings", icon: Settings }
 ] satisfies Array<{ id: string; labelKey: TranslationKey; icon: typeof Home }>;
@@ -61,6 +64,8 @@ function ActivePanel() {
       return <AssetsPanel />;
     case "preview":
       return <PreviewPanel />;
+    case "tokenStats":
+      return <TokenStatsPanel />;
     case "validation":
       return <ValidationPanel />;
     case "settings":

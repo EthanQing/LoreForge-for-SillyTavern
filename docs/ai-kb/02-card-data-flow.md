@@ -96,6 +96,8 @@ CHARX:
 
 `src/features/assets/AssetsPanel.tsx` folds large inline `data:` asset URIs by default and shows a lightweight summary row. Render the full URI input only when the user chooses to edit it; putting long base64 image data directly into controlled inputs can make tab switches feel blocked.
 
+Token statistics follow the same performance rule. `src/lib/tokenStats.ts` counts card text, prompt-preview text, lorebook content/keys/memos, and non-`data:` asset references, but skips inline image `data:` URI payloads so a cover image does not dominate estimates or make the stats page expensive to render.
+
 ## Asset UI Semantics
 
 The Assets panel edits the current card's CCv3 `data.assets`; it is not a SillyTavern global media library. Cover upload owns the main portrait asset (`type: "icon"`, `name: "main"`) and converts it to PNG data for card preview/export. Image upload appends one or more ordinary image assets (`type: "other"`) for later manual classification as background, emotion, user icon, or other. The manual add button creates an empty reference asset for advanced `uri` values such as external URLs, `embeded://...`, or `ccdefault:` and should not create an implicit cover.

@@ -31,6 +31,7 @@ Current tabs:
 - `lorebook`: embedded character book.
 - `assets`: image/assets management.
 - `preview`: prompt/card preview.
+- `tokenStats`: estimated token statistics for card text, prompt previews, greetings, lorebook entries, and counted asset references.
 - `validation`: validation issues.
 - `settings`: AI/API settings.
 
