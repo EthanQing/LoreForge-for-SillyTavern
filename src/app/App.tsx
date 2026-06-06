@@ -8,6 +8,7 @@ import {
   Image,
   MessageSquareText,
   Moon,
+  Save,
   Settings,
   Sparkles,
   Sun,
@@ -27,6 +28,11 @@ import { PreviewPanel } from "../features/card-editor/PreviewPanel";
 import { ValidationPanel } from "../features/card-editor/ValidationPanel";
 import { SettingsPanel } from "../features/settings/SettingsPanel";
 import { AiChatDrawer } from "../features/ai-chat/AiChatDrawer";
+import { ContextMenu } from "../components/ContextMenu";
+import { getCardDisplayName, getCardIdentity } from "./cardIdentity";
+import { useProjectActions } from "./useProjectActions";
+
+import { PageTransition } from "../components/PageTransition";
 
 const tabs = [
   { id: "home", labelKey: "nav.project", icon: Home },
@@ -71,9 +77,12 @@ export function App() {
   const setActiveTab = useCardStore((state) => state.setActiveTab);
   const card = useCardStore((state) => state.card);
   const dirty = useCardStore((state) => state.dirty);
+  const currentPath = useCardStore((state) => state.currentPath);
+  const cardOrigin = useCardStore((state) => state.cardOrigin);
   const theme = useCardStore((state) => state.theme);
   const setTheme = useCardStore((state) => state.setTheme);
   const report = useCardStore((state) => state.report);
+  const { saveCurrentCard } = useProjectActions();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -97,8 +106,23 @@ export function App() {
     return () => window.removeEventListener("beforeunload", warnOnLeave);
   }, [dirty]);
 
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      if (event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") {
+        return;
+      }
+      event.preventDefault();
+      void saveCurrentCard();
+    };
+
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [saveCurrentCard]);
+
+  const cardIdentity = getCardIdentity(cardOrigin, currentPath, t);
+
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-context-menu="workspace">
       <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark" aria-hidden="true">
@@ -138,13 +162,22 @@ export function App() {
       </aside>
       <section className="workspace">
         <header className="topbar">
-          <div>
-            <strong>{card.data.nickname || card.data.name || t("app.untitledCard")}</strong>
+          <div className="topbar-title">
+            <strong>{getCardDisplayName(card, t)}</strong>
             <span>{card.spec} / {card.spec_version}</span>
+            <div className="active-card-meta" title={cardIdentity.detail}>
+              <span className={`document-pill document-pill-${cardIdentity.tone}`}>{cardIdentity.label}</span>
+              <span className="document-path">{cardIdentity.detail}</span>
+            </div>
           </div>
           <div className="topbar-status">
-            <Button className="topbar-ai-button" icon={<Sparkles size={17} />} onClick={() => setAiChatOpen(true)}>
-              {t("aiChat.title")}
+            <Button
+              className={dirty ? "topbar-save-button topbar-save-button-dirty" : "topbar-save-button"}
+              icon={<Save size={15} />}
+              title={`${t("common.save")} (Ctrl/Cmd+S)`}
+              onClick={() => void saveCurrentCard()}
+            >
+              {t("common.save")}
             </Button>
             <span className={dirty ? "state-pill state-pill-hot" : "state-pill"}>{dirty ? t("common.unsaved") : t("common.saved")}</span>
             <span className={report.valid ? "state-pill" : "state-pill state-pill-hot"}>
@@ -154,11 +187,19 @@ export function App() {
         </header>
         <div className="workspace-scroll">
           <ErrorBoundary resetKey={activeTab}>
-            <ActivePanel key={activeTab} />
+            <PageTransition activeKey={activeTab}>
+              <ActivePanel key={activeTab} />
+            </PageTransition>
           </ErrorBoundary>
         </div>
       </section>
+      {!aiChatOpen ? (
+        <button className="ai-chat-fab" type="button" aria-label={t("a11y.aiChat")} title={t("aiChat.title")} onClick={() => setAiChatOpen(true)}>
+          <Sparkles size={22} aria-hidden="true" />
+        </button>
+      ) : null}
       <AiChatDrawer open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+      <ContextMenu />
     </main>
   );
 }

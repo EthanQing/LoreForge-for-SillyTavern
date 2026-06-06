@@ -17,7 +17,7 @@ export function PreviewPanel() {
   const prompt = buildPromptPreview(card, greeting);
 
   return (
-    <section className="panel preview-panel">
+    <section className="panel preview-panel" data-context-menu="preview">
       <div className="panel-heading">
         <h2>{t("preview.title")}</h2>
       </div>

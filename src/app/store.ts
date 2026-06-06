@@ -8,10 +8,19 @@ import { defaultAiSettings, normalizeAiSettings } from "../lib/ai";
 import { translate } from "../lib/i18n";
 
 const DRAFT_KEY = "sillytavern-card-creator:draft";
+const DRAFT_META_KEY = "sillytavern-card-creator:draft-meta";
 const RECENT_KEY = "sillytavern-card-creator:recent";
 const AI_SETTINGS_KEY = "sillytavern-card-creator:ai-settings";
 
-interface RecentItem {
+export type CardOrigin = "draft" | "file" | "new";
+
+interface DraftMeta {
+  currentPath: string | null;
+  origin: CardOrigin;
+  dirty: boolean;
+}
+
+export interface RecentItem {
   path: string;
   name: string;
   savedAt: number;
@@ -21,6 +30,8 @@ interface CardStore {
   card: CharacterCardV3;
   report: ValidationReport;
   dirty: boolean;
+  currentPath: string | null;
+  cardOrigin: CardOrigin;
   activeTab: string;
   status: string;
   recent: RecentItem[];
@@ -31,7 +42,7 @@ interface CardStore {
   setTheme: (theme: "light" | "dark") => void;
   updateAiSettings: (settings: Partial<AiSettings>) => void;
   setAiModels: (models: AiModel[]) => void;
-  replaceCard: (card: CharacterCardV3, options?: { dirty?: boolean; status?: string; path?: string }) => void;
+  replaceCard: (card: CharacterCardV3, options?: { dirty?: boolean; status?: string; path?: string; origin?: CardOrigin }) => void;
   updateData: <K extends keyof CharacterCardV3["data"]>(key: K, value: CharacterCardV3["data"][K]) => void;
   updateCard: (updater: (card: CharacterCardV3) => CharacterCardV3) => void;
   applyAgentCard: (card: CharacterCardV3, status?: string) => void;
@@ -44,8 +55,10 @@ interface CardStore {
   removeLorebookEntry: (index: number) => void;
   reorderLorebookEntry: (from: number, to: number) => void;
   addAsset: (asset: CardAsset) => void;
+  addAssets: (assets: CardAsset[]) => void;
   updateAsset: (index: number, updater: (asset: CardAsset) => CardAsset) => void;
   removeAsset: (index: number) => void;
+  removeRecent: (path: string) => void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,6 +97,29 @@ function loadRecent(): RecentItem[] {
   }
 }
 
+function normalizeOrigin(value: unknown): CardOrigin {
+  return value === "file" || value === "new" || value === "draft" ? value : "draft";
+}
+
+function loadDraftMeta(): DraftMeta {
+  try {
+    const raw = localStorage.getItem(DRAFT_META_KEY);
+    if (!raw) {
+      return { currentPath: null, origin: "draft", dirty: false };
+    }
+    const parsed = JSON.parse(raw) as Partial<DraftMeta>;
+    const currentPath = typeof parsed.currentPath === "string" && parsed.currentPath.trim() ? parsed.currentPath : null;
+    const origin = currentPath ? normalizeOrigin(parsed.origin) : normalizeOrigin(parsed.origin) === "file" ? "draft" : normalizeOrigin(parsed.origin);
+    return {
+      currentPath,
+      origin,
+      dirty: Boolean(parsed.dirty)
+    };
+  } catch {
+    return { currentPath: null, origin: "draft", dirty: false };
+  }
+}
+
 function loadAiSettings(): AiSettings {
   try {
     const raw = localStorage.getItem(AI_SETTINGS_KEY);
@@ -95,6 +131,14 @@ function loadAiSettings(): AiSettings {
 
 function saveDraft(card: CharacterCardV3): void {
   localStorage.setItem(DRAFT_KEY, JSON.stringify(card));
+}
+
+function hasStoredDraft(): boolean {
+  return localStorage.getItem(DRAFT_KEY) !== null;
+}
+
+function saveDraftMeta(meta: DraftMeta): void {
+  localStorage.setItem(DRAFT_META_KEY, JSON.stringify(meta));
 }
 
 function saveRecent(recent: RecentItem[]): void {
@@ -126,13 +170,30 @@ function touch(card: CharacterCardV3): CharacterCardV3 {
   };
 }
 
+export function reorderLorebookEntriesForDisplay(entries: LorebookEntry[], from: number, to: number): LorebookEntry[] {
+  if (from === to || from < 0 || to < 0 || from >= entries.length || to >= entries.length) {
+    return entries;
+  }
+  const movedEntries = [...entries];
+  const [moved] = movedEntries.splice(from, 1);
+  if (!moved) {
+    return entries;
+  }
+  movedEntries.splice(to, 0, moved);
+  return movedEntries;
+}
+
 const initialCard = typeof window === "undefined" ? createBlankCard() : loadDraft();
+const initialDraftMeta =
+  typeof window === "undefined" || !hasStoredDraft() ? ({ currentPath: null, origin: "new", dirty: false } satisfies DraftMeta) : loadDraftMeta();
 const initialAiSettings = typeof window === "undefined" ? defaultAiSettings : loadAiSettings();
 
 export const useCardStore = create<CardStore>((set, get) => ({
   card: initialCard,
   report: validateCard(initialCard),
-  dirty: false,
+  dirty: initialDraftMeta.dirty,
+  currentPath: initialDraftMeta.currentPath,
+  cardOrigin: initialDraftMeta.origin,
   activeTab: "home",
   status: translate("status.draftLoaded"),
   recent: typeof window === "undefined" ? [] : loadRecent(),
@@ -159,11 +220,17 @@ export const useCardStore = create<CardStore>((set, get) => ({
   replaceCard: (card, options) => {
     const normalized = normalizeStoredCard(card);
     const report = validateCard(normalized);
+    const dirty = options?.dirty ?? false;
+    const currentPath = options?.path ?? null;
+    const cardOrigin = currentPath ? "file" : options?.origin ?? "draft";
     saveDraft(normalized);
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty });
     set((state) => ({
       card: normalized,
       report,
-      dirty: options?.dirty ?? false,
+      dirty,
+      currentPath,
+      cardOrigin,
       status: options?.status ?? state.status,
       recent: addRecent(state.recent, options?.path, normalized)
     }));
@@ -180,27 +247,37 @@ export const useCardStore = create<CardStore>((set, get) => ({
   updateCard: (updater) => {
     const card = touch(updater(get().card));
     const report = validateCard(card);
+    const { currentPath, cardOrigin } = get();
     saveDraft(card);
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: true });
     set({ card, report, dirty: true, status: translate("status.draftSavedLocally") });
   },
   applyAgentCard: (card, status) => {
     const applied = prepareCardForExport(card);
     const report = validateCard(applied);
+    const { currentPath, cardOrigin } = get();
     saveDraft(applied);
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: true });
     set({ card: applied, report, dirty: true, status: status ?? translate("status.draftSavedLocally") });
   },
   newCard: () => {
     const card = createBlankCard();
     saveDraft(card);
-    set({ card, report: validateCard(card), dirty: false, status: translate("status.newCardCreated"), activeTab: "basic" });
+    saveDraftMeta({ currentPath: null, origin: "new", dirty: false });
+    set({ card, report: validateCard(card), dirty: false, currentPath: null, cardOrigin: "new", status: translate("status.newCardCreated"), activeTab: "basic" });
   },
   markSaved: (card, path) => {
     const saved = card ?? prepareCardForExport(get().card);
+    const currentPath = path ?? get().currentPath;
+    const cardOrigin = currentPath ? "file" : get().cardOrigin;
     saveDraft(saved);
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: false });
     set((state) => ({
       card: saved,
       report: validateCard(saved),
       dirty: false,
+      currentPath,
+      cardOrigin,
       status: translate("status.saved"),
       recent: addRecent(state.recent, path, saved)
     }));
@@ -232,23 +309,31 @@ export const useCardStore = create<CardStore>((set, get) => ({
   },
   reorderLorebookEntry: (from, to) => {
     get().updateLorebook((book) => {
-      const entries = [...book.entries];
-      const [moved] = entries.splice(from, 1);
-      entries.splice(to, 0, moved);
       return {
         ...book,
-        entries: entries.map((entry, index) => ({ ...entry, insertion_order: index }))
+        entries: reorderLorebookEntriesForDisplay(book.entries, from, to)
       };
     });
   },
   addAsset: (asset) => get().updateData("assets", [...(get().card.data.assets ?? []), asset]),
+  addAssets: (assets) => {
+    if (assets.length === 0) {
+      return;
+    }
+    get().updateData("assets", [...(get().card.data.assets ?? []), ...assets]);
+  },
   updateAsset: (index, updater) => {
     get().updateData(
       "assets",
       (get().card.data.assets ?? []).map((asset, assetIndex) => (assetIndex === index ? updater(asset) : asset))
     );
   },
-  removeAsset: (index) => get().updateData("assets", (get().card.data.assets ?? []).filter((_, assetIndex) => assetIndex !== index))
+  removeAsset: (index) => get().updateData("assets", (get().card.data.assets ?? []).filter((_, assetIndex) => assetIndex !== index)),
+  removeRecent: (path) => {
+    const next = get().recent.filter((item) => item.path !== path);
+    saveRecent(next);
+    set({ recent: next, status: translate("status.recentRemoved") });
+  }
 }));
 
 export function applyParsedCard(parsed: ParsedCard, path?: string): void {

@@ -1,5 +1,5 @@
 import { ImagePlus, Package, Plus, Star, Trash2 } from "lucide-react";
-import { ChangeEvent, useRef } from "react";
+import { ChangeEvent, memo, useMemo, useRef, useState } from "react";
 import { useCardStore } from "../../app/store";
 import { Button } from "../../components/Button";
 import { SelectField, TextField } from "../../components/Field";
@@ -8,6 +8,7 @@ import { dataImageToPngDataUrl, extensionFromName, isDataImageUri, readFileAsDat
 import type { CardAsset } from "../../lib/schema";
 
 const emptyAssets: CardAsset[] = [];
+const INLINE_URI_LIMIT = 180;
 
 const assetTypeLabelKeys: Record<string, TranslationKey> = {
   icon: "assetType.icon",
@@ -33,31 +34,98 @@ function normalizeAssetForUi(asset: unknown, index: number): CardAsset {
   } as CardAsset;
 }
 
-function createDefaultAsset(assets: CardAsset[]): CardAsset {
+function createDefaultReferenceAsset(assets: CardAsset[]): CardAsset {
   return {
-    type: "icon",
-    uri: "ccdefault:",
-    name: assets.some((item) => item.type === "icon") ? "icon" : "main",
-    ext: "png",
+    type: "other",
+    uri: "",
+    name: `asset-${assets.length + 1}`,
+    ext: "unknown",
   };
 }
+
+function isLargeInlineUri(uri: string): boolean {
+  return uri.startsWith("data:") || uri.length > INLINE_URI_LIMIT;
+}
+
+function summarizeUri(uri: string): string {
+  if (uri.length <= 96) {
+    return uri || "empty";
+  }
+  return `${uri.slice(0, 42)}...${uri.slice(-28)}`;
+}
+
+function formatUriSize(uri: string): string {
+  if (!uri) {
+    return "0 KB";
+  }
+  const kilobytes = Math.max(1, Math.round(uri.length / 1024));
+  return `${kilobytes} KB`;
+}
+
+interface AssetUriFieldProps {
+  label: string;
+  editLabel: string;
+  hideLabel: string;
+  summaryLabel: string;
+  uri: string;
+  onChange: (value: string) => void;
+}
+
+const AssetUriField = memo(function AssetUriField({ editLabel, hideLabel, label, onChange, summaryLabel, uri }: AssetUriFieldProps) {
+  const [editingLargeUri, setEditingLargeUri] = useState(false);
+  const largeInlineUri = isLargeInlineUri(uri);
+
+  if (!largeInlineUri || editingLargeUri) {
+    return (
+      <div className="asset-uri-editor">
+        <TextField label={label} value={uri} onChange={(event) => onChange(event.target.value)} />
+        {largeInlineUri ? (
+          <Button onClick={() => setEditingLargeUri(false)}>
+            {hideLabel}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="field asset-uri-summary-field">
+      <span className="field-label">
+        {label}
+        <small>{summaryLabel}</small>
+      </span>
+      <div className="asset-uri-summary">
+        <span>{formatUriSize(uri)}</span>
+        <code title={uri}>{summarizeUri(uri)}</code>
+        <Button onClick={() => setEditingLargeUri(true)}>
+          {editLabel}
+        </Button>
+      </div>
+    </div>
+  );
+});
 
 export function AssetsPanel() {
   const { t } = useI18n();
   const storedAssets = useCardStore((state) => state.card.data.assets);
   const updateData = useCardStore((state) => state.updateData);
+  const addAssets = useCardStore((state) => state.addAssets);
+  const updateAsset = useCardStore((state) => state.updateAsset);
+  const removeAsset = useCardStore((state) => state.removeAsset);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const assets = Array.isArray(storedAssets) ? storedAssets.map(normalizeAssetForUi) : emptyAssets;
+  const assets = useMemo(() => (Array.isArray(storedAssets) ? storedAssets.map(normalizeAssetForUi) : emptyAssets), [storedAssets]);
 
-  const addAsset = (asset = createDefaultAsset(assets)) => {
-    updateData("assets", [...assets, asset]);
+  const addReferenceAsset = () => {
+    addAssets([createDefaultReferenceAsset(assets)]);
   };
 
   const setCoverAsset = (asset: CardAsset, sourceIndex?: number) => {
+    const latestStoredAssets = useCardStore.getState().card.data.assets;
+    const latestAssets = Array.isArray(latestStoredAssets) ? latestStoredAssets.map(normalizeAssetForUi) : emptyAssets;
     updateData("assets", [
       asset,
-      ...assets.filter((item, itemIndex) => itemIndex !== sourceIndex && !(item.type === "icon" && item.name === "main")),
+      ...latestAssets.filter((item, itemIndex) => itemIndex !== sourceIndex && !(item.type === "icon" && item.name === "main")),
     ]);
   };
 
@@ -76,18 +144,19 @@ export function AssetsPanel() {
   };
 
   const addImageAsset = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) {
       return;
     }
-    const type = assets.some((asset) => asset.type === "icon") ? "other" : "icon";
-    const name = type === "icon" ? "main" : file.name.replace(/\.[^.]+$/, "") || "asset";
-    addAsset({
-      type,
-      uri: type === "icon" && name === "main" ? await readFileAsPngDataUrl(file) : await readFileAsDataUrl(file),
-      name,
-      ext: type === "icon" && name === "main" ? "png" : extensionFromName(file.name),
-    });
+    const uploadedAssets: CardAsset[] = await Promise.all(
+      files.map(async (file, index): Promise<CardAsset> => ({
+        type: "other",
+        uri: await readFileAsDataUrl(file),
+        name: file.name.replace(/\.[^.]+$/, "") || `image-${index + 1}`,
+        ext: extensionFromName(file.name),
+      }))
+    );
+    addAssets(uploadedAssets);
     event.target.value = "";
   };
 
@@ -105,19 +174,19 @@ export function AssetsPanel() {
   };
 
   return (
-    <section className="panel">
+    <section className="panel" data-context-menu="project">
       <div className="panel-heading">
         <h2>{t("assets.title")}</h2>
         <div className="inline-row compact">
           <input ref={coverInputRef} className="hidden-file" type="file" accept="image/*" onChange={uploadCover} />
-          <input ref={inputRef} className="hidden-file" type="file" accept="image/*" onChange={addImageAsset} />
+          <input ref={inputRef} className="hidden-file" type="file" accept="image/*" multiple onChange={addImageAsset} />
           <Button icon={<Star size={16} />} variant="primary" onClick={() => coverInputRef.current?.click()}>
             {t("assets.cover")}
           </Button>
           <Button icon={<ImagePlus size={16} />} onClick={() => inputRef.current?.click()}>
             {t("assets.image")}
           </Button>
-          <Button icon={<Plus size={16} />} variant="primary" onClick={() => addAsset()}>
+          <Button icon={<Plus size={16} />} variant="primary" onClick={addReferenceAsset}>
             {t("assets.asset")}
           </Button>
         </div>
@@ -131,15 +200,19 @@ export function AssetsPanel() {
       ) : null}
       <div className="asset-grid">
         {assets.map((asset, index) => (
-          <article className="asset-card" key={`${asset.type}-${asset.name}-${index}`}>
+          <article className="asset-card" data-context-menu="asset" data-index={index} key={`${asset.type}-${asset.name}-${index}`}>
             <div className="asset-preview">
-              {asset.uri.startsWith("data:image/") ? <img alt={asset.name} src={asset.uri} /> : <span>{t(assetTypeLabelKeys[asset.type] ?? "assetType.other")}</span>}
+              {asset.uri.startsWith("data:image/") ? (
+                <img alt={asset.name} decoding="async" loading="lazy" src={asset.uri} />
+              ) : (
+                <span>{t(assetTypeLabelKeys[asset.type] ?? "assetType.other")}</span>
+              )}
             </div>
             <div className="asset-fields">
               <SelectField
                 label={t("assets.type")}
                 value={asset.type}
-                onChange={(event) => updateData("assets", assets.map((item, itemIndex) => (itemIndex === index ? { ...item, type: event.target.value } : item)))}
+                onChange={(event) => updateAsset(index, (item) => ({ ...item, type: event.target.value }))}
               >
                 <option value="icon">{t("assetType.icon")}</option>
                 <option value="background">{t("assetType.background")}</option>
@@ -150,22 +223,22 @@ export function AssetsPanel() {
               <TextField
                 label={t("field.name")}
                 value={asset.name}
-                onChange={(event) => updateData("assets", assets.map((item, itemIndex) => (itemIndex === index ? { ...item, name: event.target.value } : item)))}
+                onChange={(event) => updateAsset(index, (item) => ({ ...item, name: event.target.value }))}
               />
               <TextField
                 label={t("assets.ext")}
                 value={asset.ext}
                 onChange={(event) =>
-                  updateData(
-                    "assets",
-                    assets.map((item, itemIndex) => (itemIndex === index ? { ...item, ext: event.target.value.toLowerCase().replace(/^\./, "") } : item))
-                  )
+                  updateAsset(index, (item) => ({ ...item, ext: event.target.value.toLowerCase().replace(/^\./, "") }))
                 }
               />
-              <TextField
+              <AssetUriField
+                editLabel={t("assets.editUri")}
+                hideLabel={t("assets.hideUri")}
                 label={t("assets.uri")}
-                value={asset.uri}
-                onChange={(event) => updateData("assets", assets.map((item, itemIndex) => (itemIndex === index ? { ...item, uri: event.target.value } : item)))}
+                summaryLabel={t("assets.uriFolded")}
+                uri={asset.uri}
+                onChange={(value) => updateAsset(index, (item) => ({ ...item, uri: value }))}
               />
               <Button
                 disabled={asset.type === "icon" && asset.name === "main"}
@@ -174,7 +247,7 @@ export function AssetsPanel() {
               >
                 {t("assets.setCover")}
               </Button>
-              <Button icon={<Trash2 size={16} />} variant="danger" onClick={() => updateData("assets", assets.filter((_, itemIndex) => itemIndex !== index))}>
+              <Button icon={<Trash2 size={16} />} variant="danger" onClick={() => removeAsset(index)}>
                 {t("common.delete")}
               </Button>
             </div>

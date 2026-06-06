@@ -37,6 +37,17 @@ export async function pickJsonSavePath(): Promise<string | null> {
   });
 }
 
+export async function pickCardSavePath(): Promise<string | null> {
+  return await save({
+    filters: [
+      { name: translate("dialog.pngCard"), extensions: ["png", "apng"] },
+      { name: translate("dialog.characterCardJson"), extensions: ["json"] },
+      { name: translate("dialog.charxCard"), extensions: ["charx"] }
+    ],
+    defaultPath: "card.png"
+  });
+}
+
 export async function pickPngOpenPath(): Promise<string | null> {
   const selected = await open({
     multiple: false,

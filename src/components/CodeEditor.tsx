@@ -59,19 +59,21 @@ export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px
   }
 
   return (
-    <CodeMirror
-      basicSetup={{
-        foldGutter: false,
-        lineNumbers: false,
-        highlightActiveLine: false,
-      }}
-      editable={!readOnly}
-      extensions={extensions}
-      height="auto"
-      maxHeight={maxHeight}
-      minHeight={minHeight}
-      value={value}
-      onChange={(next) => onChange?.(next)}
-    />
+    <div className="code-editor-shell" data-context-menu={mode === "json" ? "json" : undefined} data-editor-readonly={readOnly ? "true" : undefined}>
+      <CodeMirror
+        basicSetup={{
+          foldGutter: false,
+          lineNumbers: false,
+          highlightActiveLine: false,
+        }}
+        editable={!readOnly}
+        extensions={extensions}
+        height="auto"
+        maxHeight={maxHeight}
+        minHeight={minHeight}
+        value={value}
+        onChange={(next) => onChange?.(next)}
+      />
+    </div>
   );
 }

@@ -20,7 +20,7 @@ export function ValidationPanel() {
   );
 
   return (
-    <section className="panel">
+    <section className="panel" data-context-menu="validation">
       <div className="panel-heading">
         <h2>{t("validation.title")}</h2>
         <div className="inline-row compact">

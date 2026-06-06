@@ -12,6 +12,8 @@ Default profile:
 - Streaming enabled.
 - Reasoning display enabled.
 - Thinking mode enabled with `high` effort.
+- Max output token setting defaults to `8192` but can be raised to `384000` for DeepSeek V4-sized outputs.
+- Request timeout defaults to `60000` ms but can be raised up to `1800000` ms for very long streamed responses.
 
 Settings are normalized through `normalizeAiSettings` and persisted by `src/app/store.ts` under localStorage key `sillytavern-card-creator:ai-settings`.
 
@@ -36,7 +38,7 @@ Streaming uses the Tauri event channel `ai://stream` and filters events by `requ
 
 The global chat drawer is `src/features/ai-chat/AiChatDrawer.tsx`.
 
-`src/app/App.tsx` opens it from the topbar. The drawer is global rather than tied to a single editor tab.
+`src/app/App.tsx` opens it from the bottom-right floating AI button. The drawer is global rather than tied to a single editor tab, and it uses a slide/fade animation for open and close.
 
 The drawer now has two modes:
 
@@ -47,6 +49,16 @@ Edit mode keeps workflow actions behind the composer command menu instead of a p
 
 The composer bottom toolbar also exposes a compact model/reasoning menu next to the send button. It writes directly to the existing AI settings store (`model`, `thinkingMode`, and `thinkingEffort`) so chat requests use the selected values immediately.
 
+AI chat history is selected through a custom in-drawer popover/listbox in `AiChatDrawer.tsx`, not a native `<select>`, so long history titles and the dropdown surface stay inside the Tauri window.
+
+Guide mode and Edit mode keep separate chat histories. `ai_history.rs` stores a `mode` on each session, `list_ai_chat_sessions` filters by the active mode, and the drawer keeps separate current session state for each mode. Existing history rows without `mode` migrate to `guide`; rows with stored AI preview data migrate to `edit`.
+
+The history UI is optimized for long-running use: saved-session summaries are updated locally after a save instead of re-querying the full history list, and preview JSON blocks only stringify/render their large payloads when the user expands them. Only pending AI previews default to an open JSON response; older applied/discarded previews stay collapsed.
+
+During streaming responses, the drawer only auto-scrolls when the user is already near the bottom of the message list. Sending a new message or loading a history session still scrolls to the latest message, but manual upward scrolling pauses stream-following so reasoning panels and earlier content remain reachable.
+
+When an AI edit preview is applied, the drawer uses the shared project save path to silently save existing JSON, PNG/APNG, or CHARX cards after applying the patch. New cards and unbound local drafts do not open a save dialog from this automatic AI-only save path; they remain saved to the local draft until the user runs the normal Save action.
+
 ## Field-Level Agent
 
 Main long-text editors can be wrapped in `AiFieldAssistant`.
@@ -54,6 +66,7 @@ Main long-text editors can be wrapped in `AiFieldAssistant`.
 Behavior:
 
 - Shows small AI buttons while the field is focused.
+- Also registers a context-menu target: right-clicking the field shell/label area outside the editable text opens the same field actions in the global context menu.
 - Default actions are polish/expand and rewrite.
 - More actions include complete, shorten, translate, character voice, conflict check, keyword extraction, and variants.
 - Results are shown as a mini field diff preview and are not applied until the user confirms.
@@ -72,6 +85,7 @@ Important behavior:
 - Raw card paths such as `/data`, `/data/...`, `/spec`, and `/spec_version` are rejected.
 - `regexScripts` patches are rejected because regex scripts are not supported yet.
 - Patch preview converts current card to normalized shape, applies patches, converts back to CCv3, validates, and builds diffs. The chat preview surfaces the structured JSON directly so large worldBook changes can be inspected before applying.
+- World book entry `order` controls the final persisted entry array order. When AI patches `/worldBook/entries/*/order`, `fromNormalizedAiCard` sorts entries by `order` and preserves those exact values as `insertion_order`.
 
 Use this normalized patch layer for AI editing features instead of letting AI write arbitrary CCv3 JSON.
 
@@ -101,13 +115,16 @@ Target parsing and local patch filtering live in `src/lib/aiAgent.ts`:
 
 The prompt tells the model to obey the target, but local filtering is still required because model output is untrusted.
 
+AI chat history persists both preview JSON and preview state. Historical previews that were applied or discarded expose a re-inject action: the stored AI response patches are recalculated against the current card and then applied through the same preview/apply/save flow. Do not reapply the historical `preview.after` snapshot directly, because it may overwrite newer user edits.
+
 The AI drawer also provides mention autocomplete while composing in edit mode, without rendering a static `@` target guide row:
 
 - Typing partial targets such as `@基` suggests `@基础`.
 - Arrow Up/Down changes the active suggestion.
+- The active suggestion is scrolled into view while navigating long candidate lists with the keyboard.
 - Tab or Enter applies the active suggestion.
 - Escape closes the suggestion menu.
-- Suggestions include fixed sections and up to the first eight current worldBook entries.
+- Suggestions include fixed sections and all current worldBook entries. The menu height is bounded and scrollable instead of dropping later entries.
 
 ## Prompt References
 

@@ -14,6 +14,7 @@ import {
   type AiFieldTarget
 } from "../lib/aiAgent";
 import { useAiFieldContext } from "../lib/aiFieldContext";
+import { useContextMenuTarget } from "../lib/contextMenuTargets";
 import { useI18n } from "../lib/i18n";
 
 interface AiFieldAssistantProps {
@@ -112,9 +113,21 @@ export function AiFieldAssistant({ target, children, onApply }: AiFieldAssistant
     setPreview(undefined);
   };
 
+  const contextTargetId = useContextMenuTarget(() => ({
+    kind: "ai-field",
+    label: target.label,
+    path: target.path,
+    value: target.value,
+    ready: Boolean(ready),
+    busy,
+    runAction: (action) => void runAction(action)
+  }));
+
   return (
     <div
       className="ai-field-shell"
+      data-context-menu="ai-field"
+      data-context-target-id={contextTargetId}
       onFocus={() => {
         window.clearTimeout(blurTimer.current);
         setFocused(true);

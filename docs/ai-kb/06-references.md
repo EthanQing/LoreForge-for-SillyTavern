@@ -7,6 +7,9 @@
 - `vite.config.ts`: Vite configuration.
 - `src/app/App.tsx`: main UI shell and navigation.
 - `src/app/store.ts`: central Zustand store and local persistence.
+- `src/app/useProjectActions.ts`: shared frontend project actions for opening cards, creating drafts, exports, clipboard helpers, validation refreshes, and context-menu commands.
+- `src/components/ContextMenu.tsx`: global custom right-click menu system and context resolver.
+- `src/lib/contextMenuTargets.ts`: internal registry for component-owned context-menu targets such as AI fields and lorebook entries.
 - `src/lib/schema.ts`: TypeScript CCv3 schema and blank object helpers.
 - `src/lib/validation.ts`: frontend validation.
 - `src/lib/migrations.ts`: frontend migration/export preparation.
@@ -34,9 +37,11 @@
 ## Existing Docs
 
 - `docs/ai-assistant-prompts.md`: AI assistant prompt material; read when changing AI prompt behavior.
+- DeepSeek API pricing/model limits: `https://api-docs.deepseek.com/quick_start/pricing` documents DeepSeek V4 maximum output as 384K.
 
 ## Local Storage Keys
 
 - `sillytavern-card-creator:draft`
+- `sillytavern-card-creator:draft-meta`
 - `sillytavern-card-creator:recent`
 - `sillytavern-card-creator:ai-settings`

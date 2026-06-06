@@ -14,9 +14,13 @@
 `src/app/App.tsx` owns the main shell:
 
 - Left sidebar navigation.
-- Topbar with active card name, dirty/saved status, validation summary, and AI chat button.
+- Topbar with active card name, active file/draft/new-card identity, dirty/saved status, and validation summary.
+- Topbar global save entry; `Ctrl/Cmd+S` is bound to the same save action.
 - Active panel switch by `activeTab`.
-- Global `AiChatDrawer`.
+- Main panel scrolling through `.workspace-scroll`; individual pages should normally grow with content instead of owning the full app viewport.
+- Global `AiChatDrawer`, opened from the bottom-right floating AI button.
+- Global custom context menu via `src/components/ContextMenu.tsx`.
+- Context-sensitive right-click targets register local actions through `src/lib/contextMenuTargets.ts`; use this for component-owned actions such as field AI previews and lorebook entry open/move/delete instead of duplicating local state in the global menu.
 
 Current tabs:
 
@@ -32,11 +36,14 @@ Current tabs:
 
 Panel modules live under `src/features/*`. Reusable UI components live under `src/components/*`.
 
+Global project/file actions that need to be reused outside the import/export panel live in `src/app/useProjectActions.ts`. Prefer this hook for open, new-card, save, export, copy, validation refresh, and context-menu actions instead of duplicating import/export logic in UI components.
+
 ## State Model
 
 `src/app/store.ts` is the central UI state store. It owns:
 
 - Current `CharacterCardV3`.
+- Current card identity: `currentPath` plus `cardOrigin` (`file`, `draft`, or `new`).
 - Validation report.
 - Dirty state.
 - Active tab.
@@ -44,7 +51,7 @@ Panel modules live under `src/features/*`. Reusable UI components live under `sr
 - Theme.
 - AI settings.
 
-The store persists local draft, recent list, and AI settings in `localStorage`.
+The store persists local draft, draft identity metadata, recent list, and AI settings in `localStorage`.
 
 Important pattern: use store methods such as `updateCard`, `updateData`, `replaceCard`, `markSaved`, and `applyAgentCard` so validation, draft persistence, dirty status, and timestamps remain consistent.
 
