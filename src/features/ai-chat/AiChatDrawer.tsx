@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Bot, BrainCircuit, Check, ChevronDown, History, PanelRightClose, PenLine, Plus, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "../../components/Button";
+import { Collapsible } from "../../components/Collapsible";
 import { AutoResizeTextarea } from "../../components/Field";
 import { useCardStore } from "../../app/store";
+import { useProjectActions } from "../../app/useProjectActions";
 import { useI18n } from "../../lib/i18n";
 import { sendAiChat, type AiModel, type AiThinkingEffort, type AiThinkingMode } from "../../lib/ai";
 import { buildAiAgentMessages, buildAiGuideMessages } from "../../lib/aiAgentPrompts";
 import {
+  createAiAgentPreview,
   createAiAgentPreviewForTarget,
   createEditTargetFromFieldTarget,
   emptyFieldPaths,
@@ -30,6 +33,7 @@ import {
   listAiChatSessions,
   loadAiChatSession,
   saveAiChatSession,
+  type AiChatHistoryMode,
   type AiChatHistoryMessage,
   type AiChatSessionSummary
 } from "../../lib/aiChatHistory";
@@ -42,7 +46,13 @@ interface AiChatDrawerProps {
 type ChatMessage = AiChatHistoryMessage;
 
 type Translator = ReturnType<typeof useI18n>["t"];
-type AiChatMode = "guide" | "edit";
+type AiChatMode = AiChatHistoryMode;
+
+interface AiModeSessionState {
+  sessionId: string;
+  sessionCreatedAt: number;
+  messages: ChatMessage[];
+}
 
 interface MentionTarget {
   label: string;
@@ -66,6 +76,9 @@ export interface WorkflowCommandQuery {
 const AGENT_MIN_OUTPUT_TOKENS = 8192;
 const AGENT_MIN_TIMEOUT_MS = 120_000;
 const GUIDE_MIN_TIMEOUT_MS = 90_000;
+const AUTO_SCROLL_BOTTOM_THRESHOLD = 96;
+const AI_HISTORY_LIST_LIMIT = 80;
+const AI_HISTORY_PREVIEW_CHARS = 120;
 const workflowActions: AiWorkflowAction[] = [
   "diagnose",
   "complete_draft",
@@ -84,13 +97,16 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const currentFieldTarget = useAiFieldContext((state) => state.currentTarget);
   const applyAgentCard = useCardStore((state) => state.applyAgentCard);
   const setActiveTab = useCardStore((state) => state.setActiveTab);
+  const setStatus = useCardStore((state) => state.setStatus);
   const updateAiSettings = useCardStore((state) => state.updateAiSettings);
-  const [sessionId, setSessionId] = useState(() => createSessionId());
-  const [sessionCreatedAt, setSessionCreatedAt] = useState(() => Date.now());
+  const { saveCardSnapshot } = useProjectActions();
+  const [modeSessions, setModeSessions] = useState<Record<AiChatMode, AiModeSessionState>>(() => ({
+    guide: createModeSessionState(),
+    edit: createModeSessionState()
+  }));
   const [history, setHistory] = useState<AiChatSessionSummary[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historySaving, setHistorySaving] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [mode, setMode] = useState<AiChatMode>("guide");
   const [includeCard, setIncludeCard] = useState(true);
@@ -99,18 +115,27 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const [workflowMenuOpen, setWorkflowMenuOpen] = useState(false);
   const [workflowMenuSuppressed, setWorkflowMenuSuppressed] = useState(false);
   const [workflowActiveIndex, setWorkflowActiveIndex] = useState(0);
+  const [historyMenuOpen, setHistoryMenuOpen] = useState(false);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeAssistantId, setActiveAssistantId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef(true);
+  const historyMenuRef = useRef<HTMLDivElement>(null);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
+  const mentionMenuRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const skipNextHistorySaveRef = useRef(false);
+  const currentModeSession = modeSessions[mode];
+  const sessionId = currentModeSession.sessionId;
+  const sessionCreatedAt = currentModeSession.sessionCreatedAt;
+  const messages = currentModeSession.messages;
   const ready = aiSettings.enabled && aiSettings.apiKey.trim() && aiSettings.baseUrl.trim() && aiSettings.model.trim();
   const mentionTargets = useMemo(() => buildMentionTargets(card), [card]);
   const mentionQuery = mode === "edit" ? findActiveMentionQuery(draft, composerRef.current?.selectionStart ?? draft.length) : undefined;
   const mentionSuggestions = useMemo(
-    () => filterMentionTargets(mentionTargets, mentionQuery?.query ?? "").slice(0, 8),
+    () => filterMentionTargets(mentionTargets, mentionQuery?.query ?? ""),
     [mentionQuery?.query, mentionTargets]
   );
   const workflowQuery = mode === "edit" ? findActiveWorkflowQuery(draft, composerRef.current?.selectionStart ?? draft.length) : undefined;
@@ -123,10 +148,53 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const showMentionSuggestions = !showWorkflowMenu && !mentionMenuSuppressed && Boolean(mentionQuery && mentionSuggestions.length > 0);
   const modelOptions = useMemo(() => buildModelOptions(aiSettings.model, aiSettings.availableModels), [aiSettings.availableModels, aiSettings.model]);
   const thinkingLabel = formatThinkingLabel(aiSettings.thinkingMode, aiSettings.thinkingEffort, t);
+  const activeHistorySession = history.find((session) => session.id === sessionId);
+  const historyTriggerLabel = activeHistorySession
+    ? `${activeHistorySession.title} - ${formatHistoryTime(activeHistorySession.updatedAt, locale)}`
+    : history.length === 0
+      ? t("aiChat.noHistory")
+      : t("aiChat.currentConversation");
+
+  const setCurrentModeSession = (updater: (current: AiModeSessionState) => AiModeSessionState) => {
+    setModeSessions((current) => ({
+      ...current,
+      [mode]: updater(current[mode])
+    }));
+  };
+
+  const setSessionId = (nextSessionId: string) => {
+    setCurrentModeSession((current) => ({ ...current, sessionId: nextSessionId }));
+  };
+
+  const setSessionCreatedAt = (nextCreatedAt: number) => {
+    setCurrentModeSession((current) => ({ ...current, sessionCreatedAt: nextCreatedAt }));
+  };
+
+  const setMessages = (nextMessages: ChatMessage[] | ((current: ChatMessage[]) => ChatMessage[])) => {
+    setCurrentModeSession((current) => ({
+      ...current,
+      messages: typeof nextMessages === "function" ? nextMessages(current.messages) : nextMessages
+    }));
+  };
+
+  const replaceModeSession = (targetMode: AiChatMode, nextSession: AiModeSessionState) => {
+    setModeSessions((current) => ({
+      ...current,
+      [targetMode]: nextSession
+    }));
+  };
 
   useEffect(() => {
     setMentionActiveIndex(0);
   }, [mentionQuery?.query, mentionTargets]);
+
+  useEffect(() => {
+    if (!showMentionSuggestions) {
+      return;
+    }
+    const activeOption = mentionMenuRef.current?.querySelector<HTMLElement>("[data-active='true']");
+    activeOption?.scrollIntoView({ block: "nearest" });
+  }, [mentionActiveIndex, showMentionSuggestions]);
 
   useEffect(() => {
     setWorkflowActiveIndex(0);
@@ -144,8 +212,44 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     if (!open) {
       return;
     }
-    void refreshHistory();
-  }, [open]);
+    autoScrollRef.current = true;
+    scheduleScrollToBottom({ force: true, behavior: "auto" });
+    void refreshHistory(mode);
+  }, [open, mode]);
+
+  useEffect(() => {
+    if (!historyMenuOpen && !settingsMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : undefined;
+      if (!target) {
+        return;
+      }
+      if (historyMenuOpen && !historyMenuRef.current?.contains(target)) {
+        setHistoryMenuOpen(false);
+      }
+      if (settingsMenuOpen && !settingsMenuRef.current?.contains(target)) {
+        setSettingsMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      setHistoryMenuOpen(false);
+      setSettingsMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [historyMenuOpen, settingsMenuOpen]);
 
   useEffect(() => {
     if (!open || messages.length === 0) {
@@ -160,6 +264,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       setHistorySaving(true);
       void saveAiChatSession({
         id: sessionId,
+        mode,
         title: buildSessionTitle(messages),
         createdAt: sessionCreatedAt,
         updatedAt: Date.now(),
@@ -167,9 +272,8 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       })
         .then((saved) => {
           setSessionCreatedAt(saved.createdAt);
-          return listAiChatSessions();
+          setHistory((current) => upsertHistorySummary(current, summarizeHistorySession(saved)));
         })
-        .then(setHistory)
         .catch((saveError) => {
           setError(saveError instanceof Error ? saveError.message : String(saveError));
         })
@@ -177,11 +281,11 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     }, busy ? 1000 : 350);
 
     return () => window.clearTimeout(saveTimer);
-  }, [busy, messages, open, sessionCreatedAt, sessionId]);
+  }, [busy, messages, mode, open, sessionCreatedAt, sessionId]);
 
-  const refreshHistory = async () => {
+  const refreshHistory = async (targetMode: AiChatMode = mode) => {
     try {
-      setHistory(await listAiChatSessions());
+      setHistory(await listAiChatSessions(targetMode));
     } catch (historyError) {
       setHistory([]);
       setError(historyError instanceof Error ? historyError.message : String(historyError));
@@ -218,7 +322,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
             : message
         )
       );
-      queueMicrotask(scrollToBottom);
+      scheduleScrollToBottom({ behavior: "auto" });
     });
 
     setMessages((current) =>
@@ -274,7 +378,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
             : message
         )
       );
-      queueMicrotask(scrollToBottom);
+      scheduleScrollToBottom({ behavior: "auto" });
     });
     const response = parseAiAgentResponse(result.content);
     const deniedFiltered = filterAiPatchesByDeniedPaths(response.patches, deniedPaths);
@@ -322,7 +426,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setBusy(true);
     setActiveAssistantId(assistantId);
     setError("");
-    queueMicrotask(scrollToBottom);
+    scheduleScrollToBottom({ force: true });
 
     try {
       if (mode === "edit") {
@@ -337,7 +441,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     } finally {
       setBusy(false);
       setActiveAssistantId(null);
-      queueMicrotask(scrollToBottom);
+      scheduleScrollToBottom({ behavior: "auto" });
     }
   };
 
@@ -376,7 +480,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setBusy(true);
     setActiveAssistantId(assistantId);
     setError("");
-    queueMicrotask(scrollToBottom);
+    scheduleScrollToBottom({ force: true });
 
     try {
       if (mode === "edit") {
@@ -391,7 +495,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     } finally {
       setBusy(false);
       setActiveAssistantId(null);
-      queueMicrotask(scrollToBottom);
+      scheduleScrollToBottom({ behavior: "auto" });
     }
   };
 
@@ -406,9 +510,29 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setWorkflowMenuOpen(false);
     setWorkflowMenuSuppressed(false);
     setWorkflowActiveIndex(0);
+    setHistoryMenuOpen(false);
     setSettingsMenuOpen(false);
     setError("");
   };
+
+  const switchChatMode = (nextMode: AiChatMode) => {
+    if (nextMode === mode || busy || historyBusy) {
+      return;
+    }
+    skipNextHistorySaveRef.current = modeSessions[nextMode].messages.length > 0;
+    setMode(nextMode);
+    setDraft("");
+    setHistory([]);
+    setHistoryMenuOpen(false);
+    setSettingsMenuOpen(false);
+    setWorkflowMenuOpen(false);
+    setWorkflowMenuSuppressed(false);
+    setWorkflowActiveIndex(0);
+    setError("");
+    autoScrollRef.current = true;
+    scheduleScrollToBottom({ force: true, behavior: "auto" });
+  };
+
 
   const runWorkflow = async (workflowAction: AiWorkflowAction) => {
     if (busy) {
@@ -427,6 +551,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setBusy(true);
     setActiveAssistantId(assistantId);
     setError("");
+    scheduleScrollToBottom({ force: true });
     try {
       const sourceCard = includeCard ? card : createBlankCard();
       const sourceReport = includeCard ? report : validateCard(sourceCard);
@@ -467,12 +592,12 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     } finally {
       setBusy(false);
       setActiveAssistantId(null);
-      queueMicrotask(scrollToBottom);
+      scheduleScrollToBottom({ behavior: "auto" });
     }
   };
 
   const appendMention = (mention: string) => {
-    setMode("edit");
+    switchChatMode("edit");
     setWorkflowMenuOpen(false);
     setWorkflowMenuSuppressed(false);
     setDraft((current) => {
@@ -516,12 +641,19 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setError("");
     try {
       const session = await loadAiChatSession(nextSessionId);
-      setSessionId(session.id);
-      setSessionCreatedAt(session.createdAt);
+      const sessionMode: AiChatMode = session.mode === "edit" ? "edit" : "guide";
       skipNextHistorySaveRef.current = true;
-      setMessages(session.messages);
+      replaceModeSession(sessionMode, {
+        sessionId: session.id,
+        sessionCreatedAt: session.createdAt,
+        messages: session.messages
+      });
+      if (sessionMode !== mode) {
+        setMode(sessionMode);
+        void refreshHistory(sessionMode);
+      }
       setDraft("");
-      queueMicrotask(scrollToBottom);
+      scheduleScrollToBottom({ force: true, behavior: "auto" });
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : String(historyError));
     } finally {
@@ -537,11 +669,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setError("");
     try {
       await deleteAiChatSession(sessionId);
-      setHistory(await listAiChatSessions());
-      setSessionId(createSessionId());
-      setSessionCreatedAt(Date.now());
-      setMessages([]);
+      setHistory((current) => current.filter((session) => session.id !== sessionId));
+      replaceModeSession(mode, createModeSessionState());
       setDraft("");
+      setHistoryMenuOpen(false);
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : String(historyError));
     } finally {
@@ -549,14 +680,49 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     }
   };
 
-  const applyPreview = (messageId: string, preview: AiAgentPreview) => {
+  const applyPreview = async (messageId: string, preview: AiAgentPreview, options: { replacePreview?: boolean } = {}) => {
+    if (preview.validationReport.errors.length > 0) {
+      setError(t("aiAgent.validationBlocked"));
+      return;
+    }
+    if (preview.diffs.length === 0) {
+      setStatus(t("aiAgent.noDiff"));
+      setMessages((current) =>
+        current.map((message) => (message.id === messageId ? { ...message, preview, previewState: message.previewState ?? "pending" } : message))
+      );
+      return;
+    }
     applyAgentCard(preview.after, t("status.aiAgentApplied"));
     setMessages((current) =>
-      current.map((message) => (message.id === messageId ? { ...message, previewState: "applied" } : message))
+      current.map((message) =>
+        message.id === messageId ? { ...message, ...(options.replacePreview ? { preview } : {}), previewState: "applied" } : message
+      )
     );
     const nextTab = tabForDiff(preview.diffs[0]);
     if (nextTab) {
       setActiveTab(nextTab);
+    }
+    await saveCardSnapshot(preview.after, {
+      promptIfUnbound: false,
+      savedStatus: t("status.aiAgentAppliedAndSaved"),
+      unboundStatus: t("status.aiAgentAppliedDraftAutosaved")
+    });
+  };
+
+  const reinjectPreview = async (messageId: string, preview: AiAgentPreview) => {
+    setError("");
+    try {
+      const nextPreview = createAiAgentPreview(card, preview.response);
+      if (nextPreview.validationReport.errors.length > 0) {
+        setMessages((current) =>
+          current.map((message) => (message.id === messageId ? { ...message, preview: nextPreview, previewState: "pending" } : message))
+        );
+        setError(t("aiAgent.validationBlocked"));
+        return;
+      }
+      await applyPreview(messageId, nextPreview, { replacePreview: true });
+    } catch (reinjectError) {
+      setError(reinjectError instanceof Error ? reinjectError.message : String(reinjectError));
     }
   };
 
@@ -566,12 +732,14 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     );
   };
 
-  if (!open) {
-    return null;
-  }
-
   return (
-    <div className="ai-chat-layer" role="dialog" aria-modal="true" aria-label={t("a11y.aiChat")}>
+    <div
+      className={open ? "ai-chat-layer is-open" : "ai-chat-layer"}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("a11y.aiChat")}
+      aria-hidden={!open}
+    >
       <button className="ai-chat-scrim" type="button" aria-label={t("a11y.closeAiChat")} onClick={onClose} />
       <aside className="ai-chat-drawer">
         <header className="ai-chat-header">
@@ -590,16 +758,18 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
           <div className="ai-chat-mode-switch" role="group" aria-label={t("aiChat.mode")}>
             <button
               className={mode === "guide" ? "active" : ""}
+              disabled={busy || historyBusy}
               type="button"
-              onClick={() => setMode("guide")}
+              onClick={() => switchChatMode("guide")}
             >
               <BrainCircuit size={16} aria-hidden="true" />
               <span>{t("aiChat.guideMode")}</span>
             </button>
             <button
               className={mode === "edit" ? "active" : ""}
+              disabled={busy || historyBusy}
               type="button"
-              onClick={() => setMode("edit")}
+              onClick={() => switchChatMode("edit")}
             >
               <PenLine size={16} aria-hidden="true" />
               <span>{t("aiChat.editMode")}</span>
@@ -644,22 +814,50 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
         </div>
 
         <div className="ai-chat-historybar">
-          <label className="ai-chat-history-select">
+          <div className="ai-chat-history-select" ref={historyMenuRef}>
             <History size={16} aria-hidden="true" />
-            <select
-              className="input"
+            <button
+              aria-expanded={historyMenuOpen}
+              aria-haspopup="listbox"
+              className="ai-chat-history-trigger"
               disabled={busy || historyBusy || history.length === 0}
-              value={history.some((session) => session.id === sessionId) ? sessionId : ""}
-              onChange={(event) => void loadHistorySession(event.currentTarget.value)}
+              title={historyTriggerLabel}
+              type="button"
+              onClick={() => {
+                setSettingsMenuOpen(false);
+                setWorkflowMenuOpen(false);
+                setHistoryMenuOpen((current) => !current);
+              }}
             >
-              <option value="">{history.length === 0 ? t("aiChat.noHistory") : t("aiChat.currentConversation")}</option>
-              {history.map((session) => (
-                <option key={session.id} title={session.lastMessagePreview} value={session.id}>
-                  {session.title} - {formatHistoryTime(session.updatedAt, locale)}
-                </option>
-              ))}
-            </select>
-          </label>
+              <span>{historyTriggerLabel}</span>
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+            {historyMenuOpen ? (
+              <div className="ai-chat-history-menu" role="listbox" aria-label={t("aiChat.currentConversation")}>
+                {history.map((session) => {
+                  const isActive = session.id === sessionId;
+                  return (
+                    <button
+                      aria-selected={isActive}
+                      className={isActive ? "active" : ""}
+                      key={session.id}
+                      role="option"
+                      title={session.lastMessagePreview || session.title}
+                      type="button"
+                      onClick={() => {
+                        setHistoryMenuOpen(false);
+                        void loadHistorySession(session.id);
+                      }}
+                    >
+                      <span className="ai-chat-history-title">{session.title}</span>
+                      <span className="ai-chat-history-meta">{formatHistoryTime(session.updatedAt, locale)}</span>
+                      {session.lastMessagePreview ? <span className="ai-chat-history-preview">{session.lastMessagePreview}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
           <span className="state-pill">
             {historySaving ? t("aiChat.historySaving") : t("aiChat.historySaved")}
           </span>
@@ -668,7 +866,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
           </Button>
         </div>
 
-        <div className="ai-chat-messages" ref={scrollRef}>
+        <div className="ai-chat-messages" ref={scrollRef} onScroll={handleMessagesScroll}>
           {messages.length === 0 ? (
             <div className="ai-chat-empty">
               <BrainCircuit size={28} aria-hidden="true" />
@@ -698,10 +896,12 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                   ) : null}
                 </div>
                 {showReasoningPanel ? (
-                  <details className="ai-reasoning-panel">
-                    <summary>{t("aiChat.reasoningTitle")}</summary>
+                  <Collapsible
+                    className="ai-reasoning-panel"
+                    title={t("aiChat.reasoningTitle")}
+                  >
                     <pre className="ai-reasoning">{message.reasoning || t("aiChat.thinkingPlaceholder")}</pre>
-                  </details>
+                  </Collapsible>
                 ) : null}
                 <pre>{message.content || (isActiveAssistant ? t("aiChat.thinkingPlaceholder") : "")}</pre>
                 {message.preview ? (
@@ -709,8 +909,9 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                     preview={message.preview}
                     state={message.previewState ?? "pending"}
                     t={t}
-                    onApply={() => applyPreview(message.id, message.preview!)}
+                    onApply={() => void applyPreview(message.id, message.preview!)}
                     onDiscard={() => discardPreview(message.id)}
+                    onReinject={() => void reinjectPreview(message.id, message.preview!)}
                   />
                 ) : null}
               </article>
@@ -723,11 +924,12 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
         <footer className="ai-chat-composer">
           <div className="ai-chat-composer-input">
             {showMentionSuggestions ? (
-              <div className="ai-mention-menu" role="listbox" aria-label={t("aiChat.mentionTargets")}>
+              <div className="ai-mention-menu" ref={mentionMenuRef} role="listbox" aria-label={t("aiChat.mentionTargets")}>
                 {mentionSuggestions.map((target, index) => (
                   <button
                     aria-selected={index === mentionActiveIndex}
                     className={index === mentionActiveIndex ? "active" : ""}
+                    data-active={index === mentionActiveIndex ? "true" : undefined}
                     key={target.value}
                     role="option"
                     type="button"
@@ -859,7 +1061,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
               ) : null}
             </div>
             <div className="ai-chat-composer-actions">
-              <div className="ai-model-menu-shell">
+              <div className="ai-model-menu-shell" ref={settingsMenuRef}>
                 <button
                   className="ai-model-menu-trigger"
                   type="button"
@@ -881,7 +1083,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                       <select
                         className="input"
                         value={aiSettings.model}
-                        onChange={(event) => updateAiSettings({ model: event.currentTarget.value })}
+                        onChange={(event) => {
+                          updateAiSettings({ model: event.currentTarget.value });
+                          setSettingsMenuOpen(false);
+                        }}
                       >
                         {modelOptions.map((model) => (
                           <option key={model.id} value={model.id}>
@@ -893,11 +1098,14 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                     <div className="ai-thinking-picker" aria-label={t("settings.thinkingEffort" as never)}>
                       <span>{t("settings.thinkingEffort" as never)}</span>
                       <div className="ai-thinking-options">
-                        <button
-                          className={aiSettings.thinkingMode === "disabled" ? "active" : ""}
-                          type="button"
-                          onClick={() => updateAiSettings({ thinkingMode: "disabled" })}
-                        >
+                          <button
+                            className={aiSettings.thinkingMode === "disabled" ? "active" : ""}
+                            type="button"
+                            onClick={() => {
+                              updateAiSettings({ thinkingMode: "disabled" });
+                              setSettingsMenuOpen(false);
+                            }}
+                          >
                           {t("common.disabled")}
                         </button>
                         {(["high", "max"] as const).map((effort) => (
@@ -905,7 +1113,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                             className={aiSettings.thinkingMode === "enabled" && aiSettings.thinkingEffort === effort ? "active" : ""}
                             key={effort}
                             type="button"
-                            onClick={() => updateAiSettings({ thinkingMode: "enabled", thinkingEffort: effort })}
+                            onClick={() => {
+                              updateAiSettings({ thinkingMode: "enabled", thinkingEffort: effort });
+                              setSettingsMenuOpen(false);
+                            }}
                           >
                             {formatThinkingEffort(effort, t)}
                           </button>
@@ -925,9 +1136,36 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     </div>
   );
 
-  function scrollToBottom() {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  function handleMessagesScroll() {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+    autoScrollRef.current = isNearScrollBottom(scrollElement);
   }
+
+  function scheduleScrollToBottom({ force = false, behavior = "smooth" }: { force?: boolean; behavior?: ScrollBehavior } = {}) {
+    if (!force && !autoScrollRef.current) {
+      return;
+    }
+    queueMicrotask(() => scrollToBottom({ force, behavior }));
+  }
+
+  function scrollToBottom({ force = false, behavior = "smooth" }: { force?: boolean; behavior?: ScrollBehavior } = {}) {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+    if (!force && !autoScrollRef.current && !isNearScrollBottom(scrollElement)) {
+      return;
+    }
+    scrollElement.scrollTo({ top: scrollElement.scrollHeight, behavior });
+    autoScrollRef.current = true;
+  }
+}
+
+function isNearScrollBottom(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= AUTO_SCROLL_BOTTOM_THRESHOLD;
 }
 
 function AiAgentPreviewBlock({
@@ -935,17 +1173,20 @@ function AiAgentPreviewBlock({
   state,
   onApply,
   onDiscard,
+  onReinject,
   t
 }: {
   preview: AiAgentPreview;
   state: "pending" | "applied" | "discarded";
   onApply: () => void;
   onDiscard: () => void;
+  onReinject: () => void;
   t: Translator;
 }) {
   const errors = preview.validationReport.errors.length;
   const warnings = preview.validationReport.warnings.length;
   const canApply = state === "pending" && errors === 0 && preview.diffs.length > 0;
+  const canReinject = state !== "pending" && preview.response.patches.length > 0;
   const responseJson = preview.rejectedPatches?.length
     ? { ...preview.response, rejectedPatches: preview.rejectedPatches }
     : preview.response;
@@ -964,7 +1205,7 @@ function AiAgentPreviewBlock({
           label={t("aiAgent.responseJson")}
           meta={t("aiAgent.patchCount", { count: preview.response.patches.length })}
           value={responseJson}
-          open
+          open={state === "pending"}
         />
         <JsonPreviewDetails label={t("aiAgent.afterJson")} meta="normalized" value={preview.afterNormalized} />
       </div>
@@ -993,6 +1234,11 @@ function AiAgentPreviewBlock({
       <div className="ai-agent-actions">
         <span className="muted">{previewStateLabel(state, t)}</span>
         <div className="spacer" />
+        {state !== "pending" ? (
+          <Button disabled={!canReinject} icon={<RotateCcw size={16} />} variant="secondary" onClick={onReinject}>
+            {t("aiAgent.reinject")}
+          </Button>
+        ) : null}
         <Button disabled={state !== "pending"} icon={<X size={16} />} variant="ghost" onClick={onDiscard}>
           {t("common.discard")}
         </Button>
@@ -1015,15 +1261,30 @@ function JsonPreviewDetails({
   value: unknown;
   open?: boolean;
 }) {
+  const [isOpen, setIsOpen] = useState(open);
+
   return (
-    <details className="ai-agent-json" open={open}>
-      <summary>
-        <span>{label}</span>
-        {meta ? <code>{meta}</code> : null}
-      </summary>
-      <pre>{JSON.stringify(value, null, 2)}</pre>
-    </details>
+    <Collapsible
+      className="ai-agent-json"
+      lazyMount
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      unmountOnClose
+      title={
+        <>
+          <span>{label}</span>
+          {meta ? <code>{meta}</code> : null}
+        </>
+      }
+    >
+      <LazyJsonPreview value={value} />
+    </Collapsible>
   );
+}
+
+function LazyJsonPreview({ value }: { value: unknown }) {
+  const json = useMemo(() => JSON.stringify(value, null, 2), [value]);
+  return <pre>{json}</pre>;
 }
 
 function renderAgentMessage(response: AiAgentResponse, target: AiAgentEditTarget | undefined): string {
@@ -1129,7 +1390,7 @@ export function buildMentionTargets(card: CharacterCardV3): MentionTarget[] {
   const entries = card.data.character_book?.entries ?? [];
   return [
     ...targets,
-    ...entries.slice(0, 8).map((entry, index) => {
+    ...entries.map((entry, index) => {
       const memo = deriveLorebookEntryComment(entry, index);
       const mention = memo.replace(/\s+/g, "_");
       return {
@@ -1303,6 +1564,30 @@ function buildSessionTitle(messages: ChatMessage[]): string {
   return normalized ? truncateText(normalized, 48) : "AI Chat";
 }
 
+function summarizeHistorySession(
+  session: AiChatSessionSummary | { id: string; mode: AiChatMode; title: string; createdAt: number; updatedAt: number; messages: ChatMessage[] }
+): AiChatSessionSummary {
+  if ("messageCount" in session) {
+    return session;
+  }
+  const lastMessage = [...session.messages].reverse().find((message) => message.content.trim().length > 0);
+  return {
+    id: session.id,
+    mode: session.mode,
+    title: session.title || buildSessionTitle(session.messages),
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    messageCount: session.messages.length,
+    lastMessagePreview: truncateText((lastMessage?.content ?? "").replace(/\s+/g, " ").trim(), AI_HISTORY_PREVIEW_CHARS)
+  };
+}
+
+function upsertHistorySummary(current: AiChatSessionSummary[], summary: AiChatSessionSummary): AiChatSessionSummary[] {
+  return [summary, ...current.filter((item) => item.id !== summary.id)]
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, AI_HISTORY_LIST_LIMIT);
+}
+
 function truncateText(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
@@ -1379,4 +1664,12 @@ function createSessionId(): string {
     return `session-${globalThis.crypto.randomUUID()}`;
   }
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createModeSessionState(): AiModeSessionState {
+  return {
+    sessionId: createSessionId(),
+    sessionCreatedAt: Date.now(),
+    messages: []
+  };
 }

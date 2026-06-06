@@ -46,6 +46,9 @@ export interface AiChatResult {
   model: string;
 }
 
+export const AI_MAX_OUTPUT_TOKENS = 384_000;
+export const AI_MAX_TIMEOUT_MS = 1_800_000;
+
 export const defaultAiSettings: AiSettings = {
   enabled: true,
   providerProfile: "deepseek",
@@ -87,8 +90,8 @@ export function normalizeAiSettings(value: unknown): AiSettings {
         : defaultAiSettings.thinkingMode,
     thinkingEffort: isThinkingEffort(rawThinkingEffort) ? rawThinkingEffort : defaultAiSettings.thinkingEffort,
     temperature: clampNumber(raw.temperature, 0, 2, defaultAiSettings.temperature),
-    maxOutputTokens: Math.trunc(clampNumber(raw.maxOutputTokens, 1, 64_000, defaultAiSettings.maxOutputTokens)),
-    timeoutMs: Math.trunc(clampNumber(raw.timeoutMs, 1_000, 300_000, defaultAiSettings.timeoutMs))
+    maxOutputTokens: Math.trunc(clampNumber(raw.maxOutputTokens, 1, AI_MAX_OUTPUT_TOKENS, defaultAiSettings.maxOutputTokens)),
+    timeoutMs: Math.trunc(clampNumber(raw.timeoutMs, 1_000, AI_MAX_TIMEOUT_MS, defaultAiSettings.timeoutMs))
   };
 }
 

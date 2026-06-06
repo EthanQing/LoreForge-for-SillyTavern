@@ -5,6 +5,8 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+const MAX_AI_TIMEOUT_MS: u64 = 1_800_000;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiProviderRequest {
@@ -323,13 +325,15 @@ fn chat_body(request: &AiChatRequest) -> Value {
 
 fn client(timeout_ms: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .timeout(Duration::from_millis(timeout_ms.clamp(1_000, 300_000)))
+        .timeout(Duration::from_millis(
+            timeout_ms.clamp(1_000, MAX_AI_TIMEOUT_MS),
+        ))
         .build()
         .map_err(|error| error.to_string())
 }
 
 fn stream_client(timeout_ms: u64) -> Result<reqwest::Client, String> {
-    let timeout = Duration::from_millis(timeout_ms.clamp(1_000, 300_000));
+    let timeout = Duration::from_millis(timeout_ms.clamp(1_000, MAX_AI_TIMEOUT_MS));
     reqwest::Client::builder()
         .connect_timeout(timeout)
         .read_timeout(timeout)

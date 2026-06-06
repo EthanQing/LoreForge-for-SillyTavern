@@ -3,6 +3,7 @@ import type { AiAgentPreview } from "./aiAgent";
 
 export type AiChatHistoryRole = "user" | "assistant";
 export type AiChatHistoryPreviewState = "pending" | "applied" | "discarded";
+export type AiChatHistoryMode = "guide" | "edit";
 
 export interface AiChatHistoryMessage {
   id: string;
@@ -16,6 +17,7 @@ export interface AiChatHistoryMessage {
 
 export interface AiChatSessionSummary {
   id: string;
+  mode: AiChatHistoryMode;
   title: string;
   createdAt: number;
   updatedAt: number;
@@ -25,14 +27,15 @@ export interface AiChatSessionSummary {
 
 export interface AiChatSession {
   id: string;
+  mode: AiChatHistoryMode;
   title: string;
   createdAt: number;
   updatedAt: number;
   messages: AiChatHistoryMessage[];
 }
 
-export async function listAiChatSessions(): Promise<AiChatSessionSummary[]> {
-  return await invoke<AiChatSessionSummary[]>("list_ai_chat_sessions");
+export async function listAiChatSessions(mode: AiChatHistoryMode): Promise<AiChatSessionSummary[]> {
+  return await invoke<AiChatSessionSummary[]>("list_ai_chat_sessions", { mode });
 }
 
 export async function loadAiChatSession(sessionId: string): Promise<AiChatSession> {

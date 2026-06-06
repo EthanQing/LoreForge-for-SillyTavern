@@ -10,11 +10,13 @@ use tauri::{AppHandle, Manager};
 const DATABASE_FILE: &str = "ai_chat_history.sqlite3";
 const MAX_TITLE_CHARS: usize = 48;
 const MAX_PREVIEW_CHARS: usize = 120;
+const DEFAULT_HISTORY_MODE: &str = "guide";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiChatSessionSummary {
     pub id: String,
+    pub mode: String,
     pub title: String,
     pub created_at: i64,
     pub updated_at: i64,
@@ -38,6 +40,7 @@ pub struct AiChatHistoryMessage {
 #[serde(rename_all = "camelCase")]
 pub struct AiChatSession {
     pub id: String,
+    pub mode: String,
     pub title: String,
     pub created_at: i64,
     pub updated_at: i64,
@@ -45,40 +48,52 @@ pub struct AiChatSession {
 }
 
 #[tauri::command]
-pub fn list_ai_chat_sessions(app: AppHandle) -> Result<Vec<AiChatSessionSummary>, String> {
+pub fn list_ai_chat_sessions(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<Vec<AiChatSessionSummary>, String> {
     let conn = open_connection(&app)?;
+    let mode = normalize_mode(mode.as_deref());
     let mut statement = conn
         .prepare(
             r#"
+            WITH recent_sessions AS (
+              SELECT id, mode, title, created_at, updated_at
+              FROM sessions
+              WHERE mode = ?1
+              ORDER BY updated_at DESC
+              LIMIT 80
+            )
             SELECT
-              sessions.id,
-              sessions.title,
-              sessions.created_at,
-              sessions.updated_at,
-              (SELECT COUNT(*) FROM messages WHERE messages.session_id = sessions.id) AS message_count,
+              recent_sessions.id,
+              recent_sessions.mode,
+              recent_sessions.title,
+              recent_sessions.created_at,
+              recent_sessions.updated_at,
+              (SELECT COUNT(*) FROM messages WHERE messages.session_id = recent_sessions.id) AS message_count,
               COALESCE((
                 SELECT content
                 FROM messages
-                WHERE messages.session_id = sessions.id
+                WHERE messages.session_id = recent_sessions.id
                 ORDER BY position DESC
                 LIMIT 1
               ), '') AS last_message_preview
-            FROM sessions
-            ORDER BY sessions.updated_at DESC
-            LIMIT 80
+            FROM recent_sessions
+            ORDER BY recent_sessions.updated_at DESC
             "#,
         )
         .map_err(|error| error.to_string())?;
 
     let rows = statement
-        .query_map([], |row| {
-            let preview: String = row.get(5)?;
+        .query_map(params![mode.as_str()], |row| {
+            let preview: String = row.get(6)?;
             Ok(AiChatSessionSummary {
                 id: row.get(0)?,
-                title: row.get(1)?,
-                created_at: row.get(2)?,
-                updated_at: row.get(3)?,
-                message_count: row.get(4)?,
+                mode: row.get(1)?,
+                title: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+                message_count: row.get(5)?,
                 last_message_preview: truncate(&preview, MAX_PREVIEW_CHARS),
             })
         })
@@ -104,17 +119,19 @@ pub fn save_ai_chat_session(
     let created_at = positive_or(session.created_at, now);
     let updated_at = positive_or(session.updated_at, now);
     let title = normalize_title(&session.title, &session.messages);
+    let mode = normalize_mode(Some(session.mode.as_str()));
 
     let tx = conn.transaction().map_err(|error| error.to_string())?;
     tx.execute(
         r#"
-        INSERT INTO sessions (id, title, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4)
+        INSERT INTO sessions (id, mode, title, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(id) DO UPDATE SET
+          mode = excluded.mode,
           title = excluded.title,
           updated_at = excluded.updated_at
         "#,
-        params![session.id.as_str(), title, created_at, updated_at],
+        params![session.id.as_str(), mode, title, created_at, updated_at],
     )
     .map_err(|error| error.to_string())?;
     tx.execute(
@@ -190,11 +207,11 @@ pub fn clear_ai_chat_sessions(app: AppHandle) -> Result<(), String> {
 }
 
 fn load_session(conn: &Connection, session_id: &str) -> Result<AiChatSession, String> {
-    let (id, title, created_at, updated_at): (String, String, i64, i64) = conn
+    let (id, mode, title, created_at, updated_at): (String, String, String, i64, i64) = conn
         .query_row(
-            "SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?1",
+            "SELECT id, mode, title, created_at, updated_at FROM sessions WHERE id = ?1",
             params![session_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         )
         .optional()
         .map_err(|error| error.to_string())?
@@ -231,6 +248,7 @@ fn load_session(conn: &Connection, session_id: &str) -> Result<AiChatSession, St
 
     Ok(AiChatSession {
         id,
+        mode,
         title,
         created_at,
         updated_at,
@@ -261,6 +279,7 @@ fn init_db(conn: &Connection) -> Result<(), String> {
         r#"
         CREATE TABLE IF NOT EXISTS sessions (
           id TEXT PRIMARY KEY,
+          mode TEXT NOT NULL DEFAULT 'guide',
           title TEXT NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
@@ -285,7 +304,47 @@ fn init_db(conn: &Connection) -> Result<(), String> {
           ON messages(session_id, position ASC);
         "#,
     )
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    ensure_session_mode_column(conn)
+}
+
+fn ensure_session_mode_column(conn: &Connection) -> Result<(), String> {
+    let mut statement = conn
+        .prepare("PRAGMA table_info(sessions)")
+        .map_err(|error| error.to_string())?;
+    let column_names = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+
+    if !column_names.iter().any(|name| name == "mode") {
+        conn.execute(
+            "ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'guide'",
+            [],
+        )
+        .map_err(|error| error.to_string())?;
+        conn.execute(
+            r#"
+            UPDATE sessions
+            SET mode = 'edit'
+            WHERE id IN (
+              SELECT DISTINCT session_id
+              FROM messages
+              WHERE preview_json IS NOT NULL OR preview_state IS NOT NULL
+            )
+            "#,
+            [],
+        )
+        .map_err(|error| error.to_string())?;
+    }
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ai_history_sessions_mode_updated_at ON sessions(mode, updated_at DESC)",
+        [],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 fn normalize_title(title: &str, messages: &[AiChatHistoryMessage]) -> String {
@@ -302,6 +361,13 @@ fn normalize_title(title: &str, messages: &[AiChatHistoryMessage]) -> String {
         "AI Chat".to_string()
     } else {
         truncate(first_user_message, MAX_TITLE_CHARS)
+    }
+}
+
+fn normalize_mode(value: Option<&str>) -> String {
+    match value {
+        Some("edit") => "edit".to_string(),
+        _ => DEFAULT_HISTORY_MODE.to_string(),
     }
 }
 

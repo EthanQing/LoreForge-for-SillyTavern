@@ -29,6 +29,8 @@ pnpm tauri build
 
 `pnpm dev` runs Vite at `127.0.0.1:1420`.
 
+On Windows PowerShell, execution policy may block the `pnpm.ps1` shim. Use `pnpm.cmd build`, `pnpm.cmd test`, or `pnpm.cmd dev` from PowerShell when that happens.
+
 ## Rust Commands
 
 Backend tests can be run with:

@@ -639,9 +639,10 @@ function fromNormalizedWorldBook(normalized: NormalizedWorldBook, previousBook: 
     token_budget: normalized.tokenBudget,
     recursive_scanning: normalized.recursiveScanning,
     extensions: previousBook?.extensions ?? {},
-    entries: normalized.entries.map((entry, index) =>
-      fromNormalizedWorldBookEntry(entry, previousEntriesById.get(entry.id), index)
-    )
+    entries: normalized.entries
+      .map((entry, originalIndex) => ({ entry, originalIndex }))
+      .sort((left, right) => left.entry.order - right.entry.order || left.originalIndex - right.originalIndex)
+      .map(({ entry }, index) => fromNormalizedWorldBookEntry(entry, previousEntriesById.get(entry.id), index))
   };
 }
 
@@ -1037,7 +1038,7 @@ function normalizedEntryId(entry: LorebookEntry, index: number): string {
   if (entry.id !== undefined && entry.id !== null && String(entry.id).trim()) {
     return String(entry.id);
   }
-  return `entry_${optionalNumber(entry.insertion_order) ?? index}`;
+  return `entry_${index}`;
 }
 
 function patchError(index: number, message: string): Error {

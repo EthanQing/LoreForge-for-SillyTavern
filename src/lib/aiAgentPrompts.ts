@@ -206,6 +206,7 @@ Field roles:
 WorldBook entry requirements:
 New entries must include id, enabled, comment, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, and budget.
 comment is the SillyTavern Entry Title/Memo: keep it short, human-readable, and useful in the UI.
+Use the order field to control worldBook entry ordering; lower order values are written earlier in the entries array.
 Recommended entry defaults: enabled true, selective false, constant false, insertionPosition before_char, depth 4, probability 100, budget 300.
 `.trim();
 
@@ -281,6 +282,7 @@ Patch /exampleDialogue unless the user asks for another field.
 Mode: WorldBook generation.
 Create or edit lorebook entries only for reusable background knowledge that should be injected conditionally or constantly.
 Entry content must stand alone as prompt-ready lore.
+When the user asks to reorder entries, patch the affected /worldBook/entries/*/order values.
 Use stable ids such as wb_main_setting, wb_faction_name, or wb_relationship_user_char.
 Do not rely on comments, keys, or secondaryKeys to carry important facts.
 `.trim(),

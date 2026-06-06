@@ -366,6 +366,7 @@ Recommended defaults:
 - constant: false unless the lore is always needed
 - insertionPosition: "before_char"
 - order: next available integer
+- To reorder entries, patch affected `/worldBook/entries/*/order` values; lower order values are written earlier in the persisted entries array.
 - depth: 4
 - probability: 100
 - budget: 300

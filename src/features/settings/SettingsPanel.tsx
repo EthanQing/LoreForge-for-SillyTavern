@@ -4,7 +4,7 @@ import { Button } from "../../components/Button";
 import { FieldShell, SelectField, TextField } from "../../components/Field";
 import { useCardStore } from "../../app/store";
 import { useI18n, type Locale, type TranslationKey } from "../../lib/i18n";
-import { fetchAiModels, testAiConnection, type AiThinkingEffort, type AiThinkingMode } from "../../lib/ai";
+import { AI_MAX_OUTPUT_TOKENS, AI_MAX_TIMEOUT_MS, fetchAiModels, testAiConnection, type AiThinkingEffort, type AiThinkingMode } from "../../lib/ai";
 
 const thinkingOptions = [
   { value: "high", labelKey: "common.high" },
@@ -232,15 +232,18 @@ export function SettingsPanel() {
           </div>
           <div className="two-column">
             <TextField
+              detail="1 - 384K"
               label={t("settings.maxOutputTokens")}
+              max={AI_MAX_OUTPUT_TOKENS}
               min={1}
-              step={128}
+              step={1024}
               type="number"
               value={aiSettings.maxOutputTokens}
               onChange={(event) => updateAiSettings({ maxOutputTokens: Number(event.currentTarget.value) })}
             />
             <TextField
               label={t("settings.timeoutMs")}
+              max={AI_MAX_TIMEOUT_MS}
               min={1000}
               step={1000}
               type="number"

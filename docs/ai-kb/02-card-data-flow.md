@@ -50,11 +50,23 @@ Use `src/app/store.ts` methods instead of mutating card state directly.
 - `markSaved`: stores exported/saved card, validates, clears dirty, updates recent list.
 - `applyAgentCard`: applies AI-generated card state and marks dirty.
 
+The store also persists draft identity metadata under `sillytavern-card-creator:draft-meta`: current file path, card origin (`file`, `draft`, or `new`), and dirty state. Keep this metadata in sync when adding open/save/new-card flows so the topbar and Project panel can show the active editing target accurately.
+
 ## Import/Export Flow
 
 Frontend command wrappers are in `src/lib/tauri.ts`.
 
 Backend orchestration is in `src-tauri/src/commands.rs`.
+
+Global save:
+
+- `useProjectActions().saveCurrentCard()` is the shared Save action for the topbar, Project panel, context menu, and `Ctrl/Cmd+S`.
+- `useProjectActions().saveCardSnapshot(card, options)` is the programmatic save path for applying an already-computed card snapshot, currently used by AI preview apply/re-inject so the saved file matches the just-applied card rather than a stale React render.
+- If the active `currentPath` points to an existing JSON, PNG/APNG, or CHARX card, Save writes back to that same path without opening a save dialog.
+- JSON Save uses `save_card_json`; PNG/APNG Save uses `export_card_png`; CHARX Save uses `export_charx`.
+- For PNG/APNG Save, the current main icon/cover asset is used as the base image when present. If no cover asset exists, the current image path is used as the fallback base before writing back to the same path.
+- New cards, local drafts, and unrecognized paths use a save dialog with PNG as the default format while still allowing JSON or CHARX.
+- Keep `exportJson()`, `exportPng()`, and `exportCharxFile()` as explicit save-as/export paths that always prompt for a destination.
 
 Supported open formats:
 
@@ -79,6 +91,22 @@ CHARX:
 - Export writes root `card.json`.
 - Backend supports asset file entries.
 - Current README notes that the UI does not yet automatically map selected assets into `embeded://` paths.
+
+## Asset UI Performance
+
+`src/features/assets/AssetsPanel.tsx` folds large inline `data:` asset URIs by default and shows a lightweight summary row. Render the full URI input only when the user chooses to edit it; putting long base64 image data directly into controlled inputs can make tab switches feel blocked.
+
+## Asset UI Semantics
+
+The Assets panel edits the current card's CCv3 `data.assets`; it is not a SillyTavern global media library. Cover upload owns the main portrait asset (`type: "icon"`, `name: "main"`) and converts it to PNG data for card preview/export. Image upload appends one or more ordinary image assets (`type: "other"`) for later manual classification as background, emotion, user icon, or other. The manual add button creates an empty reference asset for advanced `uri` values such as external URLs, `embeded://...`, or `ccdefault:` and should not create an implicit cover.
+
+## Lorebook UI Performance
+
+`src/features/lorebook/LorebookPanel.tsx` keeps closed world book entries as lightweight summary rows. Entry editors use `Collapsible` with lazy mount and close-time unmounting so large books do not create many `CodeEditor`, `AiFieldAssistant`, chip inputs, and advanced controls during tab switches. Keep summary rendering bounded; avoid joining huge keyword arrays or normalizing full entry content just to show a one-line preview.
+
+World book entries can be reordered through the drag handle in each entry summary. The UI uses `useCardStore().reorderLorebookEntry(from, to)`, which moves the array item for display order only and does not rewrite any entry's `insertion_order`. The entry summary still supports native drag/drop, but the visible handle also has a pointer-event fallback because Tauri WebView can fail to deliver native `drop` events reliably. Keep the arrow buttons as a non-drag fallback, and do not reset user-defined order ranges such as 100+ back to 0. Duplicate `insertion_order` values are valid SillyTavern data and must remain valid in the editor.
+
+The entry insertion-position UI mirrors SillyTavern's official dropdown. Character, example-message, Author's Note, and outlet placements write `entries[*].extensions.position` directly. The three `@D` depth options are composite UI choices that write `extensions.position = 4` plus `extensions.role = 0 | 1 | 2`; do not treat them as separate position numbers. Trigger Strategy is also a composite UI control: Keyword means `constant = false` and `extensions.vectorized = false`, Constant means `constant = true`, and Vector Similarity means `extensions.vectorized = true`.
 
 ## Validation
 

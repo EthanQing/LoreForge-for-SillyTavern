@@ -108,6 +108,56 @@ describe("ai agent normalized card helpers", () => {
     expect(patched.worldBook?.entries.map((entry) => entry.order)).toEqual([0, 1]);
   });
 
+  it("writes worldBook entries in normalized order after AI changes order values", () => {
+    const card = createBlankCard();
+    const first = { ...worldBookEntry("wb_first"), comment: "First", order: 0 };
+    const second = { ...worldBookEntry("wb_second"), comment: "Second", order: 1 };
+    const patched = applyAiPatches(toNormalizedAiCard(card), [
+      { op: "add", path: "/worldBook", value: { name: "Book", entries: [first, second] } },
+      { op: "replace", path: "/worldBook/entries/0/order", value: 101 },
+      { op: "replace", path: "/worldBook/entries/1/order", value: 100 }
+    ]);
+    const nextCard = fromNormalizedAiCard(patched, card);
+
+    expect(nextCard.data.character_book?.entries.map((entry) => entry.comment)).toEqual(["Second", "First"]);
+    expect(nextCard.data.character_book?.entries.map((entry) => entry.insertion_order)).toEqual([100, 101]);
+  });
+
+  it("keeps same-order worldBook entries distinct when they have no explicit id", () => {
+    const card = createBlankCard();
+    card.data.character_book = {
+      name: "Book",
+      extensions: {},
+      entries: [
+        {
+          comment: "First",
+          keys: ["first"],
+          content: "First content.",
+          extensions: { marker: "first" },
+          enabled: true,
+          insertion_order: 10,
+          use_regex: false
+        },
+        {
+          comment: "Second",
+          keys: ["second"],
+          content: "Second content.",
+          extensions: { marker: "second" },
+          enabled: true,
+          insertion_order: 10,
+          use_regex: false
+        }
+      ]
+    };
+
+    const normalized = toNormalizedAiCard(card);
+    const roundtripped = fromNormalizedAiCard(normalized, card);
+
+    expect(normalized.worldBook?.entries.map((entry) => entry.id)).toEqual(["entry_0", "entry_1"]);
+    expect(roundtripped.data.character_book?.entries.map((entry) => entry.insertion_order)).toEqual([10, 10]);
+    expect(roundtripped.data.character_book?.entries.map((entry) => entry.extensions.marker)).toEqual(["first", "second"]);
+  });
+
   it("rejects raw card paths and unsupported regexScripts", () => {
     const normalized = toNormalizedAiCard(createBlankCard());
 

@@ -7,7 +7,7 @@ import {
   findActiveWorkflowQuery
 } from "./AiChatDrawer";
 import type { AiWorkflowAction } from "../../lib/aiAgent";
-import { createBlankCard } from "../../lib/schema";
+import { createBlankCard, createBlankLorebookEntry } from "../../lib/schema";
 
 describe("AI chat mention autocomplete", () => {
   it("detects the active mention query at the cursor", () => {
@@ -51,6 +51,22 @@ describe("AI chat mention autocomplete", () => {
     const targets = buildMentionTargets(card);
     expect(filterMentionTargets(targets, "灰")[0].value).toBe("@灰港");
     expect(filterMentionTargets(targets, "港口")[0].value).toBe("@灰港");
+  });
+
+  it("keeps later lorebook entries available after the first eight", () => {
+    const card = createBlankCard();
+    card.data.character_book = {
+      extensions: {},
+      entries: Array.from({ length: 12 }, (_, index) => ({
+        ...createBlankLorebookEntry(index),
+        comment: `Entry ${index + 1}`,
+        keys: [`key-${index + 1}`]
+      }))
+    };
+
+    const targets = buildMentionTargets(card);
+    expect(filterMentionTargets(targets, "Entry 12")[0].value).toBe("@Entry_12");
+    expect(filterMentionTargets(targets, "key-12")[0].value).toBe("@Entry_12");
   });
 });
 
