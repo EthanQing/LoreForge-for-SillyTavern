@@ -221,12 +221,14 @@ export function createBlankLorebook(): Lorebook {
 }
 
 export function createBlankLorebookEntry(order: number): LorebookEntry {
+  const title = `Entry ${order + 1}`;
   return {
     keys: [],
     content: "",
     extensions: {},
     enabled: true,
     insertion_order: order,
+    comment: title,
     use_regex: false,
   };
 }

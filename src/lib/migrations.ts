@@ -7,6 +7,7 @@ import {
   unixNow,
 } from "./schema";
 import { translate } from "./i18n";
+import { normalizeLorebookForSillyTavern } from "./lorebookCompat";
 
 export interface MigrationResult {
   card: CharacterCardV3;
@@ -189,12 +190,14 @@ export function migrateToV3(input: unknown, now = unixNow()): MigrationResult {
 }
 
 export function prepareCardForExport(card: CharacterCardV3, now = unixNow()): CharacterCardV3 {
+  const data = normalizeData(card.data, now);
   return {
     ...card,
     spec: "chara_card_v3",
     spec_version: card.spec_version || "3.0",
     data: {
-      ...normalizeData(card.data, now),
+      ...data,
+      character_book: normalizeLorebookForSillyTavern(data.character_book),
       modification_date: now,
     },
   };

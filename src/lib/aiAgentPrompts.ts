@@ -83,7 +83,7 @@ export function buildAiAgentMessages(options: BuildAiAgentMessagesOptions): AiCh
                 kind: options.editTarget.kind,
                 entryIndex: options.editTarget.entryIndex,
                 entryId: options.editTarget.entryId,
-                entryName: options.editTarget.entryName,
+                entryMemo: options.editTarget.entryMemo,
                 editablePaths: options.editTarget.editablePaths,
                 fieldTarget: options.editTarget.fieldTarget ?? null
               }
@@ -204,7 +204,8 @@ Field roles:
 - worldBook.entries content must stand alone as prompt-ready lore; keys only trigger entries.
 
 WorldBook entry requirements:
-New entries must include id, enabled, name, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, and budget.
+New entries must include id, enabled, comment, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, and budget.
+comment is the SillyTavern Entry Title/Memo: keep it short, human-readable, and useful in the UI.
 Recommended entry defaults: enabled true, selective false, constant false, insertionPosition before_char, depth 4, probability 100, budget 300.
 `.trim();
 
@@ -281,7 +282,7 @@ Mode: WorldBook generation.
 Create or edit lorebook entries only for reusable background knowledge that should be injected conditionally or constantly.
 Entry content must stand alone as prompt-ready lore.
 Use stable ids such as wb_main_setting, wb_faction_name, or wb_relationship_user_char.
-Do not rely on names, keys, or secondaryKeys to carry important facts.
+Do not rely on comments, keys, or secondaryKeys to carry important facts.
 `.trim(),
   validation_repair: `
 Mode: Validation repair.
@@ -357,7 +358,7 @@ Reduce repetition, shorten verbose content, and move reusable background into wo
 `.trim(),
   worldbook_build: `
 Workflow: WorldBook builder.
-Create or improve worldBook entries with standalone content and useful keys. Avoid relying on entry names alone.
+Create or improve worldBook entries with standalone content, concise comment memos, and useful keys.
 `.trim(),
   import_cleanup: `
 Workflow: Imported card cleanup.

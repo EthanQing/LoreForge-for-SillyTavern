@@ -20,7 +20,7 @@ function worldBookEntry(id: string): NormalizedWorldBookEntry {
   return {
     id,
     enabled: true,
-    name: "Main Setting",
+    comment: "Main Setting",
     keys: ["setting"],
     secondaryKeys: [],
     content: "The setting has a clear reusable fact.",
@@ -55,6 +55,7 @@ describe("ai agent normalized card helpers", () => {
         {
           id: "wb_keep",
           name: "Faction",
+          comment: "Faction Memo",
           keys: ["faction"],
           secondary_keys: ["city"],
           content: "A preserved faction.",
@@ -76,7 +77,9 @@ describe("ai agent normalized card helpers", () => {
     expect(roundtripped.data.character_book?.extensions.keep).toBe(true);
     expect(roundtripped.data.character_book?.entries[0].extensions.entryKeep).toBe(true);
     expect(roundtripped.data.character_book?.entries[0].priority).toBe(42);
+    expect(roundtripped.data.character_book?.entries[0].comment).toBe("Faction Memo");
     expect(roundtripped.data.character_book?.entries[0].content).toBe("Updated lore.");
+    expect(roundtripped.data.character_book?.entries[0].extensions.depth).toBe(3);
   });
 
   it("applies allowed scalar and array patches", () => {
@@ -167,6 +170,28 @@ describe("ai agent normalized card helpers", () => {
 
     expect(() => applyAiPatches(normalized, [badPatch])).toThrow(/missing enabled/);
     expect(normalized.worldBook).toBeUndefined();
+  });
+
+  it("requires and applies SillyTavern memo comments for worldBook entries", () => {
+    const normalized = toNormalizedAiCard(createBlankCard());
+    const entry = worldBookEntry("wb_city");
+
+    const patched = applyAiPatches(normalized, [
+      { op: "add", path: "/worldBook", value: { name: "Book", entries: [entry] } },
+      { op: "replace", path: "/worldBook/entries/0/comment", value: "City Memo" }
+    ]);
+    const card = fromNormalizedAiCard(patched, createBlankCard());
+
+    expect(patched.worldBook?.entries[0].comment).toBe("City Memo");
+    expect(card.data.character_book?.entries[0].comment).toBe("City Memo");
+    expect(card.data.character_book?.entries[0].name).toBeUndefined();
+    expect(card.data.character_book?.entries[0].extensions.probability).toBe(100);
+
+    const missingComment = { ...entry } as Record<string, unknown>;
+    delete missingComment.comment;
+    expect(() => applyAiPatches(toNormalizedAiCard(createBlankCard()), [{ op: "add", path: "/worldBook", value: { entries: [missingComment] } }])).toThrow(
+      /missing comment/
+    );
   });
 
   it("parses @ targets and filters out-of-scope patches", () => {

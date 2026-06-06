@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createBlankCard } from "./schema";
-import { migrateToV3 } from "./migrations";
+import { createBlankCard, createBlankLorebookEntry } from "./schema";
+import { migrateToV3, prepareCardForExport } from "./migrations";
 import { validateCard } from "./validation";
 
 describe("ccv3 schema helpers", () => {
@@ -39,6 +39,56 @@ describe("ccv3 schema helpers", () => {
     );
     expect(result.card.spec).toBe("chara_card_v3");
     expect(result.card.data.character_book?.entries[0].use_regex).toBe(false);
+  });
+
+  it("creates blank lorebook entries with a SillyTavern memo fallback", () => {
+    const entry = createBlankLorebookEntry(2);
+
+    expect(entry.name).toBeUndefined();
+    expect(entry.comment).toBe("Entry 3");
+  });
+
+  it("fills empty lorebook memos and syncs SillyTavern extension fields before export", () => {
+    const card = createBlankCard(100);
+    card.data.character_book = {
+      extensions: {},
+      entries: [
+        {
+          name: "Faction",
+          keys: ["faction"],
+          content: "Faction lore.",
+          extensions: {},
+          enabled: true,
+          insertion_order: 0,
+          use_regex: false,
+          position: "after_char",
+          case_sensitive: true,
+          depth: 3,
+          probability: 80,
+        },
+        {
+          keys: ["city"],
+          content: "City lore.",
+          extensions: { commentKeep: true },
+          enabled: true,
+          insertion_order: 1,
+          use_regex: false,
+        },
+      ],
+    };
+
+    const exported = prepareCardForExport(card, 200);
+    const entries = exported.data.character_book?.entries ?? [];
+
+    expect(entries[0].comment).toBe("Faction");
+    expect(entries[0].name).toBeUndefined();
+    expect(entries[0].extensions.position).toBe(1);
+    expect(entries[0].extensions.case_sensitive).toBe(true);
+    expect(entries[0].extensions.depth).toBe(3);
+    expect(entries[0].extensions.probability).toBe(80);
+    expect(entries[1].comment).toBe("city");
+    expect(entries[1].extensions.commentKeep).toBe(true);
+    expect(entries[1].extensions.display_index).toBe(1);
   });
 
   it("migrates V1 cards", () => {

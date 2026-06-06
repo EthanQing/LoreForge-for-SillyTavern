@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, BrainCircuit, Check, History, PanelRightClose, PenLine, Plus, RotateCcw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowUp, Bot, BrainCircuit, Check, ChevronDown, History, PanelRightClose, PenLine, Plus, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "../../components/Button";
 import { AutoResizeTextarea } from "../../components/Field";
 import { useCardStore } from "../../app/store";
 import { useI18n } from "../../lib/i18n";
-import { sendAiChat } from "../../lib/ai";
+import { sendAiChat, type AiModel, type AiThinkingEffort, type AiThinkingMode } from "../../lib/ai";
 import { buildAiAgentMessages, buildAiGuideMessages } from "../../lib/aiAgentPrompts";
 import {
   createAiAgentPreviewForTarget,
@@ -22,6 +22,7 @@ import {
   type AiWorkflowAction
 } from "../../lib/aiAgent";
 import { createBlankCard, type CharacterCardV3 } from "../../lib/schema";
+import { deriveLorebookEntryComment } from "../../lib/lorebookCompat";
 import { validateCard } from "../../lib/validation";
 import { useAiFieldContext } from "../../lib/aiFieldContext";
 import {
@@ -56,6 +57,12 @@ interface MentionQuery {
   query: string;
 }
 
+export interface WorkflowCommandQuery {
+  start: number;
+  end: number;
+  query: string;
+}
+
 const AGENT_MIN_OUTPUT_TOKENS = 8192;
 const AGENT_MIN_TIMEOUT_MS = 120_000;
 const GUIDE_MIN_TIMEOUT_MS = 90_000;
@@ -77,6 +84,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const currentFieldTarget = useAiFieldContext((state) => state.currentTarget);
   const applyAgentCard = useCardStore((state) => state.applyAgentCard);
   const setActiveTab = useCardStore((state) => state.setActiveTab);
+  const updateAiSettings = useCardStore((state) => state.updateAiSettings);
   const [sessionId, setSessionId] = useState(() => createSessionId());
   const [sessionCreatedAt, setSessionCreatedAt] = useState(() => Date.now());
   const [history, setHistory] = useState<AiChatSessionSummary[]>([]);
@@ -88,6 +96,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const [includeCard, setIncludeCard] = useState(true);
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [mentionMenuSuppressed, setMentionMenuSuppressed] = useState(false);
+  const [workflowMenuOpen, setWorkflowMenuOpen] = useState(false);
+  const [workflowMenuSuppressed, setWorkflowMenuSuppressed] = useState(false);
+  const [workflowActiveIndex, setWorkflowActiveIndex] = useState(0);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeAssistantId, setActiveAssistantId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -101,11 +113,32 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     () => filterMentionTargets(mentionTargets, mentionQuery?.query ?? "").slice(0, 8),
     [mentionQuery?.query, mentionTargets]
   );
-  const showMentionSuggestions = !mentionMenuSuppressed && Boolean(mentionQuery && mentionSuggestions.length > 0);
+  const workflowQuery = mode === "edit" ? findActiveWorkflowQuery(draft, composerRef.current?.selectionStart ?? draft.length) : undefined;
+  const workflowSuggestions = useMemo(
+    () => filterWorkflowActions(workflowActions, workflowQuery?.query ?? "", (action) => t(`aiWorkflow.${action}` as never)),
+    [t, workflowQuery?.query]
+  );
+  const showWorkflowMenu =
+    mode === "edit" && !workflowMenuSuppressed && (workflowMenuOpen || Boolean(workflowQuery)) && workflowSuggestions.length > 0;
+  const showMentionSuggestions = !showWorkflowMenu && !mentionMenuSuppressed && Boolean(mentionQuery && mentionSuggestions.length > 0);
+  const modelOptions = useMemo(() => buildModelOptions(aiSettings.model, aiSettings.availableModels), [aiSettings.availableModels, aiSettings.model]);
+  const thinkingLabel = formatThinkingLabel(aiSettings.thinkingMode, aiSettings.thinkingEffort, t);
 
   useEffect(() => {
     setMentionActiveIndex(0);
   }, [mentionQuery?.query, mentionTargets]);
+
+  useEffect(() => {
+    setWorkflowActiveIndex(0);
+  }, [workflowMenuOpen, workflowQuery?.query]);
+
+  useEffect(() => {
+    if (mode !== "edit") {
+      setWorkflowMenuOpen(false);
+      setWorkflowMenuSuppressed(false);
+      setWorkflowActiveIndex(0);
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (!open) {
@@ -285,6 +318,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     const assistantMessage: ChatMessage = { id: assistantId, role: "assistant", content: "", reasoning: "", createdAt: now + 1 };
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft("");
+    setSettingsMenuOpen(false);
     setBusy(true);
     setActiveAssistantId(assistantId);
     setError("");
@@ -369,6 +403,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setSessionCreatedAt(Date.now());
     setMessages([]);
     setDraft("");
+    setWorkflowMenuOpen(false);
+    setWorkflowMenuSuppressed(false);
+    setWorkflowActiveIndex(0);
+    setSettingsMenuOpen(false);
     setError("");
   };
 
@@ -435,6 +473,8 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
 
   const appendMention = (mention: string) => {
     setMode("edit");
+    setWorkflowMenuOpen(false);
+    setWorkflowMenuSuppressed(false);
     setDraft((current) => {
       const trimmed = current.trimStart();
       if (trimmed.startsWith(mention)) {
@@ -442,6 +482,15 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       }
       return current.trim() ? `${mention} ${current}` : `${mention} `;
     });
+  };
+
+  const runWorkflowFromMenu = (workflowAction: AiWorkflowAction) => {
+    setWorkflowMenuOpen(false);
+    setWorkflowMenuSuppressed(false);
+    setWorkflowActiveIndex(0);
+    setSettingsMenuOpen(false);
+    setDraft("");
+    void runWorkflow(workflowAction);
   };
 
   const applyMentionSuggestion = (target: MentionTarget) => {
@@ -594,26 +643,6 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
           ) : null}
         </div>
 
-        {mode === "edit" ? (
-          <div className="ai-chat-mentions" aria-label={t("aiChat.mentionTargets")}>
-            {mentionTargets.map((target) => (
-              <button key={target.value} type="button" onClick={() => appendMention(target.value)}>
-                {target.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {mode === "edit" ? (
-          <div className="ai-workflow-bar" aria-label={t("aiWorkflow.title" as never)}>
-            {workflowActions.map((action) => (
-              <button disabled={busy} key={action} type="button" onClick={() => void runWorkflow(action)}>
-                {t(`aiWorkflow.${action}` as never)}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
         <div className="ai-chat-historybar">
           <label className="ai-chat-history-select">
             <History size={16} aria-hidden="true" />
@@ -719,10 +748,40 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
               placeholder={mode === "edit" ? t("aiChat.editPlaceholder") : t("aiChat.placeholder")}
               value={draft}
               onChange={(event) => {
+                const nextDraft = event.currentTarget.value;
+                const nextCursor = event.currentTarget.selectionStart ?? nextDraft.length;
                 setMentionMenuSuppressed(false);
-                setDraft(event.currentTarget.value);
+                setWorkflowMenuSuppressed(false);
+                setDraft(nextDraft);
+                if (!findActiveWorkflowQuery(nextDraft, nextCursor)) {
+                  setWorkflowMenuOpen(false);
+                }
               }}
               onKeyDown={(event) => {
+                if (showWorkflowMenu) {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setWorkflowActiveIndex((current) => (current + 1) % workflowSuggestions.length);
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setWorkflowActiveIndex((current) => (current - 1 + workflowSuggestions.length) % workflowSuggestions.length);
+                    return;
+                  }
+                  if (event.key === "Tab" || event.key === "Enter") {
+                    event.preventDefault();
+                    runWorkflowFromMenu(workflowSuggestions[workflowActiveIndex] ?? workflowSuggestions[0]);
+                    return;
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setWorkflowMenuOpen(false);
+                    setWorkflowMenuSuppressed(true);
+                    setWorkflowActiveIndex(0);
+                    return;
+                  }
+                }
                 if (showMentionSuggestions) {
                   if (event.key === "ArrowDown") {
                     event.preventDefault();
@@ -753,9 +812,114 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
               }}
             />
           </div>
-          <Button disabled={busy || !draft.trim()} icon={<Send size={18} />} variant="primary" onClick={() => void send()}>
-            {t("common.send")}
-          </Button>
+          <div className="ai-chat-composer-toolbar">
+            <div className="ai-chat-composer-tools">
+              {mode === "edit" ? (
+                <div className="ai-workflow-shell">
+                  {showWorkflowMenu ? (
+                    <div className="ai-workflow-menu" role="listbox" aria-label={t("aiWorkflow.title" as never)}>
+                      {workflowSuggestions.map((action, index) => (
+                        <button
+                          aria-selected={index === workflowActiveIndex}
+                          className={index === workflowActiveIndex ? "active" : ""}
+                          disabled={busy}
+                          key={action}
+                          role="option"
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            runWorkflowFromMenu(action);
+                          }}
+                        >
+                          {t(`aiWorkflow.${action}` as never)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <button
+                    className="ai-workflow-trigger"
+                    disabled={busy}
+                    type="button"
+                    aria-label={t("aiWorkflow.title" as never)}
+                    title={t("aiWorkflow.title" as never)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      const nextOpen = !showWorkflowMenu;
+                      setSettingsMenuOpen(false);
+                      setMentionMenuSuppressed(true);
+                      setWorkflowMenuSuppressed(!nextOpen && Boolean(workflowQuery));
+                      setWorkflowMenuOpen(nextOpen);
+                      setWorkflowActiveIndex(0);
+                      window.requestAnimationFrame(() => composerRef.current?.focus());
+                    }}
+                  >
+                    <Plus size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div className="ai-chat-composer-actions">
+              <div className="ai-model-menu-shell">
+                <button
+                  className="ai-model-menu-trigger"
+                  type="button"
+                  aria-expanded={settingsMenuOpen}
+                  aria-label={`${t("settings.model" as never)} / ${t("settings.thinkingEffort" as never)}`}
+                  onClick={() => {
+                    setWorkflowMenuOpen(false);
+                    setSettingsMenuOpen((current) => !current);
+                  }}
+                >
+                  <span>{compactModelLabel(aiSettings.model)}</span>
+                  <span>{thinkingLabel}</span>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </button>
+                {settingsMenuOpen ? (
+                  <div className="ai-model-menu">
+                    <label className="field">
+                      <span>{t("settings.model" as never)}</span>
+                      <select
+                        className="input"
+                        value={aiSettings.model}
+                        onChange={(event) => updateAiSettings({ model: event.currentTarget.value })}
+                      >
+                        {modelOptions.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="ai-thinking-picker" aria-label={t("settings.thinkingEffort" as never)}>
+                      <span>{t("settings.thinkingEffort" as never)}</span>
+                      <div className="ai-thinking-options">
+                        <button
+                          className={aiSettings.thinkingMode === "disabled" ? "active" : ""}
+                          type="button"
+                          onClick={() => updateAiSettings({ thinkingMode: "disabled" })}
+                        >
+                          {t("common.disabled")}
+                        </button>
+                        {(["high", "max"] as const).map((effort) => (
+                          <button
+                            className={aiSettings.thinkingMode === "enabled" && aiSettings.thinkingEffort === effort ? "active" : ""}
+                            key={effort}
+                            type="button"
+                            onClick={() => updateAiSettings({ thinkingMode: "enabled", thinkingEffort: effort })}
+                          >
+                            {formatThinkingEffort(effort, t)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <button className="ai-send-button" disabled={busy || !draft.trim()} type="button" aria-label={t("common.send")} onClick={() => void send()}>
+                <ArrowUp size={18} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </footer>
       </aside>
     </div>
@@ -782,6 +946,9 @@ function AiAgentPreviewBlock({
   const errors = preview.validationReport.errors.length;
   const warnings = preview.validationReport.warnings.length;
   const canApply = state === "pending" && errors === 0 && preview.diffs.length > 0;
+  const responseJson = preview.rejectedPatches?.length
+    ? { ...preview.response, rejectedPatches: preview.rejectedPatches }
+    : preview.response;
 
   return (
     <div className="ai-agent-preview">
@@ -790,6 +957,16 @@ function AiAgentPreviewBlock({
         <span className={errors > 0 ? "state-pill state-pill-hot" : "state-pill"}>
           {t("aiAgent.validationSummary", { errors, warnings })}
         </span>
+      </div>
+
+      <div className="ai-agent-json-list">
+        <JsonPreviewDetails
+          label={t("aiAgent.responseJson")}
+          meta={t("aiAgent.patchCount", { count: preview.response.patches.length })}
+          value={responseJson}
+          open
+        />
+        <JsonPreviewDetails label={t("aiAgent.afterJson")} meta="normalized" value={preview.afterNormalized} />
       </div>
 
       {preview.response.summary.length > 0 ? (
@@ -801,18 +978,10 @@ function AiAgentPreviewBlock({
       ) : null}
 
       {preview.diffs.length > 0 ? (
-        <div className="ai-agent-diffs">
+        <div className="ai-agent-changed-paths">
+          <span>{t("aiAgent.changedPaths")}</span>
           {preview.diffs.map((diff) => (
-            <details className="ai-agent-diff" key={diff.path} open={preview.diffs.length <= 3}>
-              <summary>
-                <span>{diff.label}</span>
-                <code>{diff.path}</code>
-              </summary>
-              <div className="ai-agent-diff-grid">
-                <DiffValue label={t("aiAgent.before")} value={diff.before} />
-                <DiffValue label={t("aiAgent.after")} value={diff.after} />
-              </div>
-            </details>
+            <code key={diff.path}>{diff.path}</code>
           ))}
         </div>
       ) : (
@@ -835,12 +1004,25 @@ function AiAgentPreviewBlock({
   );
 }
 
-function DiffValue({ label, value }: { label: string; value: string }) {
+function JsonPreviewDetails({
+  label,
+  meta,
+  value,
+  open = false
+}: {
+  label: string;
+  meta?: string;
+  value: unknown;
+  open?: boolean;
+}) {
   return (
-    <div>
-      <span>{label}</span>
-      <pre>{value}</pre>
-    </div>
+    <details className="ai-agent-json" open={open}>
+      <summary>
+        <span>{label}</span>
+        {meta ? <code>{meta}</code> : null}
+      </summary>
+      <pre>{JSON.stringify(value, null, 2)}</pre>
+    </details>
   );
 }
 
@@ -948,18 +1130,19 @@ export function buildMentionTargets(card: CharacterCardV3): MentionTarget[] {
   return [
     ...targets,
     ...entries.slice(0, 8).map((entry, index) => {
-      const name = String(entry.name || entry.id || `条目${index + 1}`).trim();
-      const mention = name.replace(/\s+/g, "_");
+      const memo = deriveLorebookEntryComment(entry, index);
+      const mention = memo.replace(/\s+/g, "_");
       return {
-        label: `@${name}`,
+        label: `@${memo}`,
         value: `@${mention}`,
         description: `世界书条目 #${index + 1}${entry.keys.length ? ` · ${entry.keys.slice(0, 3).join(", ")}` : ""}`,
         aliases: [
-          name,
+          memo,
           `条目${index + 1}`,
           `entry${index + 1}`,
           `#${index + 1}`,
           entry.id === undefined ? "" : String(entry.id),
+          entry.comment ?? "",
           ...entry.keys
         ].filter(Boolean)
       };
@@ -970,6 +1153,21 @@ export function buildMentionTargets(card: CharacterCardV3): MentionTarget[] {
 export function findActiveMentionQuery(value: string, cursor: number): MentionQuery | undefined {
   const beforeCursor = value.slice(0, cursor);
   const match = beforeCursor.match(/(^|\s)@([^\s@，。！？、；：,.!?;:]*)$/u);
+  if (!match || match.index === undefined) {
+    return undefined;
+  }
+  const prefixLength = match[1].length;
+  const start = match.index + prefixLength;
+  return {
+    start,
+    end: cursor,
+    query: match[2] ?? ""
+  };
+}
+
+export function findActiveWorkflowQuery(value: string, cursor: number): WorkflowCommandQuery | undefined {
+  const beforeCursor = value.slice(0, cursor);
+  const match = beforeCursor.match(/(^|\s)\/([^\r\n]*)$/u);
   if (!match || match.index === undefined) {
     return undefined;
   }
@@ -994,8 +1192,42 @@ export function filterMentionTargets(targets: MentionTarget[], query: string): M
     .map((item) => item.target);
 }
 
+export function filterWorkflowActions(
+  actions: AiWorkflowAction[],
+  query: string,
+  getLabel: (action: AiWorkflowAction) => string
+): AiWorkflowAction[] {
+  const normalizedQuery = normalizeWorkflowCommandText(query);
+  if (!normalizedQuery) {
+    return actions;
+  }
+  return actions
+    .map((action, index) => ({ action, index, score: workflowActionMatchScore(action, normalizedQuery, getLabel) }))
+    .filter((item) => item.score >= 0)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map((item) => item.action);
+}
+
 function mentionMatchScore(target: MentionTarget, normalizedQuery: string): number {
   const candidates = [target.label, target.value, ...target.aliases].map(normalizeMentionText).filter(Boolean);
+  if (candidates.some((candidate) => candidate === normalizedQuery)) {
+    return 0;
+  }
+  if (candidates.some((candidate) => candidate.startsWith(normalizedQuery))) {
+    return 1;
+  }
+  if (candidates.some((candidate) => candidate.includes(normalizedQuery))) {
+    return 2;
+  }
+  return -1;
+}
+
+function workflowActionMatchScore(
+  action: AiWorkflowAction,
+  normalizedQuery: string,
+  getLabel: (action: AiWorkflowAction) => string
+): number {
+  const candidates = [action, getLabel(action), ...action.split("_")].map(normalizeWorkflowCommandText).filter(Boolean);
   if (candidates.some((candidate) => candidate === normalizedQuery)) {
     return 0;
   }
@@ -1014,6 +1246,45 @@ function normalizeMentionText(value: string): string {
     .replace(/^@/u, "")
     .replace(/[\s_\-:：/\\]+/gu, "")
     .toLowerCase();
+}
+
+function normalizeWorkflowCommandText(value: string): string {
+  return value
+    .trim()
+    .replace(/^\/+/u, "")
+    .replace(/[\s_\-:：\/\\]+/gu, "")
+    .toLowerCase();
+}
+
+function buildModelOptions(currentModel: string, models: AiModel[]): AiModel[] {
+  const options = currentModel.trim() ? [...models, { id: currentModel.trim() }] : models;
+  const seen = new Set<string>();
+  return options.filter((model) => {
+    const id = model.id.trim();
+    if (!id || seen.has(id)) {
+      return false;
+    }
+    seen.add(id);
+    return true;
+  });
+}
+
+function compactModelLabel(model: string): string {
+  const trimmed = model.trim();
+  if (!trimmed) {
+    return "model";
+  }
+  const leaf = trimmed.split("/").filter(Boolean).pop() ?? trimmed;
+  const compact = leaf.replace(/^deepseek-/iu, "");
+  return compact.length > 18 ? `${compact.slice(0, 15)}...` : compact;
+}
+
+function formatThinkingEffort(effort: AiThinkingEffort, t: Translator): string {
+  return effort === "max" ? t("common.max") : t("common.high");
+}
+
+function formatThinkingLabel(mode: AiThinkingMode, effort: AiThinkingEffort, t: Translator): string {
+  return mode === "disabled" ? t("common.disabled") : formatThinkingEffort(effort, t);
 }
 
 function buildConversation(messages: ChatMessage[]) {

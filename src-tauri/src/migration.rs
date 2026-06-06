@@ -1,6 +1,8 @@
-use crate::card_schema::{current_unix_seconds, CharacterCardV3, ExtraFields};
+use crate::card_schema::{current_unix_seconds, CharacterCardV3, ExtraFields, LorebookEntry};
 use crate::errors::{CardError, CardResult};
 use serde_json::{Map, Value};
+
+const LOREBOOK_ENTRY_COMMENT_MAX_LENGTH: usize = 100;
 
 pub fn migrate_value_to_v3(value: Value) -> CardResult<(CharacterCardV3, Vec<String>, String)> {
     let object = value.as_object().ok_or_else(|| {
@@ -62,9 +64,105 @@ pub fn normalize_card(mut card: CharacterCardV3) -> CharacterCardV3 {
 
 pub fn touch_for_export(mut card: CharacterCardV3) -> CharacterCardV3 {
     card = normalize_card(card);
+    normalize_lorebook_for_export(&mut card);
     card.spec_version = "3.0".to_string();
     card.data.modification_date = Some(current_unix_seconds());
     card
+}
+
+fn normalize_lorebook_for_export(card: &mut CharacterCardV3) {
+    if let Some(book) = &mut card.data.character_book {
+        for (index, entry) in book.entries.iter_mut().enumerate() {
+            normalize_lorebook_entry_for_export(entry, index);
+        }
+    }
+}
+
+fn normalize_lorebook_entry_for_export(entry: &mut LorebookEntry, index: usize) {
+    entry.comment = Some(derive_lorebook_entry_comment(entry, index));
+    entry.name = None;
+
+    copy_i64_extension(&mut entry.extensions, "depth", entry.extra.get("depth"));
+    copy_i64_extension(
+        &mut entry.extensions,
+        "probability",
+        entry.extra.get("probability"),
+    );
+    copy_i64_extension(&mut entry.extensions, "budget", entry.extra.get("budget"));
+    copy_bool_extension(
+        &mut entry.extensions,
+        "case_sensitive",
+        entry.case_sensitive,
+    );
+
+    if !entry.extensions.contains_key("position") {
+        if let Some(position) = entry.position.as_deref() {
+            let value = if position == "after_char" { 1 } else { 0 };
+            entry
+                .extensions
+                .insert("position".to_string(), Value::from(value));
+        }
+    }
+    if !entry.extensions.contains_key("display_index") {
+        entry
+            .extensions
+            .insert("display_index".to_string(), Value::from(index as i64));
+    }
+}
+
+fn derive_lorebook_entry_comment(entry: &LorebookEntry, index: usize) -> String {
+    for candidate in [
+        entry.comment.as_deref(),
+        entry.name.as_deref(),
+        entry
+            .keys
+            .iter()
+            .find(|key| !key.trim().is_empty())
+            .map(String::as_str),
+    ] {
+        if let Some(value) = candidate {
+            if !value.trim().is_empty() {
+                return truncate_lorebook_entry_comment(value);
+            }
+        }
+    }
+    truncate_lorebook_entry_comment(&fallback_lorebook_entry_comment(index))
+}
+
+fn fallback_lorebook_entry_comment(index: usize) -> String {
+    format!("Entry {}", index + 1)
+}
+
+fn truncate_lorebook_entry_comment(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .take(LOREBOOK_ENTRY_COMMENT_MAX_LENGTH)
+        .collect()
+}
+
+fn copy_i64_extension(extensions: &mut ExtraFields, key: &str, value: Option<&Value>) {
+    if extensions.contains_key(key) {
+        return;
+    }
+    if let Some(value) = value.and_then(value_as_i64) {
+        extensions.insert(key.to_string(), Value::from(value));
+    }
+}
+
+fn copy_bool_extension(extensions: &mut ExtraFields, key: &str, value: Option<bool>) {
+    if extensions.contains_key(key) {
+        return;
+    }
+    if let Some(value) = value {
+        extensions.insert(key.to_string(), Value::from(value));
+    }
+}
+
+fn value_as_i64(value: &Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|number| i64::try_from(number).ok()))
 }
 
 fn migrate_struct(
@@ -178,5 +276,53 @@ mod tests {
         assert_eq!(source, "v1");
         assert_eq!(card.data.name, "Legacy");
         assert_eq!(card.spec, "chara_card_v3");
+    }
+
+    #[test]
+    fn export_fills_lorebook_comment_and_extension_fields() {
+        let (card, _, _) = migrate_value_to_v3(json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {
+                "name": "Test",
+                "character_book": {
+                    "extensions": {},
+                    "entries": [{
+                        "name": "Faction",
+                        "keys": ["faction"],
+                        "content": "Faction lore.",
+                        "extensions": {},
+                        "enabled": true,
+                        "insertion_order": 0,
+                        "use_regex": false,
+                        "position": "after_char",
+                        "case_sensitive": true,
+                        "depth": 3,
+                        "probability": 80
+                    }]
+                }
+            }
+        }))
+        .unwrap();
+
+        let card = touch_for_export(card);
+        let book = card.data.character_book.as_ref().unwrap();
+        let entry = &book.entries[0];
+
+        assert_eq!(entry.comment.as_deref(), Some("Faction"));
+        assert!(entry.name.is_none());
+        assert_eq!(
+            entry.extensions.get("position").and_then(Value::as_i64),
+            Some(1)
+        );
+        assert_eq!(
+            entry.extensions.get("case_sensitive").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(entry.extensions.get("depth").and_then(Value::as_i64), Some(3));
+        assert_eq!(
+            entry.extensions.get("probability").and_then(Value::as_i64),
+            Some(80)
+        );
     }
 }

@@ -1,4 +1,9 @@
 import type { CharacterCardV3, Lorebook, LorebookEntry, ValidationReport } from "./schema";
+import {
+  deriveLorebookEntryComment,
+  fallbackLorebookEntryComment,
+  normalizeLorebookEntryComment
+} from "./lorebookCompat";
 import { validateCard } from "./validation";
 
 export type AiPatchOperation = "add" | "replace" | "remove";
@@ -32,7 +37,7 @@ export interface NormalizedWorldBook {
 export interface NormalizedWorldBookEntry {
   id: string;
   enabled: boolean;
-  name: string;
+  comment: string;
   keys: string[];
   secondaryKeys: string[];
   content: string;
@@ -78,7 +83,7 @@ export type AiFieldTarget =
   | { kind: "field"; path: string; label: string; value: string }
   | { kind: "selection"; path: string; label: string; value: string; start: number; end: number }
   | { kind: "section"; section: "basic" | "prompts" | "greetings" | "worldBook"; label: string }
-  | { kind: "worldBookEntry"; entryIndex: number; entryId?: string; entryName?: string; label: string };
+  | { kind: "worldBookEntry"; entryIndex: number; entryId?: string; entryMemo?: string; label: string };
 
 export interface AiAgentEditTarget {
   kind: AiAgentEditTargetKind;
@@ -88,7 +93,7 @@ export interface AiAgentEditTarget {
   instruction: string;
   entryIndex?: number;
   entryId?: string;
-  entryName?: string;
+  entryMemo?: string;
   fieldTarget?: AiFieldTarget;
 }
 
@@ -200,7 +205,7 @@ export function createEditTargetFromFieldTarget(target: AiFieldTarget): AiAgentE
       instruction: "",
       entryIndex: target.entryIndex,
       entryId: target.entryId,
-      entryName: target.entryName,
+      entryMemo: target.entryMemo,
       fieldTarget: target
     };
   }
@@ -503,17 +508,17 @@ function resolveWorldBookEntryMention(
     const entryIndex = Number(numericMatch[1]) - 1;
     const entry = entries[entryIndex];
     if (entry) {
-      return worldBookEntryTarget(entryIndex, entry.id, entry.name || mention);
+      return worldBookEntryTarget(entryIndex, entry.id, entry.comment || mention);
     }
   }
 
   const entryIndex = entries.findIndex((entry) => {
-    const candidates = [entry.id, entry.name, ...entry.keys].map(normalizeMention).filter(Boolean);
+    const candidates = [entry.id, entry.comment, ...entry.keys].map(normalizeMention).filter(Boolean);
     return candidates.includes(normalizedMention);
   });
   if (entryIndex >= 0) {
     const entry = entries[entryIndex];
-    return worldBookEntryTarget(entryIndex, entry.id, entry.name || mention);
+    return worldBookEntryTarget(entryIndex, entry.id, entry.comment || mention);
   }
 
   return undefined;
@@ -522,15 +527,15 @@ function resolveWorldBookEntryMention(
 function worldBookEntryTarget(
   entryIndex: number,
   entryId: string,
-  entryName: string
+  entryMemo: string
 ): Omit<AiAgentEditTarget, "mention" | "instruction"> {
   return {
     kind: "worldBookEntry",
-    label: `世界书条目 ${entryName || `#${entryIndex + 1}`}`,
+    label: `世界书条目 ${entryMemo || `#${entryIndex + 1}`}`,
     editablePaths: worldBookEntryEditablePaths(entryIndex),
     entryIndex,
     entryId,
-    entryName
+    entryMemo
   };
 }
 
@@ -565,7 +570,7 @@ function worldBookEntryEditablePaths(entryIndex: number): string[] {
     base,
     `${base}/id`,
     `${base}/enabled`,
-    `${base}/name`,
+    `${base}/comment`,
     `${base}/keys`,
     `${base}/secondaryKeys`,
     `${base}/content`,
@@ -602,21 +607,23 @@ function normalizeMention(value: string): string {
 
 function toNormalizedWorldBookEntry(entry: LorebookEntry, index: number): NormalizedWorldBookEntry {
   const passthrough = entry as Record<string, unknown>;
+  const extensions = isRecord(entry.extensions) ? entry.extensions : {};
   const order = optionalNumber(entry.insertion_order) ?? index;
   return {
     id: normalizedEntryId(entry, index),
     enabled: optionalBoolean(entry.enabled) ?? true,
-    name: asString(entry.name),
+    comment: deriveLorebookEntryComment(entry, index),
     keys: stringArray(entry.keys),
     secondaryKeys: stringArray(entry.secondary_keys),
     content: asString(entry.content),
     selective: optionalBoolean(entry.selective) ?? false,
     constant: optionalBoolean(entry.constant) ?? false,
-    insertionPosition: entry.position === "after_char" ? "after_char" : "before_char",
+    insertionPosition:
+      optionalNumber(extensions.position) === 1 || entry.position === "after_char" ? "after_char" : "before_char",
     order,
-    depth: optionalNumber(passthrough.depth) ?? 4,
-    probability: optionalNumber(passthrough.probability) ?? 100,
-    budget: optionalNumber(passthrough.budget) ?? 300
+    depth: optionalNumber(extensions.depth) ?? optionalNumber(passthrough.depth) ?? 4,
+    probability: optionalNumber(extensions.probability) ?? optionalNumber(passthrough.probability) ?? 100,
+    budget: optionalNumber(extensions.budget) ?? optionalNumber(passthrough.budget) ?? 300
   };
 }
 
@@ -644,10 +651,19 @@ function fromNormalizedWorldBookEntry(
   index: number
 ): LorebookEntry {
   const generatedPreviousId = previousEntry?.id === undefined && /^entry_\d+$/.test(normalized.id);
+  const comment = normalizeLorebookEntryComment(
+    normalized.comment || normalized.keys.find((key) => key.trim()) || fallbackLorebookEntryComment(index)
+  );
+  const extensions = {
+    ...(previousEntry?.extensions ?? {}),
+    depth: normalized.depth,
+    probability: normalized.probability,
+    budget: normalized.budget
+  };
   return {
     ...(previousEntry ?? { extensions: {} }),
     id: generatedPreviousId ? undefined : normalized.id,
-    name: normalized.name,
+    name: undefined,
     enabled: normalized.enabled,
     keys: normalized.keys,
     secondary_keys: normalized.secondaryKeys,
@@ -657,12 +673,12 @@ function fromNormalizedWorldBookEntry(
     position: normalized.insertionPosition,
     insertion_order: normalized.order,
     use_regex: previousEntry?.use_regex ?? false,
-    extensions: previousEntry?.extensions ?? {},
-    depth: normalized.depth,
-    probability: normalized.probability,
-    budget: normalized.budget,
+    extensions,
+    depth: undefined,
+    probability: undefined,
+    budget: undefined,
     order: undefined,
-    comment: previousEntry?.comment ?? undefined,
+    comment,
     priority: previousEntry?.priority ?? undefined,
     case_sensitive: previousEntry?.case_sensitive ?? undefined
   } as LorebookEntry;
@@ -839,7 +855,7 @@ function applyWorldBookEntries(book: NormalizedWorldBook, rest: string[], patch:
 function applyWorldBookEntryField(entry: NormalizedWorldBookEntry, field: string, patch: AiPatch, index: number): void {
   switch (field) {
     case "id":
-    case "name":
+    case "comment":
     case "content":
       entry[field] = patch.op === "remove" ? "" : expectString(patch.value, index, patch.path);
       return;
@@ -900,7 +916,7 @@ function expectWorldBookEntry(value: unknown, index: number, path: string): Norm
   for (const key of [
     "id",
     "enabled",
-    "name",
+    "comment",
     "keys",
     "secondaryKeys",
     "content",
@@ -920,7 +936,7 @@ function expectWorldBookEntry(value: unknown, index: number, path: string): Norm
   return {
     id: expectString(value.id, index, `${path}/id`),
     enabled: expectBoolean(value.enabled, index, `${path}/enabled`),
-    name: expectString(value.name, index, `${path}/name`),
+    comment: expectString(value.comment, index, `${path}/comment`),
     keys: expectStringArray(value.keys, index, `${path}/keys`),
     secondaryKeys: expectStringArray(value.secondaryKeys, index, `${path}/secondaryKeys`),
     content: expectString(value.content, index, `${path}/content`),
@@ -1003,7 +1019,7 @@ function defaultEntry(): NormalizedWorldBookEntry {
   return {
     id: "",
     enabled: true,
-    name: "",
+    comment: "",
     keys: [],
     secondaryKeys: [],
     content: "",
