@@ -37,10 +37,12 @@ On Windows GNU Rust toolchains, `cargo test` and `pnpm tauri build` require GNU 
 - Rust Tauri commands for JSON, PNG/APNG `tEXt` metadata, CHARX zip import/export, and validation.
 - PNG export writes `ccv3` metadata and optional legacy `chara` compatibility metadata.
 - CHARX export writes root `card.json` and supports asset file entries through the backend command.
+- AI settings panel for OpenAI-compatible APIs such as DeepSeek, including base URL, API key, model fetching, streaming test output, and thinking intensity.
+- Global AI Chat drawer with current-card context, streaming responses, and optional reasoning display.
 
 ## Current Limits
 
 - The first UI pass embeds selected local images as data URLs; the Rust CHARX backend can include asset files, but the UI does not yet map those assets into `embeded://` paths automatically.
 - Remote asset URLs are editable but not automatically loaded for preview.
-- No network AI generation is implemented.
+- Full AI-assisted card patch generation is not wired into the editor yet; the API settings and connection test are available.
 - Rust verification is blocked on this Windows GNU environment until `dlltool.exe` or an MSVC Rust toolchain is available.

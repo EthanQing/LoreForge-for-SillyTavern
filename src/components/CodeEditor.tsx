@@ -12,6 +12,7 @@ interface CodeEditorProps {
   onChange?: (value: string) => void;
   mode?: EditorMode;
   minHeight?: string;
+  maxHeight?: string;
   readOnly?: boolean;
 }
 
@@ -48,8 +49,8 @@ const macroHighlighter = ViewPlugin.fromClass(
   },
 );
 
-export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px", readOnly = false }: CodeEditorProps) {
-  const extensions: ReactCodeMirrorProps["extensions"] = [];
+export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px", maxHeight = "360px", readOnly = false }: CodeEditorProps) {
+  const extensions: ReactCodeMirrorProps["extensions"] = [EditorView.lineWrapping];
   if (mode === "json") {
     extensions.push(json());
   }
@@ -67,6 +68,7 @@ export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px
       editable={!readOnly}
       extensions={extensions}
       height="auto"
+      maxHeight={maxHeight}
       minHeight={minHeight}
       value={value}
       onChange={(next) => onChange?.(next)}

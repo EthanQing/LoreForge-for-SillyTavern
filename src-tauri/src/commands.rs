@@ -4,6 +4,8 @@ use crate::errors::{command_error, CardError, CardResult};
 use crate::migration::{migrate_value_to_v3, touch_for_export};
 use crate::png_card::{read_card_value, write_card_chunks};
 use crate::validation::{ensure_valid_for_export, validate_card_report};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
@@ -28,13 +30,15 @@ pub fn save_card_json(path: String, card: CharacterCardV3) -> Result<ParsedCard,
 #[tauri::command]
 pub fn export_card_png(
     path: String,
-    base_png_path: String,
+    base_png_path: Option<String>,
+    base_png_data_url: Option<String>,
     card: CharacterCardV3,
     options: PngExportOptions,
 ) -> Result<ParsedCard, String> {
     export_card_png_inner(
         PathBuf::from(path),
-        PathBuf::from(base_png_path),
+        base_png_path.map(PathBuf::from),
+        base_png_data_url,
         card,
         options,
     )
@@ -91,15 +95,44 @@ fn save_card_json_inner(path: PathBuf, card: CharacterCardV3) -> CardResult<Pars
 
 fn export_card_png_inner(
     path: PathBuf,
-    base_png_path: PathBuf,
+    base_png_path: Option<PathBuf>,
+    base_png_data_url: Option<String>,
     card: CharacterCardV3,
     options: PngExportOptions,
 ) -> CardResult<ParsedCard> {
     let card = prepare_export_card(card)?;
-    let base = fs::read(&base_png_path)?;
+    let base = read_export_base_png(base_png_path, base_png_data_url)?;
     let png = write_card_chunks(&base, &card, options.compatibility_v2)?;
     fs::write(&path, png)?;
     Ok(parsed(card, Vec::new(), "png-ccv3".to_string(), None))
+}
+
+fn read_export_base_png(
+    base_png_path: Option<PathBuf>,
+    base_png_data_url: Option<String>,
+) -> CardResult<Vec<u8>> {
+    if let Some(data_url) = base_png_data_url.filter(|value| !value.trim().is_empty()) {
+        return decode_png_data_url(&data_url);
+    }
+
+    let path = base_png_path.ok_or_else(|| {
+        CardError::Invalid("A PNG cover image is required before exporting PNG.".to_string())
+    })?;
+    Ok(fs::read(path)?)
+}
+
+fn decode_png_data_url(data_url: &str) -> CardResult<Vec<u8>> {
+    let (metadata, encoded) = data_url
+        .trim()
+        .split_once(',')
+        .ok_or_else(|| CardError::Invalid("Cover image data URL is malformed.".to_string()))?;
+    let metadata = metadata.to_ascii_lowercase();
+    if !metadata.starts_with("data:image/") || !metadata.contains(";base64") {
+        return Err(CardError::Invalid(
+            "Cover image must be a base64 image data URL.".to_string(),
+        ));
+    }
+    Ok(STANDARD.decode(encoded.trim())?)
 }
 
 fn import_card_png_inner(path: PathBuf) -> CardResult<ParsedCard> {

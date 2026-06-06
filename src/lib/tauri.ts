@@ -1,9 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { CharacterCardV3, ParsedCard, ValidationReport } from "./schema";
+import { translate } from "./i18n";
 
 export interface PngExportOptions {
   compatibility_v2: boolean;
+}
+
+export interface PngExportBase {
+  basePngPath?: string | null;
+  basePngDataUrl?: string | null;
 }
 
 export interface CharxAssetInput {
@@ -16,7 +22,7 @@ export async function pickOpenCardPath(): Promise<string | null> {
     multiple: false,
     filters: [
       {
-        name: "Character cards",
+        name: translate("dialog.characterCards"),
         extensions: ["json", "png", "apng", "charx"]
       }
     ]
@@ -26,7 +32,7 @@ export async function pickOpenCardPath(): Promise<string | null> {
 
 export async function pickJsonSavePath(): Promise<string | null> {
   return await save({
-    filters: [{ name: "Character Card JSON", extensions: ["json"] }],
+    filters: [{ name: translate("dialog.characterCardJson"), extensions: ["json"] }],
     defaultPath: "card.json"
   });
 }
@@ -34,21 +40,21 @@ export async function pickJsonSavePath(): Promise<string | null> {
 export async function pickPngOpenPath(): Promise<string | null> {
   const selected = await open({
     multiple: false,
-    filters: [{ name: "PNG image", extensions: ["png", "apng"] }]
+    filters: [{ name: translate("dialog.pngImage"), extensions: ["png", "apng"] }]
   });
   return typeof selected === "string" ? selected : null;
 }
 
 export async function pickPngSavePath(): Promise<string | null> {
   return await save({
-    filters: [{ name: "PNG card", extensions: ["png"] }],
+    filters: [{ name: translate("dialog.pngCard"), extensions: ["png"] }],
     defaultPath: "card.png"
   });
 }
 
 export async function pickCharxSavePath(): Promise<string | null> {
   return await save({
-    filters: [{ name: "CHARX card", extensions: ["charx"] }],
+    filters: [{ name: translate("dialog.charxCard"), extensions: ["charx"] }],
     defaultPath: "card.charx"
   });
 }
@@ -63,14 +69,16 @@ export async function saveCardJson(path: string, card: CharacterCardV3): Promise
 
 export async function exportCardPng(
   path: string,
-  basePngPath: string,
   card: CharacterCardV3,
-  options: PngExportOptions
+  options: PngExportOptions,
+  base: PngExportBase = {}
 ): Promise<ParsedCard> {
   return await invoke<ParsedCard>("export_card_png", {
     path,
-    basePngPath,
-    base_png_path: basePngPath,
+    basePngPath: base.basePngPath ?? null,
+    base_png_path: base.basePngPath ?? null,
+    basePngDataUrl: base.basePngDataUrl ?? null,
+    base_png_data_url: base.basePngDataUrl ?? null,
     card,
     options
   });

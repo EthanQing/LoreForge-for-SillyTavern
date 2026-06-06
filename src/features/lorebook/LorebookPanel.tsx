@@ -5,6 +5,7 @@ import { Button } from "../../components/Button";
 import { ChipInput } from "../../components/ChipInput";
 import { CodeEditor } from "../../components/CodeEditor";
 import { SelectField, TextField } from "../../components/Field";
+import { useI18n } from "../../lib/i18n";
 import { createBlankLorebook, lorebookEnvelopeSchema } from "../../lib/schema";
 
 function numberValue(value: number | undefined): string {
@@ -20,6 +21,7 @@ function parseNumber(value: string): number | undefined {
 }
 
 export function LorebookPanel() {
+  const { t } = useI18n();
   const card = useCardStore((state) => state.card);
   const updateData = useCardStore((state) => state.updateData);
   const updateLorebook = useCardStore((state) => state.updateLorebook);
@@ -57,10 +59,10 @@ export function LorebookPanel() {
     return (
       <section className="panel">
         <div className="panel-heading">
-          <h2>Lorebook</h2>
+          <h2>{t("lorebook.title")}</h2>
         </div>
         <Button icon={<Plus size={18} />} variant="primary" onClick={() => updateData("character_book", createBlankLorebook())}>
-          Create Lorebook
+          {t("lorebook.create")}
         </Button>
       </section>
     );
@@ -69,34 +71,34 @@ export function LorebookPanel() {
   return (
     <section className="panel">
       <div className="panel-heading">
-        <h2>Lorebook</h2>
+        <h2>{t("lorebook.title")}</h2>
         <div className="inline-row compact">
           <input ref={inputRef} className="hidden-file" type="file" accept="application/json,.json" onChange={importLorebook} />
           <Button icon={<Upload size={16} />} onClick={() => inputRef.current?.click()}>
-            Import
+            {t("common.import")}
           </Button>
           <Button icon={<Download size={16} />} onClick={exportLorebook}>
-            Export
+            {t("common.export")}
           </Button>
           <Button icon={<Plus size={16} />} variant="primary" onClick={addLorebookEntry}>
-            Entry
+            {t("lorebook.entry")}
           </Button>
         </div>
       </div>
       <div className="two-column">
-        <TextField label="Name" value={book.name ?? ""} onChange={(event) => updateLorebook((current) => ({ ...current, name: event.target.value }))} />
+        <TextField label={t("field.name")} value={book.name ?? ""} onChange={(event) => updateLorebook((current) => ({ ...current, name: event.target.value }))} />
         <TextField
-          label="Description"
+          label={t("field.description")}
           value={book.description ?? ""}
           onChange={(event) => updateLorebook((current) => ({ ...current, description: event.target.value }))}
         />
         <TextField
-          label="Scan Depth"
+          label={t("lorebook.scanDepth")}
           value={numberValue(book.scan_depth)}
           onChange={(event) => updateLorebook((current) => ({ ...current, scan_depth: parseNumber(event.target.value) }))}
         />
         <TextField
-          label="Token Budget"
+          label={t("lorebook.tokenBudget")}
           value={numberValue(book.token_budget)}
           onChange={(event) => updateLorebook((current) => ({ ...current, token_budget: parseNumber(event.target.value) }))}
         />
@@ -107,35 +109,63 @@ export function LorebookPanel() {
           type="checkbox"
           onChange={(event) => updateLorebook((current) => ({ ...current, recursive_scanning: event.target.checked }))}
         />
-        <span>Recursive Scanning</span>
+        <span>{t("lorebook.recursiveScanning")}</span>
       </label>
       <div className="stack">
         {book.entries.map((entry, index) => (
-          <article className="lore-entry" key={`${entry.insertion_order}-${index}`}>
+          <details className="lore-entry" key={`${entry.insertion_order}-${index}`}>
+            <summary className="lore-entry-summary">
+              <span className="lore-entry-summary-main">
+                <strong>{entry.name || t("lorebook.entryNumber", { index: index + 1 })}</strong>
+                <span>{entry.keys.length ? entry.keys.join(", ") : t("lorebook.noKeys")}</span>
+              </span>
+              <span className="lore-entry-summary-meta">
+                <span className={entry.enabled ? "state-pill" : "state-pill state-pill-hot"}>
+                  {entry.enabled ? t("common.enabled") : t("common.disabled")}
+                </span>
+                <span className="state-pill">#{entry.insertion_order}</span>
+              </span>
+              {entry.content.trim() ? <span className="lore-entry-preview">{entry.content.trim().replace(/\s+/g, " ").slice(0, 120)}</span> : null}
+            </summary>
+            <div className="lore-entry-body">
             <div className="list-editor-toolbar">
-              <strong>{entry.name || `Entry ${index + 1}`}</strong>
+              <strong>{entry.name || t("lorebook.entryNumber", { index: index + 1 })}</strong>
               <div className="spacer" />
-              <Button icon={<ArrowUp size={16} />} disabled={index === 0} onClick={() => reorderLorebookEntry(index, index - 1)} />
-              <Button icon={<ArrowDown size={16} />} disabled={index === book.entries.length - 1} onClick={() => reorderLorebookEntry(index, index + 1)} />
+              <Button
+                aria-label={t("common.moveUp")}
+                icon={<ArrowUp size={16} />}
+                disabled={index === 0}
+                onClick={() => reorderLorebookEntry(index, index - 1)}
+              />
+              <Button
+                aria-label={t("common.moveDown")}
+                icon={<ArrowDown size={16} />}
+                disabled={index === book.entries.length - 1}
+                onClick={() => reorderLorebookEntry(index, index + 1)}
+              />
               <Button icon={<Trash2 size={16} />} variant="danger" onClick={() => removeLorebookEntry(index)}>
-                Delete
+                {t("common.delete")}
               </Button>
             </div>
             <div className="two-column">
-              <TextField label="Name" value={entry.name ?? ""} onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, name: event.target.value }))} />
+              <TextField label={t("field.name")} value={entry.name ?? ""} onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, name: event.target.value }))} />
               <TextField
-                label="Insertion Order"
+                label={t("lorebook.insertionOrder")}
                 value={String(entry.insertion_order)}
                 onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, insertion_order: Number(event.target.value) || 0 }))}
               />
               <TextField
-                label="Priority"
+                label={t("lorebook.priority")}
                 value={numberValue(entry.priority)}
                 onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, priority: parseNumber(event.target.value) }))}
               />
-              <TextField label="ID" value={entry.id === undefined ? "" : String(entry.id)} onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, id: event.target.value }))} />
+              <TextField
+                label={t("common.id")}
+                value={entry.id === undefined ? "" : String(entry.id)}
+                onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, id: event.target.value }))}
+              />
               <SelectField
-                label="Position"
+                label={t("lorebook.position")}
                 value={entry.position ?? ""}
                 onChange={(event) =>
                   updateLorebookEntry(index, (item) => ({
@@ -144,29 +174,29 @@ export function LorebookPanel() {
                   }))
                 }
               >
-                <option value="">Default</option>
-                <option value="before_char">before_char</option>
-                <option value="after_char">after_char</option>
+                <option value="">{t("common.default")}</option>
+                <option value="before_char">{t("lorebook.beforeChar")}</option>
+                <option value="after_char">{t("lorebook.afterChar")}</option>
               </SelectField>
               <TextField
-                label="Comment"
+                label={t("lorebook.comment")}
                 value={entry.comment ?? ""}
                 onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, comment: event.target.value }))}
               />
             </div>
-            <ChipInput label="Keys" values={entry.keys} onChange={(values) => updateLorebookEntry(index, (item) => ({ ...item, keys: values }))} />
+            <ChipInput label={t("lorebook.keys")} values={entry.keys} onChange={(values) => updateLorebookEntry(index, (item) => ({ ...item, keys: values }))} />
             <ChipInput
-              label="Secondary Keys"
+              label={t("lorebook.secondaryKeys")}
               values={entry.secondary_keys ?? []}
               onChange={(values) => updateLorebookEntry(index, (item) => ({ ...item, secondary_keys: values }))}
             />
             <div className="check-grid">
               {[
-                ["Enabled", "enabled"],
-                ["Use Regex", "use_regex"],
-                ["Case Sensitive", "case_sensitive"],
-                ["Constant", "constant"],
-                ["Selective", "selective"]
+                [t("common.enabled"), "enabled"],
+                [t("lorebook.useRegex"), "use_regex"],
+                [t("lorebook.caseSensitive"), "case_sensitive"],
+                [t("lorebook.constant"), "constant"],
+                [t("lorebook.selective"), "selective"]
               ].map(([label, key]) => (
                 <label className="toggle-row" key={key}>
                   <input
@@ -179,10 +209,11 @@ export function LorebookPanel() {
               ))}
             </div>
             <div className="editor-block">
-              <span className="field-label">Content</span>
+              <span className="field-label">{t("lorebook.content")}</span>
               <CodeEditor value={entry.content} mode="prompt" minHeight="150px" onChange={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))} />
             </div>
-          </article>
+            </div>
+          </details>
         ))}
       </div>
     </section>

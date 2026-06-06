@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useCardStore } from "../../app/store";
 import { Button } from "../../components/Button";
 import { CodeEditor } from "../../components/CodeEditor";
+import { useI18n } from "../../lib/i18n";
 
 function GreetingList({
   title,
@@ -15,6 +16,7 @@ function GreetingList({
   onChange: (values: string[]) => void;
   onPromote?: (value: string, index: number) => void;
 }) {
+  const { t } = useI18n();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   return (
@@ -22,10 +24,10 @@ function GreetingList({
       <div className="subpanel-heading">
         <h3>{title}</h3>
         <Button icon={<Plus size={16} />} onClick={() => onChange([...values, ""])}>
-          Add
+          {t("common.add")}
         </Button>
       </div>
-      {values.length === 0 ? <p className="muted">Empty</p> : null}
+      {values.length === 0 ? <p className="muted">{t("greetings.empty")}</p> : null}
       <div className="stack">
         {values.map((value, index) => (
           <article
@@ -51,7 +53,7 @@ function GreetingList({
               <div className="spacer" />
               {onPromote ? (
                 <Button icon={<Star size={16} />} variant="ghost" onClick={() => onPromote(value, index)}>
-                  First
+                  {t("greetings.promoteFirst")}
                 </Button>
               ) : null}
               <Button
@@ -59,7 +61,7 @@ function GreetingList({
                 variant="danger"
                 onClick={() => onChange(values.filter((_, itemIndex) => itemIndex !== index))}
               >
-                Delete
+                {t("common.delete")}
               </Button>
             </div>
             <CodeEditor
@@ -76,20 +78,21 @@ function GreetingList({
 }
 
 export function GreetingsPanel() {
+  const { t } = useI18n();
   const data = useCardStore((state) => state.card.data);
   const updateData = useCardStore((state) => state.updateData);
 
   return (
     <section className="panel">
       <div className="panel-heading">
-        <h2>Greetings</h2>
+        <h2>{t("greetings.title")}</h2>
       </div>
       <div className="editor-block">
-        <span className="field-label">First Message</span>
+        <span className="field-label">{t("greetings.firstMessage")}</span>
         <CodeEditor value={data.first_mes} mode="prompt" minHeight="180px" onChange={(value) => updateData("first_mes", value)} />
       </div>
       <GreetingList
-        title="Alternate Greetings"
+        title={t("greetings.alternateGreetings")}
         values={data.alternate_greetings}
         onChange={(values) => updateData("alternate_greetings", values)}
         onPromote={(value, index) => {
@@ -100,7 +103,7 @@ export function GreetingsPanel() {
           );
         }}
       />
-      <GreetingList title="Group Only Greetings" values={data.group_only_greetings} onChange={(values) => updateData("group_only_greetings", values)} />
+      <GreetingList title={t("greetings.groupOnlyGreetings")} values={data.group_only_greetings} onChange={(values) => updateData("group_only_greetings", values)} />
     </section>
   );
 }

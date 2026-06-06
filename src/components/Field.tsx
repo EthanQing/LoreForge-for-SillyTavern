@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 interface FieldShellProps {
@@ -31,6 +32,28 @@ export function TextField({ label, detail, ...props }: TextFieldProps) {
   );
 }
 
+export function AutoResizeTextarea({ className, onInput, rows = 1, value, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    resizeTextarea(textareaRef.current);
+  }, [value]);
+
+  return (
+    <textarea
+      {...props}
+      className={["textarea", className].filter(Boolean).join(" ")}
+      ref={textareaRef}
+      rows={rows}
+      value={value}
+      onInput={(event) => {
+        resizeTextarea(event.currentTarget);
+        onInput?.(event);
+      }}
+    />
+  );
+}
+
 interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string;
   detail?: ReactNode;
@@ -39,7 +62,7 @@ interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement>
 export function TextAreaField({ label, detail, ...props }: TextAreaFieldProps) {
   return (
     <FieldShell label={label} detail={detail}>
-      <textarea className="textarea" {...props} />
+      <AutoResizeTextarea {...props} />
     </FieldShell>
   );
 }
@@ -58,4 +81,21 @@ export function SelectField({ label, detail, children, ...props }: SelectFieldPr
       </select>
     </FieldShell>
   );
+}
+
+function resizeTextarea(element: HTMLTextAreaElement | null): void {
+  if (!element) {
+    return;
+  }
+
+  element.style.height = "auto";
+  const maxHeight = Number.parseFloat(window.getComputedStyle(element).maxHeight);
+  const nextHeight = element.scrollHeight;
+  if (Number.isFinite(maxHeight)) {
+    element.style.height = `${Math.min(nextHeight, maxHeight)}px`;
+    element.style.overflowY = nextHeight > maxHeight ? "auto" : "hidden";
+    return;
+  }
+  element.style.height = `${nextHeight}px`;
+  element.style.overflowY = "hidden";
 }

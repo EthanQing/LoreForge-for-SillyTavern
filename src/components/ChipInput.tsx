@@ -1,6 +1,7 @@
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./Button";
+import { useI18n } from "../lib/i18n";
 
 interface ChipInputProps {
   label: string;
@@ -9,8 +10,10 @@ interface ChipInputProps {
   placeholder?: string;
 }
 
-export function ChipInput({ label, values, onChange, placeholder = "Add value" }: ChipInputProps) {
+export function ChipInput({ label, values, onChange, placeholder }: ChipInputProps) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState("");
+  const resolvedPlaceholder = placeholder ?? t("chip.placeholder");
 
   const addValue = () => {
     const value = draft.trim();
@@ -30,7 +33,7 @@ export function ChipInput({ label, values, onChange, placeholder = "Add value" }
             <span className="chip" key={`${value}-${index}`}>
               {value}
               <button
-                aria-label={`Remove ${value}`}
+                aria-label={t("chip.remove", { value })}
                 className="chip-remove"
                 type="button"
                 onClick={() => onChange(values.filter((_, itemIndex) => itemIndex !== index))}
@@ -43,7 +46,7 @@ export function ChipInput({ label, values, onChange, placeholder = "Add value" }
         <div className="inline-row">
           <input
             className="input"
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -53,7 +56,7 @@ export function ChipInput({ label, values, onChange, placeholder = "Add value" }
               }
             }}
           />
-          <Button aria-label={`Add ${label}`} icon={<Plus size={16} />} onClick={addValue} />
+          <Button aria-label={t("chip.add", { label })} icon={<Plus size={16} />} onClick={addValue} />
         </div>
       </div>
     </div>

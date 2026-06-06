@@ -6,6 +6,7 @@ import {
   createBlankCard,
   unixNow,
 } from "./schema";
+import { translate } from "./i18n";
 
 export interface MigrationResult {
   card: CharacterCardV3;
@@ -132,7 +133,7 @@ function isV1(raw: Record<string, unknown>): boolean {
 export function migrateToV3(input: unknown, now = unixNow()): MigrationResult {
   const warnings: string[] = [];
   if (!isRecord(input)) {
-    throw new Error("The selected file does not contain a card object.");
+    throw new Error(translate("migration.notCardObject"));
   }
 
   if (input.spec === "chara_card_v3") {
@@ -144,13 +145,13 @@ export function migrateToV3(input: unknown, now = unixNow()): MigrationResult {
     };
     const versionNumber = Number.parseFloat(card.spec_version);
     if (Number.isFinite(versionNumber) && versionNumber > 3) {
-      warnings.push("This card uses a newer spec version; unsupported fields may be present.");
+      warnings.push(translate("migration.newerSpec"));
     }
     return { card, warnings, sourceFormat: "v3" };
   }
 
   if (input.spec === "chara_card_v2") {
-    warnings.push("Imported a CCv2 card and migrated it to CCv3.");
+    warnings.push(translate("migration.v2"));
     return {
       card: {
         ...input,
@@ -180,11 +181,11 @@ export function migrateToV3(input: unknown, now = unixNow()): MigrationResult {
       mes_example: asString(input.mes_example),
       extensions: Object.keys(unknownFields).length > 0 ? { imported_v1_fields: unknownFields } : {},
     };
-    warnings.push("Imported a legacy V1 card and migrated it to CCv3.");
+    warnings.push(translate("migration.v1"));
     return { card, warnings, sourceFormat: "v1" };
   }
 
-  throw new Error("Unsupported character card format.");
+  throw new Error(translate("migration.unsupported"));
 }
 
 export function prepareCardForExport(card: CharacterCardV3, now = unixNow()): CharacterCardV3 {

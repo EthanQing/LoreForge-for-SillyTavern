@@ -1,10 +1,11 @@
 import { CharacterCardV3 } from "./schema";
+import { translate } from "./i18n";
 
 export function displayName(card: CharacterCardV3): string {
-  return card.data.nickname?.trim() || card.data.name.trim() || "Unnamed";
+  return card.data.nickname?.trim() || card.data.name.trim() || translate("app.unnamed");
 }
 
-export function replaceMacros(text: string, card: CharacterCardV3, userName = "User"): string {
+export function replaceMacros(text: string, card: CharacterCardV3, userName = translate("app.userName")): string {
   const name = displayName(card);
   return text
     .replaceAll("{{char}}", name)

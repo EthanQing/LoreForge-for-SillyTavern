@@ -11,7 +11,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = ["tauri-app"]
-tauri-app = ["dep:tauri", "dep:tauri-plugin-dialog"]
+tauri-app = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:rusqlite"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -20,7 +20,10 @@ tauri-build = { version = "2", features = [] }
 anyhow = "1"
 base64 = "0.22"
 crc32fast = "1"
+futures-util = "0.3"
 regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tauri = { version = "2", features = [], optional = true }

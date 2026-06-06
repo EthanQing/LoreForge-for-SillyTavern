@@ -5,9 +5,10 @@ import { Button } from "../../components/Button";
 import { CodeEditor } from "../../components/CodeEditor";
 import { TextField } from "../../components/Field";
 import { ChipInput } from "../../components/ChipInput";
+import { useI18n } from "../../lib/i18n";
 
-function formatTimestamp(value?: number): string {
-  return value ? new Date(value * 1000).toLocaleString() : "";
+function formatTimestamp(value: number | undefined, locale: string): string {
+  return value ? new Date(value * 1000).toLocaleString(locale) : "";
 }
 
 function safeJson(value: unknown): string {
@@ -15,6 +16,7 @@ function safeJson(value: unknown): string {
 }
 
 export function BasicInfoPanel() {
+  const { locale, t } = useI18n();
   const card = useCardStore((state) => state.card);
   const updateData = useCardStore((state) => state.updateData);
   const data = card.data;
@@ -24,23 +26,23 @@ export function BasicInfoPanel() {
   return (
     <section className="panel">
       <div className="panel-heading">
-        <h2>Basic Info</h2>
+        <h2>{t("basic.title")}</h2>
       </div>
       <div className="two-column">
-        <TextField label="Name" value={data.name} onChange={(event) => updateData("name", event.target.value)} />
-        <TextField label="Nickname" value={data.nickname ?? ""} onChange={(event) => updateData("nickname", event.target.value)} />
-        <TextField label="Creator" value={data.creator} onChange={(event) => updateData("creator", event.target.value)} />
+        <TextField label={t("field.name")} value={data.name} onChange={(event) => updateData("name", event.target.value)} />
+        <TextField label={t("field.nickname")} value={data.nickname ?? ""} onChange={(event) => updateData("nickname", event.target.value)} />
+        <TextField label={t("field.creator")} value={data.creator} onChange={(event) => updateData("creator", event.target.value)} />
         <TextField
-          label="Character Version"
+          label={t("field.characterVersion")}
           value={data.character_version}
           onChange={(event) => updateData("character_version", event.target.value)}
         />
-        <TextField label="Created" value={formatTimestamp(data.creation_date)} readOnly />
-        <TextField label="Modified" value={formatTimestamp(data.modification_date)} readOnly />
+        <TextField label={t("field.created")} value={formatTimestamp(data.creation_date, locale)} readOnly />
+        <TextField label={t("field.modified")} value={formatTimestamp(data.modification_date, locale)} readOnly />
       </div>
-      <ChipInput label="Tags" values={data.tags} onChange={(tags) => updateData("tags", tags)} />
+      <ChipInput label={t("field.tags")} values={data.tags} onChange={(tags) => updateData("tags", tags)} />
       <div className="field">
-        <span className="field-label">Source</span>
+        <span className="field-label">{t("field.source")}</span>
         <div className="source-list">
           {(data.source ?? []).map((source, index) => (
             <span className="source-item" key={`${source}-${index}`}>
@@ -53,7 +55,7 @@ export function BasicInfoPanel() {
             className="input"
             value={sourceDraft}
             onChange={(event) => setSourceDraft(event.target.value)}
-            placeholder="App source ID or URL"
+            placeholder={t("field.sourcePlaceholder")}
           />
           <Button
             icon={<Plus size={16} />}
@@ -66,16 +68,16 @@ export function BasicInfoPanel() {
               setSourceDraft("");
             }}
           >
-            Add
+            {t("common.add")}
           </Button>
         </div>
       </div>
       <div className="editor-block">
-        <span className="field-label">Creator Notes</span>
+        <span className="field-label">{t("field.creatorNotes")}</span>
         <CodeEditor value={data.creator_notes} mode="prompt" minHeight="140px" onChange={(value) => updateData("creator_notes", value)} />
       </div>
       <div className="editor-block">
-        <span className="field-label">Creator Notes Multilingual</span>
+        <span className="field-label">{t("field.creatorNotesMultilingual")}</span>
         <CodeEditor
           value={multilingualText}
           mode="json"
