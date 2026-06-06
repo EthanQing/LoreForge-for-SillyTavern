@@ -49,6 +49,8 @@ pub struct AiChatRequest {
     pub thinking_effort: Option<String>,
     pub deepseek_thinking: Option<bool>,
     pub timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub json_response: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -318,6 +320,9 @@ fn chat_body(request: &AiChatRequest) -> Value {
     }
     if let Some(enabled) = request.deepseek_thinking {
         body["thinking"] = json!({ "type": if enabled { "enabled" } else { "disabled" } });
+    }
+    if request.json_response {
+        body["response_format"] = json!({ "type": "json_object" });
     }
 
     body

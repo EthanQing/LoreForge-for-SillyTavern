@@ -84,6 +84,12 @@ Do not render a persistent `@` target guide in the AI chat composer. World book 
 
 Do not force the AI chat drawer to the bottom for every streamed delta. Respect manual upward scrolling by auto-following only while the message list is already near the bottom; otherwise expanded reasoning panels and earlier messages become impossible to inspect or collapse during streaming.
 
+## AI Request Cancellation
+
+The chat drawer stop control is a soft cancel. It should increment the local request token, clear `busy`, and ignore stale stream/result callbacks, because Tauri `invoke` calls cannot currently be aborted from the frontend wrapper. Do not let stale responses mutate messages after the user has stopped a generation or started a newer request.
+
+Structured edit and workflow requests should ask the backend for JSON object responses. If Agent workflows such as token optimization are sent as ordinary prose chat, thinking-capable models may stream reasoning for a long time and then return output that `parseAiAgentResponse` cannot use.
+
 ## Native Select Dropdowns In Tauri
 
 Native `<select>` dropdown surfaces can render outside the app window or look like browser/system UI in the Tauri desktop shell. For drawer popovers and dense desktop controls such as AI chat history, prefer an app-rendered popover/listbox that is bounded by the drawer/window.

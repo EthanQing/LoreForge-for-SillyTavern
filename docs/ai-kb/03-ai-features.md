@@ -34,6 +34,8 @@ Frontend calls are wrapped by:
 
 Streaming uses the Tauri event channel `ai://stream` and filters events by `requestId`.
 
+Structured AI edit requests can pass `jsonResponse` through `sendAiChat`; the Tauri backend maps it to OpenAI-compatible `response_format: { "type": "json_object" }`. Use this for Agent/edit workflows that must be parsed as raw JSON, but do not enable it for guide-mode prose chat.
+
 ## Chat UI
 
 The global chat drawer is `src/features/ai-chat/AiChatDrawer.tsx`.
@@ -56,6 +58,8 @@ Guide mode and Edit mode keep separate chat histories. `ai_history.rs` stores a 
 The history UI is optimized for long-running use: saved-session summaries are updated locally after a save instead of re-querying the full history list, and preview JSON blocks only stringify/render their large payloads when the user expands them. Only pending AI previews default to an open JSON response; older applied/discarded previews stay collapsed.
 
 During streaming responses, the drawer only auto-scrolls when the user is already near the bottom of the message list. Sending a new message or loading a history session still scrolls to the latest message, but manual upward scrolling pauses stream-following so reasoning panels and earlier content remain reachable.
+
+The drawer has a soft stop control while an AI response is active. It releases the UI immediately and invalidates the in-flight request token so late stream deltas or results from the old request are ignored. This is a frontend recovery path; the underlying Tauri HTTP request may still finish naturally.
 
 When an AI edit preview is applied, the drawer uses the shared project save path to silently save existing JSON, PNG/APNG, or CHARX cards after applying the patch. New cards and unbound local drafts do not open a save dialog from this automatic AI-only save path; they remain saved to the local draft until the user runs the normal Save action.
 

@@ -27,6 +27,10 @@ export interface AiSettings {
   timeoutMs: number;
 }
 
+export interface AiChatRequestOptions {
+  jsonResponse?: boolean;
+}
+
 export interface AiChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -128,16 +132,18 @@ export async function testAiConnection(
 export async function sendAiChat(
   settings: AiSettings,
   messages: AiChatMessage[],
-  onStream?: (event: AiStreamEvent) => void
+  onStream?: (event: AiStreamEvent) => void,
+  options?: AiChatRequestOptions
 ): Promise<AiChatResult> {
-  return await runAiChat("send_ai_chat", settings, messages, onStream);
+  return await runAiChat("send_ai_chat", settings, messages, onStream, options);
 }
 
 async function runAiChat(
   command: "test_ai_connection" | "send_ai_chat",
   settings: AiSettings,
   messages: AiChatMessage[],
-  onStream?: (event: AiStreamEvent) => void
+  onStream?: (event: AiStreamEvent) => void,
+  options?: AiChatRequestOptions
 ): Promise<AiChatResult> {
   const requestId = createRequestId();
   let unlisten: UnlistenFn | undefined;
@@ -166,7 +172,8 @@ async function runAiChat(
             ? settings.thinkingEffort
             : null,
         deepseekThinking: settings.providerProfile === "deepseek" ? settings.thinkingMode === "enabled" : null,
-        timeoutMs: settings.timeoutMs
+        timeoutMs: settings.timeoutMs,
+        jsonResponse: options?.jsonResponse ?? false
       }
     });
   } finally {

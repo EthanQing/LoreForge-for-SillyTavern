@@ -122,6 +122,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const requestTokenRef = useRef(0);
   const historyMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const mentionMenuRef = useRef<HTMLDivElement>(null);
@@ -292,7 +293,46 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     }
   };
 
-  const runGuideRequest = async (prompt: string, assistantId: string, conversationMessages: ChatMessage[]) => {
+  const beginAiRequest = (assistantId: string): number => {
+    requestTokenRef.current += 1;
+    setBusy(true);
+    setActiveAssistantId(assistantId);
+    setError("");
+    return requestTokenRef.current;
+  };
+
+  const isCurrentRequest = (requestToken: number): boolean => requestTokenRef.current === requestToken;
+
+  const finishAiRequest = (requestToken: number) => {
+    if (!isCurrentRequest(requestToken)) {
+      return;
+    }
+    setBusy(false);
+    setActiveAssistantId(null);
+    scheduleScrollToBottom({ behavior: "auto" });
+  };
+
+  const stopActiveRequest = () => {
+    if (!busy) {
+      return;
+    }
+    requestTokenRef.current += 1;
+    const stoppedAssistantId = activeAssistantId;
+    setBusy(false);
+    setActiveAssistantId(null);
+    setError(t("aiChat.generationStopped"));
+    if (stoppedAssistantId) {
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === stoppedAssistantId && !message.content.trim()
+            ? { ...message, content: t("aiChat.generationStopped") }
+            : message
+        )
+      );
+    }
+  };
+
+  const runGuideRequest = async (prompt: string, assistantId: string, conversationMessages: ChatMessage[], requestToken: number) => {
     const sourceCard = includeCard ? card : createBlankCard();
     const sourceReport = includeCard ? report : validateCard(sourceCard);
     const guideSettings = {
@@ -308,6 +348,9 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     });
 
     const result = await sendAiChat(guideSettings, requestMessages, (event) => {
+      if (!isCurrentRequest(requestToken)) {
+        return;
+      }
       if (event.event !== "delta") {
         return;
       }
@@ -325,6 +368,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       scheduleScrollToBottom({ behavior: "auto" });
     });
 
+    if (!isCurrentRequest(requestToken)) {
+      return;
+    }
+
     setMessages((current) =>
       current.map((message) =>
         message.id === assistantId
@@ -338,7 +385,13 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     );
   };
 
-  const runAgentRequest = async (prompt: string, assistantId: string, conversationMessages: ChatMessage[]) => {
+  const runAgentRequest = async (
+    prompt: string,
+    assistantId: string,
+    conversationMessages: ChatMessage[],
+    requestToken: number,
+    workflowAction?: AiWorkflowAction
+  ) => {
     const sourceCard = includeCard ? card : createBlankCard();
     const sourceReport = includeCard ? report : validateCard(sourceCard);
     const normalizedCard = toNormalizedAiCard(sourceCard);
@@ -356,6 +409,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       editTarget,
       deniedPaths,
       allowedPaths,
+      workflowAction,
       conversation: buildConversation(conversationMessages)
     });
     const agentSettings = {
@@ -364,6 +418,9 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       timeoutMs: Math.max(aiSettings.timeoutMs, AGENT_MIN_TIMEOUT_MS)
     };
     const result = await sendAiChat(agentSettings, requestMessages, (event) => {
+      if (!isCurrentRequest(requestToken)) {
+        return;
+      }
       if (event.event !== "delta") {
         return;
       }
@@ -379,7 +436,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
         )
       );
       scheduleScrollToBottom({ behavior: "auto" });
-    });
+    }, { jsonResponse: true });
+    if (!isCurrentRequest(requestToken)) {
+      return;
+    }
     const response = parseAiAgentResponse(result.content);
     const deniedFiltered = filterAiPatchesByDeniedPaths(response.patches, deniedPaths);
     const scopedResponse = deniedFiltered.rejected.length
@@ -390,6 +450,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
         }
       : response;
     const preview = scopedResponse.patches.length > 0 ? createAiAgentPreviewForTarget(sourceCard, scopedResponse, editTarget) : undefined;
+
+    if (!isCurrentRequest(requestToken)) {
+      return;
+    }
 
     setMessages((current) =>
       current.map((message) =>
@@ -423,25 +487,24 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft("");
     setSettingsMenuOpen(false);
-    setBusy(true);
-    setActiveAssistantId(assistantId);
-    setError("");
+    const requestToken = beginAiRequest(assistantId);
     scheduleScrollToBottom({ force: true });
 
     try {
       if (mode === "edit") {
-        await runAgentRequest(prompt, assistantId, [...messages, userMessage]);
+        await runAgentRequest(prompt, assistantId, [...messages, userMessage], requestToken);
       } else {
-        await runGuideRequest(prompt, assistantId, [...messages, userMessage]);
+        await runGuideRequest(prompt, assistantId, [...messages, userMessage], requestToken);
       }
     } catch (requestError) {
+      if (!isCurrentRequest(requestToken)) {
+        return;
+      }
       const message = requestError instanceof Error ? requestError.message : String(requestError);
       setError(message);
       setMessages((current) => current.filter((item) => item.id !== assistantId));
     } finally {
-      setBusy(false);
-      setActiveAssistantId(null);
-      scheduleScrollToBottom({ behavior: "auto" });
+      finishAiRequest(requestToken);
     }
   };
 
@@ -477,25 +540,24 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
           : message
       )
     );
-    setBusy(true);
-    setActiveAssistantId(assistantId);
-    setError("");
+    const requestToken = beginAiRequest(assistantId);
     scheduleScrollToBottom({ force: true });
 
     try {
       if (mode === "edit") {
-        await runAgentRequest(userMessage.content, assistantId, messages.slice(0, assistantIndex));
+        await runAgentRequest(userMessage.content, assistantId, messages.slice(0, assistantIndex), requestToken);
       } else {
-        await runGuideRequest(userMessage.content, assistantId, messages.slice(0, assistantIndex));
+        await runGuideRequest(userMessage.content, assistantId, messages.slice(0, assistantIndex), requestToken);
       }
     } catch (requestError) {
+      if (!isCurrentRequest(requestToken)) {
+        return;
+      }
       const message = requestError instanceof Error ? requestError.message : String(requestError);
       setError(message);
       setMessages((current) => current.map((item) => (item.id === assistantId ? previousAssistant : item)));
     } finally {
-      setBusy(false);
-      setActiveAssistantId(null);
-      scheduleScrollToBottom({ behavior: "auto" });
+      finishAiRequest(requestToken);
     }
   };
 
@@ -548,51 +610,18 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     const assistantId = createMessageId();
     const assistantMessage: ChatMessage = { id: assistantId, role: "assistant", content: "", reasoning: "", createdAt: now + 1 };
     setMessages((current) => [...current, userMessage, assistantMessage]);
-    setBusy(true);
-    setActiveAssistantId(assistantId);
-    setError("");
+    const requestToken = beginAiRequest(assistantId);
     scheduleScrollToBottom({ force: true });
     try {
-      const sourceCard = includeCard ? card : createBlankCard();
-      const sourceReport = includeCard ? report : validateCard(sourceCard);
-      const result = await sendAiChat(
-        {
-          ...aiSettings,
-          maxOutputTokens: Math.max(aiSettings.maxOutputTokens, AGENT_MIN_OUTPUT_TOKENS),
-          timeoutMs: Math.max(aiSettings.timeoutMs, AGENT_MIN_TIMEOUT_MS)
-        },
-        buildAiAgentMessages({
-          userInstruction: prompt,
-          currentCard: toNormalizedAiCard(sourceCard),
-          validationReport: sourceReport,
-          locale,
-          isBlankCard: isBlankCard(sourceCard),
-          workflowAction,
-          conversation: buildConversation(messages)
-        })
-      );
-      const response = parseAiAgentResponse(result.content);
-      const preview = response.patches.length > 0 ? createAiAgentPreviewForTarget(sourceCard, response, undefined) : undefined;
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: renderAgentMessage(response, undefined),
-                reasoning: result.reasoning,
-                preview,
-                previewState: preview ? "pending" : undefined
-              }
-            : message
-        )
-      );
+      await runAgentRequest(prompt, assistantId, [...messages, userMessage], requestToken, workflowAction);
     } catch (requestError) {
+      if (!isCurrentRequest(requestToken)) {
+        return;
+      }
       setError(requestError instanceof Error ? requestError.message : String(requestError));
       setMessages((current) => current.filter((item) => item.id !== assistantId));
     } finally {
-      setBusy(false);
-      setActiveAssistantId(null);
-      scheduleScrollToBottom({ behavior: "auto" });
+      finishAiRequest(requestToken);
     }
   };
 
@@ -861,6 +890,9 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
           <span className="state-pill">
             {historySaving ? t("aiChat.historySaving") : t("aiChat.historySaved")}
           </span>
+          <Button disabled={!busy} icon={<X size={16} />} variant="ghost" onClick={stopActiveRequest}>
+            {t("aiChat.stopGeneration")}
+          </Button>
           <Button disabled={busy || historyBusy || messages.length === 0} icon={<Trash2 size={16} />} variant="ghost" onClick={() => void deleteCurrentSession()}>
             {t("aiChat.deleteConversation")}
           </Button>
@@ -1126,8 +1158,14 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                   </div>
                 ) : null}
               </div>
-              <button className="ai-send-button" disabled={busy || !draft.trim()} type="button" aria-label={t("common.send")} onClick={() => void send()}>
-                <ArrowUp size={18} aria-hidden="true" />
+              <button
+                className="ai-send-button"
+                disabled={!busy && !draft.trim()}
+                type="button"
+                aria-label={busy ? t("aiChat.stopGeneration") : t("common.send")}
+                onClick={busy ? stopActiveRequest : () => void send()}
+              >
+                {busy ? <X size={18} aria-hidden="true" /> : <ArrowUp size={18} aria-hidden="true" />}
               </button>
             </div>
           </div>
