@@ -48,7 +48,7 @@ interface NormalizedWorldBook {
 interface NormalizedWorldBookEntry {
   id: string;
   enabled: boolean;
-  name: string;
+  comment: string;
   keys: string[];
   secondaryKeys: string[];
   content: string;
@@ -90,6 +90,7 @@ interface NormalizedRegexScript {
 | `/creator` | `card.data.creator` |
 | `/characterVersion` | `card.data.character_version` |
 | `/worldBook` | `card.data.character_book` |
+| `/worldBook/entries/*/comment` | `card.data.character_book.entries[*].comment` |
 | `/worldBook/entries/*/secondaryKeys` | `card.data.character_book.entries[*].secondary_keys` |
 | `/worldBook/entries/*/insertionPosition` | `card.data.character_book.entries[*].position` |
 | `/worldBook/entries/*/order` | `card.data.character_book.entries[*].insertion_order` |
@@ -212,7 +213,7 @@ Field rules:
 - exampleDialogue uses <START> to separate samples and uses {{user}}: and {{char}}: prefixes.
 - creatorNotes are for the card creator or user and should not be relied on to shape roleplay behavior.
 - systemPrompt and postHistoryInstructions are instruction-level overrides; edit them only when explicitly requested.
-- worldBook.entries content must be independently useful when injected into a prompt. Keys and secondaryKeys only trigger entries; never put important facts only in keys, secondaryKeys, or entry names.
+- worldBook.entries content must be independently useful when injected into a prompt. Keys and secondaryKeys only trigger entries; never put important facts only in keys, secondaryKeys, or the Entry Title/Memo.
 - regexScripts are scoped regex rules. Create or edit them only when explicitly requested. pattern and flags must follow JavaScript RegExp conventions.
 
 Type rules:
@@ -220,7 +221,8 @@ Type rules:
 - tags, alternateGreetings, keys, and secondaryKeys must be string arrays.
 - Add array items with a path ending in "/-".
 - Remove or replace array items only with concrete numeric indexes.
-- New worldBook entries must include id, enabled, name, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, and budget.
+- New worldBook entries must include id, enabled, comment, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, and budget.
+- `comment` is SillyTavern's visible Entry Title/Memo. Keep it short and human-readable.
 - New regexScripts entries must include id, enabled, name, pattern, replace, flags, and scope.
 
 Quality rules:
@@ -354,9 +356,9 @@ Mode: WorldBook generation.
 Create or edit lorebook entries only for reusable background knowledge that should be injected conditionally or constantly.
 
 Each new worldBook entry must include:
-id, enabled, name, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, budget.
+id, enabled, comment, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, budget.
 
-Entry content must stand alone as prompt-ready lore. Do not rely on name, keys, or secondaryKeys to carry important facts.
+Entry content must stand alone as prompt-ready lore. Do not rely on comment, keys, or secondaryKeys to carry important facts.
 
 Recommended defaults:
 - enabled: true

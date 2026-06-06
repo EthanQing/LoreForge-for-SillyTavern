@@ -28,9 +28,23 @@ Backend CHARX export supports asset entries, but README says the UI does not yet
 
 AI agent patches intentionally target a normalized editing surface. Do not expand allowed patch paths casually; raw `/data/...` edits are rejected by design.
 
+## SillyTavern World Book Memo Field
+
+SillyTavern imports embedded `character_book.entries[*].comment` as the visible Entry Title/Memo. The legacy/non-ST `name` field is not enough and should not be shown to users. AI-generated or exported lorebook entries must keep `comment` non-empty, usually via `src/lib/lorebookCompat.ts`.
+
+New world book entries should not write `entries[*].name`. Export normalization may use an existing `name` as a fallback source for blank `comment`, then removes `name` from the exported entry.
+
+## SillyTavern Lorebook Extension Fields
+
+Several SillyTavern world book options are read from `entry.extensions.*`, including `position`, `depth`, `probability`, `case_sensitive`, recursion flags, group fields, triggers, and automation IDs. Do not move these into narrow top-level fields or they may appear empty/default after importing into SillyTavern.
+
 ## Mention Parsing With Chinese Punctuation
 
 `@` edit targets may be followed by Chinese punctuation, such as `@基础，帮我补全一下`. Mention parsing must stop at punctuation as well as whitespace; otherwise `@基础，帮我补全一下` becomes an unknown mention and target filtering is bypassed.
+
+## Static AI Target Lists Go Stale
+
+Do not render a persistent `@` target guide in the AI chat composer. World book entries can change while the drawer is open, and a static row makes stale targets look authoritative. Keep `@` as type-ahead autocomplete and put workflow actions in the composer `+` or `/` command menu.
 
 ## Windows Rust Toolchain
 

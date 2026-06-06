@@ -41,9 +41,11 @@ The global chat drawer is `src/features/ai-chat/AiChatDrawer.tsx`.
 The drawer now has two modes:
 
 - Guide mode: plain conversation. It explains card fields, filling strategy, and section meaning. It does not return or apply patches.
-- Edit mode: structured conversation editing. It expects JSON patch output, shows a diff preview, and applies only after user confirmation.
+- Edit mode: structured conversation editing. It expects JSON patch output, shows the applied patch JSON plus the resulting normalized JSON for review, and applies only after user confirmation.
 
-Edit mode also exposes workflow buttons for card diagnosis, draft completion, source extraction, consistency repair, token optimization, worldBook building, and import cleanup. Workflows still return the same structured response and use preview/apply for any patches.
+Edit mode keeps workflow actions behind the composer command menu instead of a persistent toolbar. Click the `+` control in the composer bottom toolbar or type `/` to run card diagnosis, draft completion, source extraction, consistency repair, token optimization, worldBook building, or import cleanup. Workflows still return the same structured response and use preview/apply for any patches.
+
+The composer bottom toolbar also exposes a compact model/reasoning menu next to the send button. It writes directly to the existing AI settings store (`model`, `thinkingMode`, and `thinkingEffort`) so chat requests use the selected values immediately.
 
 ## Field-Level Agent
 
@@ -69,7 +71,7 @@ Important behavior:
 - Allowed patch roots are normalized fields such as `/name`, `/description`, `/alternateGreetings`, `/tags`, and `/worldBook`.
 - Raw card paths such as `/data`, `/data/...`, `/spec`, and `/spec_version` are rejected.
 - `regexScripts` patches are rejected because regex scripts are not supported yet.
-- Patch preview converts current card to normalized shape, applies patches, converts back to CCv3, validates, and builds diffs.
+- Patch preview converts current card to normalized shape, applies patches, converts back to CCv3, validates, and builds diffs. The chat preview surfaces the structured JSON directly so large worldBook changes can be inspected before applying.
 
 Use this normalized patch layer for AI editing features instead of letting AI write arbitrary CCv3 JSON.
 
@@ -81,7 +83,7 @@ Edit mode supports `@` targets in user instructions:
 - `@提示词`: description, personality, scenario, example dialogue, system prompt, and post-history instructions.
 - `@开场白`: first message and alternate greetings.
 - `@世界书`: whole worldBook.
-- `@世界书条目名`, `@条目序号`, or an entry id/name/key: a specific worldBook entry.
+- `@世界书条目名`, `@条目序号`, or an entry id/comment/key: a specific worldBook entry.
 - `@当前字段`: latest focused AI-enabled field.
 - `@选中文本`: latest selection target when available.
 - `@空字段`: empty normalized fields only.
@@ -99,7 +101,7 @@ Target parsing and local patch filtering live in `src/lib/aiAgent.ts`:
 
 The prompt tells the model to obey the target, but local filtering is still required because model output is untrusted.
 
-The AI drawer also provides mention autocomplete while composing in edit mode:
+The AI drawer also provides mention autocomplete while composing in edit mode, without rendering a static `@` target guide row:
 
 - Typing partial targets such as `@基` suggests `@基础`.
 - Arrow Up/Down changes the active suggestion.

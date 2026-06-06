@@ -30,7 +30,15 @@ The Zod schemas use `.passthrough()` so unknown fields can survive parsing. Pres
 Lorebook helpers:
 
 - `createBlankLorebook()`
-- `createBlankLorebookEntry(order)`
+- `createBlankLorebookEntry(order)` creates a non-empty `comment` default such as `Entry 1`; new entries do not write the legacy entry `name` field.
+
+SillyTavern lorebook compatibility helper:
+
+- `src/lib/lorebookCompat.ts`
+- SillyTavern displays embedded world book Entry Title/Memo from `entries[*].comment`, not `entries[*].name`.
+- `normalizeLorebookForSillyTavern()` fills blank comments from `comment`, then legacy `name`, then the first primary key, then `Entry N`.
+- Export normalization removes `entries[*].name` after using it as a legacy fallback so generated card data matches SillyTavern's visible field model.
+- SillyTavern-specific entry settings are stored under `entries[*].extensions.*`; preserve these unknown extension fields.
 
 ## Store Update Flow
 
@@ -58,6 +66,7 @@ JSON:
 
 - `open_card_file` routes `.json` to migration.
 - `save_card_json` prepares export card, validates, writes pretty JSON.
+- Export preparation normalizes embedded lorebooks for SillyTavern so blank entry memos are filled and key settings such as `position`, `depth`, `probability`, and `case_sensitive` are available under `entry.extensions`.
 
 PNG/APNG:
 
@@ -86,3 +95,5 @@ Frontend migration/export preparation helper: `src/lib/migrations.ts`.
 Backend migration helper: `src-tauri/src/migration.rs`.
 
 Migrations should preserve unknown fields where the schema allows it. When docs and code differ, inspect both frontend and Rust migration logic before changing behavior.
+
+Both frontend `prepareCardForExport()` and backend `touch_for_export()` run lorebook compatibility normalization. Keep those paths aligned when changing embedded world book export behavior.
