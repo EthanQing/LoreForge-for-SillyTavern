@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 interface FieldShellProps {
@@ -32,8 +32,13 @@ export function TextField({ label, detail, ...props }: TextFieldProps) {
   );
 }
 
-export function AutoResizeTextarea({ className, onInput, rows = 1, value, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export const AutoResizeTextarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function AutoResizeTextarea(
+  { className, onInput, rows = 1, value, ...props },
+  ref
+) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useImperativeHandle(ref, () => textareaRef.current as HTMLTextAreaElement);
 
   useLayoutEffect(() => {
     resizeTextarea(textareaRef.current);
@@ -52,7 +57,7 @@ export function AutoResizeTextarea({ className, onInput, rows = 1, value, ...pro
       }}
     />
   );
-}
+});
 
 interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string;

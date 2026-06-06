@@ -1,17 +1,22 @@
 import { GripVertical, Plus, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useCardStore } from "../../app/store";
+import { AiFieldAssistant } from "../../components/AiFieldAssistant";
 import { Button } from "../../components/Button";
 import { CodeEditor } from "../../components/CodeEditor";
 import { useI18n } from "../../lib/i18n";
 
 function GreetingList({
   title,
+  aiEnabled = true,
+  path,
   values,
   onChange,
   onPromote
 }: {
   title: string;
+  aiEnabled?: boolean;
+  path: string;
   values: string[];
   onChange: (values: string[]) => void;
   onPromote?: (value: string, index: number) => void;
@@ -64,12 +69,26 @@ function GreetingList({
                 {t("common.delete")}
               </Button>
             </div>
-            <CodeEditor
-              value={value}
-              mode="prompt"
-              minHeight="110px"
-              onChange={(nextValue) => onChange(values.map((item, itemIndex) => (itemIndex === index ? nextValue : item)))}
-            />
+            {aiEnabled ? (
+              <AiFieldAssistant
+                target={{ kind: "field", path: `${path}/${index}`, label: `${title} #${index + 1}`, value }}
+                onApply={(nextValue) => onChange(values.map((item, itemIndex) => (itemIndex === index ? nextValue : item)))}
+              >
+                <CodeEditor
+                  value={value}
+                  mode="prompt"
+                  minHeight="110px"
+                  onChange={(nextValue) => onChange(values.map((item, itemIndex) => (itemIndex === index ? nextValue : item)))}
+                />
+              </AiFieldAssistant>
+            ) : (
+              <CodeEditor
+                value={value}
+                mode="prompt"
+                minHeight="110px"
+                onChange={(nextValue) => onChange(values.map((item, itemIndex) => (itemIndex === index ? nextValue : item)))}
+              />
+            )}
           </article>
         ))}
       </div>
@@ -89,9 +108,12 @@ export function GreetingsPanel() {
       </div>
       <div className="editor-block">
         <span className="field-label">{t("greetings.firstMessage")}</span>
-        <CodeEditor value={data.first_mes} mode="prompt" minHeight="180px" onChange={(value) => updateData("first_mes", value)} />
+        <AiFieldAssistant target={{ kind: "field", path: "/firstMessage", label: t("greetings.firstMessage"), value: data.first_mes }} onApply={(value) => updateData("first_mes", value)}>
+          <CodeEditor value={data.first_mes} mode="prompt" minHeight="180px" onChange={(value) => updateData("first_mes", value)} />
+        </AiFieldAssistant>
       </div>
       <GreetingList
+        path="/alternateGreetings"
         title={t("greetings.alternateGreetings")}
         values={data.alternate_greetings}
         onChange={(values) => updateData("alternate_greetings", values)}
@@ -103,7 +125,7 @@ export function GreetingsPanel() {
           );
         }}
       />
-      <GreetingList title={t("greetings.groupOnlyGreetings")} values={data.group_only_greetings} onChange={(values) => updateData("group_only_greetings", values)} />
+      <GreetingList path="" aiEnabled={false} title={t("greetings.groupOnlyGreetings")} values={data.group_only_greetings} onChange={(values) => updateData("group_only_greetings", values)} />
     </section>
   );
 }

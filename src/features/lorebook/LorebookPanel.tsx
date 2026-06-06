@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Download, Plus, Trash2, Upload } from "lucide-react";
 import { ChangeEvent, useRef } from "react";
 import { useCardStore } from "../../app/store";
+import { AiFieldAssistant } from "../../components/AiFieldAssistant";
 import { Button } from "../../components/Button";
 import { ChipInput } from "../../components/ChipInput";
 import { CodeEditor } from "../../components/CodeEditor";
@@ -210,7 +211,12 @@ export function LorebookPanel() {
             </div>
             <div className="editor-block">
               <span className="field-label">{t("lorebook.content")}</span>
-              <CodeEditor value={entry.content} mode="prompt" minHeight="150px" onChange={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))} />
+              <AiFieldAssistant
+                target={{ kind: "field", path: `/worldBook/entries/${index}/content`, label: `${t("lorebook.entryNumber", { index: index + 1 })} ${t("lorebook.content")}`, value: entry.content }}
+                onApply={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))}
+              >
+                <CodeEditor value={entry.content} mode="prompt" minHeight="150px" onChange={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))} />
+              </AiFieldAssistant>
             </div>
             </div>
           </details>

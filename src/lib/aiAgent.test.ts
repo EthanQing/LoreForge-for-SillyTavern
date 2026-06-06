@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAiPatches,
+  createEditTargetFromFieldTarget,
   createAiAgentPreview,
+  emptyFieldPaths,
+  filterAiPatchesForTarget,
+  filterAiPatchesByDeniedPaths,
   fromNormalizedAiCard,
   parseAiAgentResponse,
+  parseAiAgentEditTarget,
   toNormalizedAiCard,
   type AiPatch,
   type NormalizedWorldBookEntry
@@ -162,5 +167,124 @@ describe("ai agent normalized card helpers", () => {
 
     expect(() => applyAiPatches(normalized, [badPatch])).toThrow(/missing enabled/);
     expect(normalized.worldBook).toBeUndefined();
+  });
+
+  it("parses @ targets and filters out-of-scope patches", () => {
+    const card = createBlankCard();
+    card.data.character_book = {
+      extensions: {},
+      entries: [
+        {
+          id: "wb_city",
+          name: "City",
+          keys: ["city"],
+          content: "The city is old.",
+          extensions: {},
+          enabled: true,
+          insertion_order: 0,
+          use_regex: false
+        }
+      ]
+    };
+    const normalized = toNormalizedAiCard(card);
+    const target = parseAiAgentEditTarget("@City rewrite the entry content", normalized);
+
+    expect(target?.kind).toBe("worldBookEntry");
+    expect(target?.entryIndex).toBe(0);
+
+    const filtered = filterAiPatchesForTarget(
+      [
+        { op: "replace", path: "/worldBook/entries/0/content", value: "The city is ancient." },
+        { op: "replace", path: "/name", value: "Ada" }
+      ],
+      target
+    );
+
+    expect(filtered.accepted.map((patch) => patch.path)).toEqual(["/worldBook/entries/0/content"]);
+    expect(filtered.rejected).toEqual(["/name"]);
+  });
+
+  it("parses broad @基础 and @世界书 edit targets", () => {
+    const normalized = toNormalizedAiCard(createBlankCard());
+
+    expect(parseAiAgentEditTarget("@基础 改名", normalized)?.editablePaths).toContain("/name");
+    expect(parseAiAgentEditTarget("@世界书 新增一个组织条目", normalized)?.editablePaths).toEqual(["/worldBook"]);
+  });
+
+  it("parses @ targets followed by Chinese punctuation and still filters patches", () => {
+    const normalized = toNormalizedAiCard(createBlankCard());
+    const target = parseAiAgentEditTarget("@基础，帮我补全一下", normalized);
+
+    expect(target?.kind).toBe("basic");
+    expect(target?.instruction).toBe("，帮我补全一下");
+
+    const filtered = filterAiPatchesForTarget(
+      [
+        { op: "replace", path: "/creatorNotes", value: "基础备注。" },
+        { op: "replace", path: "/description", value: "不该进入基础目标。" },
+        { op: "replace", path: "/firstMessage", value: "也不该进入基础目标。" }
+      ],
+      target
+    );
+
+    expect(filtered.accepted.map((patch) => patch.path)).toEqual(["/creatorNotes"]);
+    expect(filtered.rejected).toEqual(["/description", "/firstMessage"]);
+  });
+
+  it("field targets constrain field action patches to the targeted path", () => {
+    const target = createEditTargetFromFieldTarget({
+      kind: "field",
+      path: "/description",
+      label: "Description",
+      value: "Short."
+    });
+    const filtered = filterAiPatchesForTarget(
+      [
+        { op: "replace", path: "/description", value: "Longer description." },
+        { op: "replace", path: "/scenario", value: "Out of scope." }
+      ],
+      target
+    );
+
+    expect(filtered.accepted.map((patch) => patch.path)).toEqual(["/description"]);
+    expect(filtered.rejected).toEqual(["/scenario"]);
+  });
+
+  it("selection targets only accept string replacement for the source field", () => {
+    const target = createEditTargetFromFieldTarget({
+      kind: "selection",
+      path: "/description",
+      label: "Description",
+      value: "old",
+      start: 0,
+      end: 3
+    });
+    const filtered = filterAiPatchesForTarget(
+      [
+        { op: "replace", path: "/description", value: "new full field" },
+        { op: "add", path: "/description", value: "bad op" },
+        { op: "replace", path: "/personality", value: "bad path" }
+      ],
+      target
+    );
+
+    expect(filtered.accepted.map((patch) => patch.path)).toEqual(["/description"]);
+    expect(filtered.rejected).toEqual(["/description", "/personality"]);
+  });
+
+  it("detects empty fields and filters denied paths", () => {
+    const normalized = toNormalizedAiCard(createBlankCard());
+    expect(emptyFieldPaths(normalized)).toContain("/name");
+    expect(emptyFieldPaths(normalized)).toContain("/description");
+
+    const filtered = filterAiPatchesByDeniedPaths(
+      [
+        { op: "replace", path: "/description", value: "Denied." },
+        { op: "replace", path: "/name", value: "Allowed." }
+      ],
+      ["/description"]
+    );
+    expect(filtered.accepted.map((patch) => patch.path)).toEqual(["/name"]);
+    expect(filtered.rejected).toEqual(["/description"]);
   });
 });

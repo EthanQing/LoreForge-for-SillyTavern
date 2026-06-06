@@ -51,6 +51,47 @@ export interface AiPatch {
   value?: unknown;
 }
 
+export type AiAgentEditTargetKind = "basic" | "prompts" | "greetings" | "worldBook" | "worldBookEntry";
+
+export type AiFieldAction =
+  | "polish_expand"
+  | "rewrite"
+  | "complete"
+  | "shorten"
+  | "translate"
+  | "character_voice"
+  | "conflict_check"
+  | "extract_keywords"
+  | "repair"
+  | "variants";
+
+export type AiWorkflowAction =
+  | "diagnose"
+  | "complete_draft"
+  | "extract_source"
+  | "consistency_repair"
+  | "token_optimize"
+  | "worldbook_build"
+  | "import_cleanup";
+
+export type AiFieldTarget =
+  | { kind: "field"; path: string; label: string; value: string }
+  | { kind: "selection"; path: string; label: string; value: string; start: number; end: number }
+  | { kind: "section"; section: "basic" | "prompts" | "greetings" | "worldBook"; label: string }
+  | { kind: "worldBookEntry"; entryIndex: number; entryId?: string; entryName?: string; label: string };
+
+export interface AiAgentEditTarget {
+  kind: AiAgentEditTargetKind;
+  mention: string;
+  label: string;
+  editablePaths: string[];
+  instruction: string;
+  entryIndex?: number;
+  entryId?: string;
+  entryName?: string;
+  fieldTarget?: AiFieldTarget;
+}
+
 export interface AiAgentResponse {
   message: string;
   summary: string[];
@@ -118,6 +159,135 @@ const fieldLabels: Record<string, string> = {
 
 export function getAiAgentEditablePaths(): string[] {
   return [...editablePaths];
+}
+
+export function parseAiAgentEditTarget(instruction: string, card: NormalizedAiCard): AiAgentEditTarget | undefined {
+  const match = instruction.match(/@([^\s@，。！？、；：,.!?;:]+)/u);
+  if (!match) {
+    return undefined;
+  }
+
+  const mention = match[1].trim();
+  const cleanedInstruction = instruction.replace(match[0], "").trim();
+  const target = resolveEditTargetMention(mention, card);
+  return target
+    ? {
+        ...target,
+        mention,
+        instruction: cleanedInstruction || instruction.trim()
+      }
+    : undefined;
+}
+
+export function createEditTargetFromFieldTarget(target: AiFieldTarget): AiAgentEditTarget {
+  if (target.kind === "section") {
+    return {
+      kind: target.section,
+      mention: `@${target.label}`,
+      label: target.label,
+      editablePaths: sectionEditablePaths(target.section),
+      instruction: "",
+      fieldTarget: target
+    };
+  }
+  if (target.kind === "worldBookEntry") {
+    const base = `/worldBook/entries/${target.entryIndex}`;
+    return {
+      kind: "worldBookEntry",
+      mention: `@${target.label}`,
+      label: target.label,
+      editablePaths: worldBookEntryEditablePaths(target.entryIndex),
+      instruction: "",
+      entryIndex: target.entryIndex,
+      entryId: target.entryId,
+      entryName: target.entryName,
+      fieldTarget: target
+    };
+  }
+  return {
+    kind: pathToTargetKind(target.path),
+    mention: `@${target.label}`,
+    label: target.label,
+    editablePaths: [target.path],
+    instruction: "",
+    fieldTarget: target
+  };
+}
+
+export function emptyFieldPaths(card: NormalizedAiCard): string[] {
+  const paths: Array<[string, unknown]> = [
+    ["/name", card.name],
+    ["/description", card.description],
+    ["/personality", card.personality],
+    ["/scenario", card.scenario],
+    ["/firstMessage", card.firstMessage],
+    ["/exampleDialogue", card.exampleDialogue],
+    ["/creatorNotes", card.creatorNotes],
+    ["/tags", card.tags],
+    ["/alternateGreetings", card.alternateGreetings],
+    ["/worldBook", card.worldBook]
+  ];
+  return paths
+    .filter(([, value]) => {
+      if (typeof value === "string") {
+        return !value.trim();
+      }
+      if (Array.isArray(value)) {
+        return value.length === 0;
+      }
+      return value === undefined;
+    })
+    .map(([path]) => path);
+}
+
+export function weakFieldPaths(card: NormalizedAiCard): string[] {
+  const weakText = (value: string, min: number) => value.trim().length > 0 && value.trim().length < min;
+  return [
+    weakText(card.description, 120) ? "/description" : "",
+    weakText(card.personality, 60) ? "/personality" : "",
+    weakText(card.scenario, 80) ? "/scenario" : "",
+    weakText(card.firstMessage, 80) ? "/firstMessage" : "",
+    weakText(card.exampleDialogue, 80) ? "/exampleDialogue" : ""
+  ].filter(Boolean);
+}
+
+export function filterAiPatchesForTarget(patches: AiPatch[], target: AiAgentEditTarget | undefined): {
+  accepted: AiPatch[];
+  rejected: string[];
+} {
+  if (!target) {
+    return { accepted: patches, rejected: [] };
+  }
+
+  const accepted: AiPatch[] = [];
+  const rejected: string[] = [];
+  for (const patch of patches) {
+    if (isPatchAllowedForTarget(patch, target)) {
+      accepted.push(patch);
+    } else {
+      rejected.push(patch.path);
+    }
+  }
+  return { accepted, rejected };
+}
+
+export function filterAiPatchesByDeniedPaths(patches: AiPatch[], deniedPaths: string[]): {
+  accepted: AiPatch[];
+  rejected: string[];
+} {
+  if (deniedPaths.length === 0) {
+    return { accepted: patches, rejected: [] };
+  }
+  const accepted: AiPatch[] = [];
+  const rejected: string[] = [];
+  for (const patch of patches) {
+    if (deniedPaths.some((path) => patch.path === path || patch.path.startsWith(`${path}/`))) {
+      rejected.push(patch.path);
+    } else {
+      accepted.push(patch);
+    }
+  }
+  return { accepted, rejected };
 }
 
 export function toNormalizedAiCard(card: CharacterCardV3): NormalizedAiCard {
@@ -217,6 +387,25 @@ export function createAiAgentPreview(card: CharacterCardV3, response: AiAgentRes
   };
 }
 
+export function createAiAgentPreviewForTarget(
+  card: CharacterCardV3,
+  response: AiAgentResponse,
+  target: AiAgentEditTarget | undefined
+): AiAgentPreview {
+  const filtered = filterAiPatchesForTarget(response.patches, target);
+  const scopedResponse: AiAgentResponse = {
+    ...response,
+    summary: filtered.rejected.length
+      ? [...response.summary, `Ignored out-of-target patches: ${filtered.rejected.join(", ")}`]
+      : response.summary,
+    patches: filtered.accepted
+  };
+  return {
+    ...createAiAgentPreview(card, scopedResponse),
+    rejectedPatches: filtered.rejected
+  };
+}
+
 export function applyAiPatches(base: NormalizedAiCard, patches: AiPatch[]): NormalizedAiCard {
   const next = cloneJson(base);
   patches.forEach((patch, index) => applyAiPatch(next, patch, index));
@@ -259,6 +448,156 @@ function toNormalizedWorldBook(book: Lorebook): NormalizedWorldBook {
     recursiveScanning: optionalBoolean(book.recursive_scanning),
     entries: Array.isArray(book.entries) ? book.entries.map(toNormalizedWorldBookEntry) : []
   };
+}
+
+function resolveEditTargetMention(
+  mention: string,
+  card: NormalizedAiCard
+): Omit<AiAgentEditTarget, "mention" | "instruction"> | undefined {
+  const normalized = normalizeMention(mention);
+  if (["基础", "basic", "base", "info", "基本"].includes(normalized)) {
+    return {
+      kind: "basic",
+      label: "基础",
+      editablePaths: sectionEditablePaths("basic")
+    };
+  }
+  if (["提示词", "提示", "prompts", "prompt", "persona"].includes(normalized)) {
+    return {
+      kind: "prompts",
+      label: "提示词",
+      editablePaths: sectionEditablePaths("prompts")
+    };
+  }
+  if (["开场白", "开场", "问候", "greetings", "greeting", "firstmessage"].includes(normalized)) {
+    return {
+      kind: "greetings",
+      label: "开场白",
+      editablePaths: sectionEditablePaths("greetings")
+    };
+  }
+  if (["世界书", "世界", "条目", "lorebook", "worldbook", "worldbookentries"].includes(normalized)) {
+    return {
+      kind: "worldBook",
+      label: "世界书",
+      editablePaths: sectionEditablePaths("worldBook")
+    };
+  }
+
+  const entryTarget = resolveWorldBookEntryMention(mention, normalized, card);
+  return entryTarget;
+}
+
+function resolveWorldBookEntryMention(
+  mention: string,
+  normalizedMention: string,
+  card: NormalizedAiCard
+): Omit<AiAgentEditTarget, "mention" | "instruction"> | undefined {
+  const entries = card.worldBook?.entries ?? [];
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  const numericMatch = normalizedMention.match(/^(?:世界书)?(?:条目|entry)?#?(\d+)$/u) ?? normalizedMention.match(/^#?(\d+)$/u);
+  if (numericMatch) {
+    const entryIndex = Number(numericMatch[1]) - 1;
+    const entry = entries[entryIndex];
+    if (entry) {
+      return worldBookEntryTarget(entryIndex, entry.id, entry.name || mention);
+    }
+  }
+
+  const entryIndex = entries.findIndex((entry) => {
+    const candidates = [entry.id, entry.name, ...entry.keys].map(normalizeMention).filter(Boolean);
+    return candidates.includes(normalizedMention);
+  });
+  if (entryIndex >= 0) {
+    const entry = entries[entryIndex];
+    return worldBookEntryTarget(entryIndex, entry.id, entry.name || mention);
+  }
+
+  return undefined;
+}
+
+function worldBookEntryTarget(
+  entryIndex: number,
+  entryId: string,
+  entryName: string
+): Omit<AiAgentEditTarget, "mention" | "instruction"> {
+  return {
+    kind: "worldBookEntry",
+    label: `世界书条目 ${entryName || `#${entryIndex + 1}`}`,
+    editablePaths: worldBookEntryEditablePaths(entryIndex),
+    entryIndex,
+    entryId,
+    entryName
+  };
+}
+
+function isPatchAllowedForTarget(patch: AiPatch, target: AiAgentEditTarget): boolean {
+  const path = patch.path;
+  if (target.fieldTarget?.kind === "selection") {
+    return path === target.fieldTarget.path && patch.op === "replace" && typeof patch.value === "string";
+  }
+  if (target.kind === "worldBookEntry") {
+    const entryRoot = `/worldBook/entries/${target.entryIndex}`;
+    return path === entryRoot || path.startsWith(`${entryRoot}/`);
+  }
+  return target.editablePaths.some((allowedPath) => path === allowedPath || path.startsWith(`${allowedPath}/`));
+}
+
+function sectionEditablePaths(section: "basic" | "prompts" | "greetings" | "worldBook"): string[] {
+  switch (section) {
+    case "basic":
+      return ["/name", "/creator", "/characterVersion", "/tags", "/creatorNotes"];
+    case "prompts":
+      return ["/description", "/personality", "/scenario", "/exampleDialogue", "/systemPrompt", "/postHistoryInstructions"];
+    case "greetings":
+      return ["/firstMessage", "/alternateGreetings"];
+    case "worldBook":
+      return ["/worldBook"];
+  }
+}
+
+function worldBookEntryEditablePaths(entryIndex: number): string[] {
+  const base = `/worldBook/entries/${entryIndex}`;
+  return [
+    base,
+    `${base}/id`,
+    `${base}/enabled`,
+    `${base}/name`,
+    `${base}/keys`,
+    `${base}/secondaryKeys`,
+    `${base}/content`,
+    `${base}/selective`,
+    `${base}/constant`,
+    `${base}/insertionPosition`,
+    `${base}/order`,
+    `${base}/depth`,
+    `${base}/probability`,
+    `${base}/budget`
+  ];
+}
+
+function pathToTargetKind(path: string): AiAgentEditTargetKind {
+  if (path.startsWith("/worldBook")) {
+    return "worldBook";
+  }
+  if (path.startsWith("/firstMessage") || path.startsWith("/alternateGreetings")) {
+    return "greetings";
+  }
+  if (path.startsWith("/description") || path.startsWith("/personality") || path.startsWith("/scenario") || path.startsWith("/exampleDialogue")) {
+    return "prompts";
+  }
+  return "basic";
+}
+
+function normalizeMention(value: string): string {
+  return value
+    .trim()
+    .replace(/^@/u, "")
+    .replace(/[\s_\-:：/\\]+/gu, "")
+    .toLowerCase();
 }
 
 function toNormalizedWorldBookEntry(entry: LorebookEntry, index: number): NormalizedWorldBookEntry {

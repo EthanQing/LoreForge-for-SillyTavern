@@ -1,5 +1,5 @@
 import type { AiChatMessage } from "./ai";
-import type { NormalizedAiCard } from "./aiAgent";
+import type { AiAgentEditTarget, AiFieldAction, AiFieldTarget, AiWorkflowAction, NormalizedAiCard } from "./aiAgent";
 import { getAiAgentEditablePaths } from "./aiAgent";
 import type { Locale } from "./i18n";
 import type { ValidationReport } from "./schema";
@@ -24,11 +24,32 @@ export interface BuildAiAgentMessagesOptions {
   validationReport: ValidationReport;
   locale: Locale;
   isBlankCard: boolean;
+  editTarget?: AiAgentEditTarget;
+  fieldAction?: AiFieldAction;
+  workflowAction?: AiWorkflowAction;
+  fieldTarget?: AiFieldTarget;
+  deniedPaths?: string[];
+  allowedPaths?: string[];
   conversation?: AiAgentConversationMessage[];
 }
 
 export function buildAiAgentMessages(options: BuildAiAgentMessagesOptions): AiChatMessage[] {
-  const taskMode = detectAiAgentTaskMode(options.userInstruction, options.currentCard, options.isBlankCard);
+  const taskMode = options.workflowAction
+    ? "natural_edit"
+    : detectAiAgentTaskMode(options.userInstruction, options.currentCard, options.isBlankCard);
+  const editablePaths = options.allowedPaths?.length
+    ? options.allowedPaths
+    : options.editTarget?.editablePaths.length
+      ? options.editTarget.editablePaths
+      : getAiAgentEditablePaths();
+  const actionPrompt = [
+    modePrompts[taskMode],
+    options.fieldAction ? fieldActionPrompts[options.fieldAction] : "",
+    options.workflowAction ? workflowActionPrompts[options.workflowAction] : "",
+    buildEditTargetPrompt(options.editTarget)
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   return [
     {
       role: "system",
@@ -36,7 +57,7 @@ export function buildAiAgentMessages(options: BuildAiAgentMessagesOptions): AiCh
     },
     {
       role: "system",
-      content: modePrompts[taskMode]
+      content: actionPrompt
     },
     {
       role: "system",
@@ -50,9 +71,56 @@ export function buildAiAgentMessages(options: BuildAiAgentMessagesOptions): AiCh
           userInstruction: options.userInstruction,
           currentCard: options.currentCard,
           validationReport: compactValidationReport(options.validationReport),
-          editablePaths: getAiAgentEditablePaths(),
+          editablePaths,
+          deniedPaths: options.deniedPaths ?? [],
+          fieldAction: options.fieldAction ?? null,
+          workflowAction: options.workflowAction ?? null,
+          fieldTarget: options.fieldTarget ?? options.editTarget?.fieldTarget ?? null,
+          editTarget: options.editTarget
+            ? {
+                label: options.editTarget.label,
+                mention: options.editTarget.mention,
+                kind: options.editTarget.kind,
+                entryIndex: options.editTarget.entryIndex,
+                entryId: options.editTarget.entryId,
+                entryName: options.editTarget.entryName,
+                editablePaths: options.editTarget.editablePaths,
+                fieldTarget: options.editTarget.fieldTarget ?? null
+              }
+            : null,
           locale: options.locale,
           recentConversation: options.conversation?.slice(-8) ?? []
+        },
+        null,
+        2
+      )
+    }
+  ];
+}
+
+export interface BuildAiGuideMessagesOptions {
+  userInstruction: string;
+  currentCard: NormalizedAiCard;
+  validationReport: ValidationReport;
+  locale: Locale;
+  conversation?: AiAgentConversationMessage[];
+}
+
+export function buildAiGuideMessages(options: BuildAiGuideMessagesOptions): AiChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: guidePrompt
+    },
+    {
+      role: "user",
+      content: JSON.stringify(
+        {
+          userInstruction: options.userInstruction,
+          currentCard: options.currentCard,
+          validationReport: compactValidationReport(options.validationReport),
+          locale: options.locale,
+          recentConversation: options.conversation?.slice(-10) ?? []
         },
         null,
         2
@@ -116,6 +184,9 @@ If no card change is needed, return:
 Allowed operations: add, replace, remove.
 Patch paths are JSON Pointer paths relative to the normalized editable card, never raw CCv3.
 Allowed roots: /name, /description, /personality, /scenario, /firstMessage, /alternateGreetings, /exampleDialogue, /creatorNotes, /systemPrompt, /postHistoryInstructions, /tags, /creator, /characterVersion, /worldBook.
+If editablePaths or editTarget is provided in the user payload, every patch path must be inside those editablePaths. Treat the target as a hard boundary.
+If deniedPaths is provided, never patch those paths.
+If fieldTarget is a selection, only return a single replace patch for fieldTarget.path with the full updated field string.
 
 Never patch /data, /spec, /spec_version, app state, file paths, exports, imports, image bytes, assets, sourceFormat, unknown preserved fields, or regexScripts.
 Never modify systemPrompt or postHistoryInstructions unless the user explicitly asks for instruction-level overrides.
@@ -135,6 +206,21 @@ Field roles:
 WorldBook entry requirements:
 New entries must include id, enabled, name, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, and budget.
 Recommended entry defaults: enabled true, selective false, constant false, insertionPosition before_char, depth 4, probability 100, budget 300.
+`.trim();
+
+const guidePrompt = `
+You are the plain conversation assistant inside SillyTavern Card Creator.
+Help the user understand how to fill a CCv3 character card. Explain field meanings, suggest what to write, ask short clarifying questions, and give concrete examples when helpful.
+
+This mode is conversation only. Do not return JSON patches. Do not claim that you changed the card. If the user asks you to edit the card, tell them to switch to conversation editing mode and use @ targets such as @基础, @提示词, @开场白, @世界书, or @世界书条目名.
+
+Field guidance:
+- 基础: name, nickname, creator, characterVersion, tags, source, creatorNotes.
+- 提示词: description, personality, scenario, systemPrompt, postHistoryInstructions, exampleDialogue.
+- 开场白: firstMessage and alternateGreetings.
+- 世界书: reusable lorebook settings and entries. Entry content should contain the important facts; keys only trigger entries.
+
+Answer in the user's locale. Prefer concise, practical guidance over long theory.
 `.trim();
 
 const contentFreedomPrompt = `
@@ -204,6 +290,101 @@ Preserve existing content whenever possible.
 If an issue cannot be fixed safely without user intent, return empty patches and ask for the missing detail.
 `.trim()
 };
+
+const fieldActionPrompts: Record<AiFieldAction, string> = {
+  polish_expand: `
+Mode: Field polish and expansion.
+Improve the targeted field while preserving facts and intent. Add concrete, roleplay-useful detail. Do not edit unrelated fields.
+`.trim(),
+  rewrite: `
+Mode: Field rewrite.
+Rewrite the targeted field according to its role. Preserve important facts, but do not preserve weak wording or structure.
+`.trim(),
+  complete: `
+Mode: Field completion.
+Fill missing or weak targeted content using the current card context. Do not overwrite unrelated non-empty fields.
+`.trim(),
+  shorten: `
+Mode: Field shortening.
+Compress the targeted field while preserving important facts, names, placeholders, and useful roleplay behavior.
+`.trim(),
+  translate: `
+Mode: Field translation.
+Translate the targeted field. Preserve names, {{user}}, {{char}}, <START>, formatting, and meaning.
+`.trim(),
+  character_voice: `
+Mode: Character voice strengthening.
+Make the targeted field sound more specific to the character. Preserve setting facts and avoid generic phrasing.
+`.trim(),
+  conflict_check: `
+Mode: Conflict check.
+If actual card changes are needed, patch only the targeted field. Otherwise return empty patches and explain the conflict or consistency issue in message.
+`.trim(),
+  extract_keywords: `
+Mode: Keyword extraction.
+Extract concise tags or lorebook keys from the target. Patch only allowed tag/key paths.
+`.trim(),
+  repair: `
+Mode: Field repair.
+Fix validation or structural issues for the targeted field only.
+`.trim(),
+  variants: `
+Mode: Variant generation.
+Create a high-quality replacement or additions for the targeted field. Use summary to list alternatives when the patch format cannot represent multiple non-applied options.
+`.trim()
+};
+
+const workflowActionPrompts: Record<AiWorkflowAction, string> = {
+  diagnose: `
+Workflow: Card diagnosis.
+Do not modify the card. Return empty patches. Use message and summary to list structure issues, contradictions, weak fields, and next steps.
+`.trim(),
+  complete_draft: `
+Workflow: Complete draft.
+Patch only empty or clearly missing fields. Do not overwrite existing substantial content.
+`.trim(),
+  extract_source: `
+Workflow: Extract from source.
+Use the user input as source material. Extract stable facts into description, behavior into personality, premise into scenario, greetings/dialogue voice, and reusable lore into worldBook.
+`.trim(),
+  consistency_repair: `
+Workflow: Consistency repair.
+Patch contradictions in names, relationships, timeline, tone, and setting. Preserve existing facts unless a contradiction requires a minimal fix.
+`.trim(),
+  token_optimize: `
+Workflow: Token optimization.
+Reduce repetition, shorten verbose content, and move reusable background into worldBook when appropriate. Preserve meaning.
+`.trim(),
+  worldbook_build: `
+Workflow: WorldBook builder.
+Create or improve worldBook entries with standalone content and useful keys. Avoid relying on entry names alone.
+`.trim(),
+  import_cleanup: `
+Workflow: Imported card cleanup.
+Repair obvious imported-card issues: empty required fields, duplicate sections, malformed lorebook entries, weak greetings, and stale notes.
+`.trim()
+};
+
+function buildEditTargetPrompt(target: AiAgentEditTarget | undefined): string {
+  if (!target) {
+    return `
+Mention targeting:
+The user may mention a target with @基础, @提示词, @开场白, @世界书, or a specific lorebook entry.
+If an editTarget is present in the payload, obey it strictly. If no editTarget is present, infer the smallest appropriate editable area from the instruction.
+`.trim();
+  }
+
+  return `
+Conversation editing target:
+- Target label: ${target.label}
+- Target kind: ${target.kind}
+- Allowed editable paths: ${target.editablePaths.join(", ")}
+
+Only modify the allowed editable paths for this target.
+If the user asks for changes outside this target, return empty patches and explain that the requested target does not include that field.
+For a specific worldBook entry target, edit only that entry unless the user explicitly asks to add/remove another entry.
+`.trim();
+}
 
 function compactValidationReport(report: ValidationReport) {
   return {
