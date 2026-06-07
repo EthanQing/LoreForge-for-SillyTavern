@@ -483,7 +483,8 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
 
   const send = async () => {
     const prompt = draft.trim();
-    if (!prompt || busy) {
+    const workflowAction = mode === "edit" ? draftWorkflowAction : undefined;
+    if ((!prompt && !workflowAction) || busy) {
       return;
     }
     if (!ready) {
@@ -492,8 +493,10 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     }
 
     const now = Date.now();
-    const workflowAction = mode === "edit" ? draftWorkflowAction : undefined;
-    const userMessage: ChatMessage = { id: createMessageId(), role: "user", content: prompt, createdAt: now };
+    const workflowPrompt = workflowAction ? t(`aiWorkflow.prompt.${workflowAction}` as never) : "";
+    const requestPrompt = workflowAction ? buildWorkflowRequestPrompt(workflowPrompt, prompt) : prompt;
+    const userMessageContent = workflowAction ? formatWorkflowUserMessage(t(`aiWorkflow.${workflowAction}` as never), prompt) : prompt;
+    const userMessage: ChatMessage = { id: createMessageId(), role: "user", content: userMessageContent, createdAt: now };
     const assistantId = createMessageId();
     const assistantMessage: ChatMessage = { id: assistantId, role: "assistant", content: "", reasoning: "", createdAt: now + 1 };
     setMessages((current) => [...current, userMessage, assistantMessage]);
@@ -505,7 +508,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
 
     try {
       if (mode === "edit") {
-        await runAgentRequest(prompt, assistantId, [...messages, userMessage], requestToken, workflowAction);
+        await runAgentRequest(requestPrompt, assistantId, [...messages, userMessage], requestToken, workflowAction);
       } else {
         await runGuideRequest(prompt, assistantId, [...messages, userMessage], requestToken);
       }
@@ -624,9 +627,8 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   };
 
   const applyWorkflowFromMenu = (workflowAction: AiWorkflowAction) => {
-    const prompt = t(`aiWorkflow.prompt.${workflowAction}` as never);
     const cursor = composerRef.current?.selectionStart ?? draft.length;
-    const nextDraft = insertWorkflowPromptInDraft(draft, cursor, prompt, workflowQuery);
+    const nextDraft = removeWorkflowCommandFromDraft(draft, cursor, workflowQuery);
     setWorkflowMenuOpen(false);
     setWorkflowMenuSuppressed(false);
     setWorkflowActiveIndex(0);
@@ -1174,7 +1176,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
               </div>
               <button
                 className="ai-send-button"
-                disabled={!busy && !draft.trim()}
+                disabled={!busy && !draft.trim() && !draftWorkflowAction}
                 type="button"
                 aria-label={busy ? t("aiChat.stopGeneration") : t("common.send")}
                 onClick={busy ? stopActiveRequest : () => void send()}
@@ -1493,23 +1495,34 @@ export function findActiveWorkflowQuery(value: string, cursor: number): Workflow
   };
 }
 
-export function insertWorkflowPromptInDraft(
+export function removeWorkflowCommandFromDraft(
   value: string,
   cursor: number,
-  prompt: string,
   query: WorkflowCommandQuery | undefined
 ): { value: string; cursor: number } {
+  if (!query) {
+    return { value, cursor };
+  }
   const start = query?.start ?? cursor;
   const end = query?.end ?? cursor;
-  const before = value.slice(0, start);
-  const after = value.slice(end).replace(/^\s+/u, "");
-  const leading = before && !/\s$/u.test(before) ? " " : "";
-  const insertion = prompt.trim();
-  const nextCursor = before.length + leading.length + insertion.length + 1;
+  const before = value.slice(0, start).replace(/[ \t]+$/u, "");
+  const after = value.slice(end).replace(/^[ \t]+/u, "");
+  const separator = before && after && !before.endsWith("\n") ? " " : "";
   return {
-    value: `${before}${leading}${insertion} ${after}`,
-    cursor: nextCursor
+    value: `${before}${separator}${after}`,
+    cursor: before.length + separator.length
   };
+}
+
+function buildWorkflowRequestPrompt(workflowPrompt: string, userPrompt: string): string {
+  const trimmedWorkflow = workflowPrompt.trim();
+  const trimmedUserPrompt = userPrompt.trim();
+  return trimmedUserPrompt ? `${trimmedWorkflow}\n\n用户补充要求：${trimmedUserPrompt}` : trimmedWorkflow;
+}
+
+function formatWorkflowUserMessage(workflowLabel: string, userPrompt: string): string {
+  const trimmedUserPrompt = userPrompt.trim();
+  return trimmedUserPrompt ? `${workflowLabel}: ${trimmedUserPrompt}` : workflowLabel;
 }
 
 export function filterMentionTargets(targets: MentionTarget[], query: string): MentionTarget[] {

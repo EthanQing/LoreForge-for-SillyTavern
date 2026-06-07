@@ -5,7 +5,7 @@ import {
   filterWorkflowActions,
   findActiveMentionQuery,
   findActiveWorkflowQuery,
-  insertWorkflowPromptInDraft
+  removeWorkflowCommandFromDraft
 } from "./AiChatDrawer";
 import type { AiWorkflowAction } from "../../lib/aiAgent";
 import { createBlankCard, createBlankLorebookEntry } from "../../lib/schema";
@@ -109,22 +109,20 @@ describe("AI chat workflow commands", () => {
     expect(filterWorkflowActions(actions, "worldbook", getLabel)[0]).toBe("worldbook_build");
   });
 
-  it("inserts a selected workflow prompt without sending immediately", () => {
+  it("removes a selected slash workflow command without inserting default prompt text", () => {
     const value = "/token";
-    const prompt = "Optimize token usage while preserving core information.";
-    const result = insertWorkflowPromptInDraft(value, value.length, prompt, findActiveWorkflowQuery(value, value.length));
+    const result = removeWorkflowCommandFromDraft(value, value.length, findActiveWorkflowQuery(value, value.length));
 
-    expect(result.value).toBe(`${prompt} `);
-    expect(result.cursor).toBe(result.value.length);
+    expect(result.value).toBe("");
+    expect(result.cursor).toBe(0);
   });
 
-  it("preserves extra user guidance after replacing a slash workflow command", () => {
+  it("preserves extra user guidance after removing a slash workflow command", () => {
     const value = "/token focus on repeated lore";
     const query = { start: 0, end: 6, query: "token" };
-    const prompt = "Optimize token usage while preserving core information.";
-    const result = insertWorkflowPromptInDraft(value, 6, prompt, query);
+    const result = removeWorkflowCommandFromDraft(value, 6, query);
 
-    expect(result.value).toBe(`${prompt} focus on repeated lore`);
-    expect(result.cursor).toBe(prompt.length + 1);
+    expect(result.value).toBe("focus on repeated lore");
+    expect(result.cursor).toBe(0);
   });
 });
