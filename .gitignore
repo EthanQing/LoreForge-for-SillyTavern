@@ -12,5 +12,7 @@ src-tauri/gen/
 docs/ai-kb/
 docs/ai-assistant-prompts.md
 
+AGENT.md
+
 .DS_Store
 Thumbs.db
