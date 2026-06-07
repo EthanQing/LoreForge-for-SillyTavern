@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BookOpen,
   BarChart3,
@@ -78,6 +78,9 @@ function ActivePanel() {
 export function App() {
   const { locale, t } = useI18n();
   const [aiChatOpen, setAiChatOpen] = useState(false);
+  const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionsRef = useRef<Record<string, number>>({});
+  const activeTabRef = useRef("home");
   const activeTab = useCardStore((state) => state.activeTab);
   const setActiveTab = useCardStore((state) => state.setActiveTab);
   const card = useCardStore((state) => state.card);
@@ -92,6 +95,29 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useLayoutEffect(() => {
+    activeTabRef.current = activeTab;
+    const scrollElement = workspaceScrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+    const nextScrollTop = scrollPositionsRef.current[activeTab] ?? 0;
+    if (scrollElement.scrollTop !== nextScrollTop) {
+      scrollElement.scrollTop = nextScrollTop;
+    }
+    if (scrollElement.scrollLeft !== 0) {
+      scrollElement.scrollLeft = 0;
+    }
+  }, [activeTab]);
+
+  const handleWorkspaceScroll = useCallback(() => {
+    const scrollElement = workspaceScrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+    scrollPositionsRef.current[activeTabRef.current] = scrollElement.scrollTop;
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -190,7 +216,7 @@ export function App() {
             </span>
           </div>
         </header>
-        <div className="workspace-scroll">
+        <div className="workspace-scroll" ref={workspaceScrollRef} onScroll={handleWorkspaceScroll}>
           <ErrorBoundary resetKey={activeTab}>
             <PageTransition activeKey={activeTab}>
               <ActivePanel key={activeTab} />
