@@ -115,6 +115,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const [workflowMenuOpen, setWorkflowMenuOpen] = useState(false);
   const [workflowMenuSuppressed, setWorkflowMenuSuppressed] = useState(false);
   const [workflowActiveIndex, setWorkflowActiveIndex] = useState(0);
+  const [draftWorkflowAction, setDraftWorkflowAction] = useState<AiWorkflowAction | undefined>(undefined);
   const [historyMenuOpen, setHistoryMenuOpen] = useState(false);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -481,18 +482,20 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     }
 
     const now = Date.now();
+    const workflowAction = mode === "edit" ? draftWorkflowAction : undefined;
     const userMessage: ChatMessage = { id: createMessageId(), role: "user", content: prompt, createdAt: now };
     const assistantId = createMessageId();
     const assistantMessage: ChatMessage = { id: assistantId, role: "assistant", content: "", reasoning: "", createdAt: now + 1 };
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft("");
+    setDraftWorkflowAction(undefined);
     setSettingsMenuOpen(false);
     const requestToken = beginAiRequest(assistantId);
     scheduleScrollToBottom({ force: true });
 
     try {
       if (mode === "edit") {
-        await runAgentRequest(prompt, assistantId, [...messages, userMessage], requestToken);
+        await runAgentRequest(prompt, assistantId, [...messages, userMessage], requestToken, workflowAction);
       } else {
         await runGuideRequest(prompt, assistantId, [...messages, userMessage], requestToken);
       }
@@ -569,6 +572,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setSessionCreatedAt(Date.now());
     setMessages([]);
     setDraft("");
+    setDraftWorkflowAction(undefined);
     setWorkflowMenuOpen(false);
     setWorkflowMenuSuppressed(false);
     setWorkflowActiveIndex(0);
@@ -584,6 +588,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     skipNextHistorySaveRef.current = modeSessions[nextMode].messages.length > 0;
     setMode(nextMode);
     setDraft("");
+    setDraftWorkflowAction(undefined);
     setHistory([]);
     setHistoryMenuOpen(false);
     setSettingsMenuOpen(false);
@@ -593,36 +598,6 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     setError("");
     autoScrollRef.current = true;
     scheduleScrollToBottom({ force: true, behavior: "auto" });
-  };
-
-
-  const runWorkflow = async (workflowAction: AiWorkflowAction) => {
-    if (busy) {
-      return;
-    }
-    if (!ready) {
-      setError(t("aiChat.openSettingsFirst"));
-      return;
-    }
-    const prompt = t(`aiWorkflow.prompt.${workflowAction}` as never);
-    const now = Date.now();
-    const userMessage: ChatMessage = { id: createMessageId(), role: "user", content: t(`aiWorkflow.${workflowAction}` as never), createdAt: now };
-    const assistantId = createMessageId();
-    const assistantMessage: ChatMessage = { id: assistantId, role: "assistant", content: "", reasoning: "", createdAt: now + 1 };
-    setMessages((current) => [...current, userMessage, assistantMessage]);
-    const requestToken = beginAiRequest(assistantId);
-    scheduleScrollToBottom({ force: true });
-    try {
-      await runAgentRequest(prompt, assistantId, [...messages, userMessage], requestToken, workflowAction);
-    } catch (requestError) {
-      if (!isCurrentRequest(requestToken)) {
-        return;
-      }
-      setError(requestError instanceof Error ? requestError.message : String(requestError));
-      setMessages((current) => current.filter((item) => item.id !== assistantId));
-    } finally {
-      finishAiRequest(requestToken);
-    }
   };
 
   const appendMention = (mention: string) => {
@@ -638,13 +613,20 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     });
   };
 
-  const runWorkflowFromMenu = (workflowAction: AiWorkflowAction) => {
+  const applyWorkflowFromMenu = (workflowAction: AiWorkflowAction) => {
+    const prompt = t(`aiWorkflow.prompt.${workflowAction}` as never);
+    const cursor = composerRef.current?.selectionStart ?? draft.length;
+    const nextDraft = insertWorkflowPromptInDraft(draft, cursor, prompt, workflowQuery);
     setWorkflowMenuOpen(false);
     setWorkflowMenuSuppressed(false);
     setWorkflowActiveIndex(0);
     setSettingsMenuOpen(false);
-    setDraft("");
-    void runWorkflow(workflowAction);
+    setDraftWorkflowAction(workflowAction);
+    setDraft(nextDraft.value);
+    window.requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(nextDraft.cursor, nextDraft.cursor);
+    });
   };
 
   const applyMentionSuggestion = (target: MentionTarget) => {
@@ -682,6 +664,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
         void refreshHistory(sessionMode);
       }
       setDraft("");
+      setDraftWorkflowAction(undefined);
       scheduleScrollToBottom({ force: true, behavior: "auto" });
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : String(historyError));
@@ -701,6 +684,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       setHistory((current) => current.filter((session) => session.id !== sessionId));
       replaceModeSession(mode, createModeSessionState());
       setDraft("");
+      setDraftWorkflowAction(undefined);
       setHistoryMenuOpen(false);
     } catch (historyError) {
       setError(historyError instanceof Error ? historyError.message : String(historyError));
@@ -987,6 +971,9 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                 setMentionMenuSuppressed(false);
                 setWorkflowMenuSuppressed(false);
                 setDraft(nextDraft);
+                if (!nextDraft.trim()) {
+                  setDraftWorkflowAction(undefined);
+                }
                 if (!findActiveWorkflowQuery(nextDraft, nextCursor)) {
                   setWorkflowMenuOpen(false);
                 }
@@ -1005,7 +992,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                   }
                   if (event.key === "Tab" || event.key === "Enter") {
                     event.preventDefault();
-                    runWorkflowFromMenu(workflowSuggestions[workflowActiveIndex] ?? workflowSuggestions[0]);
+                    applyWorkflowFromMenu(workflowSuggestions[workflowActiveIndex] ?? workflowSuggestions[0]);
                     return;
                   }
                   if (event.key === "Escape") {
@@ -1062,7 +1049,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                           type="button"
                           onMouseDown={(event) => {
                             event.preventDefault();
-                            runWorkflowFromMenu(action);
+                            applyWorkflowFromMenu(action);
                           }}
                         >
                           {t(`aiWorkflow.${action}` as never)}
@@ -1476,6 +1463,25 @@ export function findActiveWorkflowQuery(value: string, cursor: number): Workflow
     start,
     end: cursor,
     query: match[2] ?? ""
+  };
+}
+
+export function insertWorkflowPromptInDraft(
+  value: string,
+  cursor: number,
+  prompt: string,
+  query: WorkflowCommandQuery | undefined
+): { value: string; cursor: number } {
+  const start = query?.start ?? cursor;
+  const end = query?.end ?? cursor;
+  const before = value.slice(0, start);
+  const after = value.slice(end).replace(/^\s+/u, "");
+  const leading = before && !/\s$/u.test(before) ? " " : "";
+  const insertion = prompt.trim();
+  const nextCursor = before.length + leading.length + insertion.length + 1;
+  return {
+    value: `${before}${leading}${insertion} ${after}`,
+    cursor: nextCursor
   };
 }
 

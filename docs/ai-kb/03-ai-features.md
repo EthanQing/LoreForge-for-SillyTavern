@@ -47,7 +47,7 @@ The drawer now has two modes:
 - Guide mode: plain conversation. It explains card fields, filling strategy, and section meaning. It does not return or apply patches.
 - Edit mode: structured conversation editing. It expects JSON patch output, shows the applied patch JSON plus the resulting normalized JSON for review, and applies only after user confirmation.
 
-Edit mode keeps workflow actions behind the composer command menu instead of a persistent toolbar. Click the `+` control in the composer bottom toolbar or type `/` to run card diagnosis, draft completion, source extraction, consistency repair, token optimization, worldBook building, or import cleanup. Workflows still return the same structured response and use preview/apply for any patches.
+Edit mode keeps workflow actions behind the composer command menu instead of a persistent toolbar. Click the `+` control in the composer bottom toolbar or type `/` to select card diagnosis, draft completion, source extraction, consistency repair, token optimization, worldBook building, or import cleanup. Selecting a workflow inserts its editable default instruction into the composer and keeps focus there so the user can add direction before sending; the actual workflow runs only when the user sends the message. Workflows still return the same structured response and use preview/apply for any patches.
 
 The composer bottom toolbar also exposes a compact model/reasoning menu next to the send button. It writes directly to the existing AI settings store (`model`, `thinkingMode`, and `thinkingEffort`) so chat requests use the selected values immediately.
 
