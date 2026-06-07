@@ -1,122 +1,94 @@
-# SillyTavern 角色卡制作器
+# SillyTavern Card Creator
 
-一个本地优先的 SillyTavern CCv3 角色卡编辑器，基于 Tauri v2、React、Vite、TypeScript 和 Rust 构建。它适合用来创建、清理、校验和导出 SillyTavern 角色卡，并提供 AI 辅助编辑能力。
+一个本地优先的 SillyTavern CCv3 角色卡编辑器，用来创建、整理、校验、预览和导出可在 SillyTavern 中使用的角色卡。项目基于 Tauri v2、React、Vite、TypeScript 和 Rust 构建。
 
-## 特性
+## 文档入口
 
-- **本地优先编辑**：角色卡草稿保存在本地，最近打开记录也保存在本机。
-- **CCv3 兼容**：支持创建空白 V3 角色卡，并迁移旧版 V1/V2 数据到 V3 结构。
-- **完整编辑面板**：覆盖基础信息、提示词、开场白、世界书、资源、预览和校验等常用区域。
-- **导入与导出**：支持 JSON、带角色卡元数据的 PNG/APNG，以及 CHARX 归档格式。
-- **世界书兼容增强**：支持 SillyTavern 世界书条目的标题/备忘录、触发词、插入顺序、常驻/选择性触发和常见高级设置。
-- **数据保护**：尽量保留未知字段，降低导入、清理、再导出时丢失兼容字段的风险。
-- **校验与预览**：前端和 Rust 后端都包含角色卡校验逻辑，并提供提示词预览与 token 估算辅助。
-- **AI 辅助编辑**：支持 OpenAI 兼容接口，例如 DeepSeek；可配置 Base URL、API Key、模型、流式输出和推理强度。
-- **AI 对话抽屉**：支持普通问答和结构化编辑模式，可对当前角色卡生成补丁、预览 JSON 变更后再确认应用。
-- **快捷工作流**：在 AI 编辑模式中可通过底部 `+` 菜单或 `/` 命令运行角色卡体检、一键补全、资料提取、一致性修复、Token 优化、世界书构建和导入清洗。
+- [完整使用指南](docs/usage-guide.md)：启动应用、制作角色卡、导入清理旧卡、使用 AI 辅助编辑和导出。
+- [更新历史](CHANGELOG.md)：按日期记录用户可见功能、行为变化和文档变化。
 
-## 如何使用
+## 主要功能
 
-1. 打开应用后，可以从「项目」页新建角色卡，或导入已有的 JSON、PNG/APNG、CHARX 文件。
-2. 在左侧导航中切换编辑区域：
-   - 「基础」填写名称、作者、标签、版本等信息。
-   - 「提示词」编辑角色描述、性格、场景、示例对话、系统提示词等内容。
-   - 「开场白」编辑首条消息和备用开场白。
-   - 「世界书」维护条目标题/备忘录、触发词、正文和高级设置。
-   - 「资源」管理封面或其它资源引用。
-   - 「预览」检查角色卡的整体数据。
-   - 「校验」查看错误和警告。
-3. 修改会自动保存到本地草稿。导出前建议先查看「校验」页，确认没有阻塞性错误。
-4. 使用「项目」页导出：
-   - JSON：导出标准角色卡 JSON。
-   - PNG/APNG：写入 `ccv3` 元数据，并保留可选旧版 `chara` 兼容元数据。
-   - CHARX：导出包含 `card.json` 的归档包。
-5. 如需使用 AI：
-   - 进入「设置」页，填写 AI 服务地址、API Key 和模型。
-   - 使用连接测试确认配置可用。
-   - 打开顶部 AI 对话按钮，选择普通模式或编辑模式。
-   - 编辑模式会先展示 AI 输出 JSON 和应用后的 JSON，确认后才写入角色卡。
+- **本地优先**：草稿、最近打开记录、当前文件状态和 AI 设置保存在本机。
+- **CCv3 角色卡编辑**：覆盖基础信息、提示词、开场白、世界书、资源、预览、Token 统计和校验。
+- **导入与导出**：支持 JSON、PNG/APNG 角色卡元数据，以及 CHARX 归档；导入 V1/V2 旧卡时会迁移到 CCv3。
+- **保存工作流**：顶部保存按钮、项目页保存、`Ctrl/Cmd+S` 和右键菜单共用同一保存逻辑；已绑定的 JSON、PNG/APNG 或 CHARX 会优先写回原文件。
+- **世界书增强**：编辑条目标题/备忘录、触发词、正文、插入顺序、常驻、选择性触发、向量相似和常见 SillyTavern 高级设置。
+- **资源管理**：上传封面、添加图片或手动资源引用；大体积 `data:` 图片 URI 会折叠显示。
+- **校验、预览与统计**：前端和 Rust 后端都包含角色卡校验逻辑，并提供 prompt preview、分区 token 估算、最大字段、开场白预览和世界书条目统计。
+- **AI 辅助编辑**：支持 OpenAI 兼容接口，例如 DeepSeek，可配置 Base URL、API Key、模型、流式输出、推理显示、输出长度和超时。
+- **AI Guide 模式**：用于解释字段、诊断写卡方向和提供建议，不会修改当前角色卡。
+- **AI Edit 模式**：通过结构化 JSON patch 生成修改预览，用户确认后才应用到角色卡。
+- **快捷工作流**：在 AI Edit 模式中可通过底部 `+` 菜单或 `/` 命令运行角色卡体检、一键补全、资料提取、一致性修复、Token 优化、世界书构建和导入清洗。
+- **字段级 AI 助手**：长文本字段可局部润色、扩写、重写、补全、缩短、翻译、检查冲突、提取关键词或生成候选版本。
 
-## 本地开发
+当前版本专注于本地角色卡编辑与可确认的 AI JSON patch 预览。
+
+## 快速开始
 
 ### 环境要求
 
-- Node.js 18 或更高版本。
-- pnpm。项目声明的包管理器为 `pnpm@10.12.1`。
-- Rust 工具链。
-- Tauri v2 所需的系统依赖。不同平台的依赖可参考 Tauri 官方文档。
+- Node.js 18 或更高版本
+- pnpm，项目声明的包管理器为 `pnpm@10.12.1`
+- Rust 工具链
+- Tauri v2 所需系统依赖
 
-如果系统里没有 pnpm，可以先启用 Corepack：
+安装依赖：
+
+```bash
+pnpm install
+```
+
+如果系统没有 pnpm：
 
 ```bash
 corepack enable
 corepack pnpm install
 ```
 
-如果已经有 pnpm：
-
-```bash
-pnpm install
-```
-
-### 启动前端开发服务器
-
-```bash
-pnpm dev
-```
-
-Vite 会在 `http://127.0.0.1:1420` 启动前端。
-
-### 启动 Tauri 桌面应用
+启动 Tauri 桌面应用：
 
 ```bash
 pnpm tauri dev
 ```
 
-该命令会启动 Vite，并打开 Tauri 桌面窗口。
-
-## 本地构建
-
-### 构建前端
+只启动前端开发服务器：
 
 ```bash
-pnpm build
+pnpm dev
 ```
 
-构建产物会输出到 `dist/`。
+默认 Vite 地址是 `http://127.0.0.1:1420`。
 
-### 构建桌面应用
+Windows PowerShell 如果拦截 `pnpm.ps1`，可以改用：
 
 ```bash
-pnpm tauri build
+pnpm.cmd install
+pnpm.cmd tauri dev
+pnpm.cmd test
+pnpm.cmd build
 ```
 
-Tauri 会先执行前端构建，再打包桌面应用。打包产物位于 `src-tauri/target/` 下的对应平台目录。
-
-## 测试
-
-运行前端和 TypeScript 测试：
+## 常用命令
 
 ```bash
 pnpm test
-```
-
-运行 Rust 后端测试：
-
-```bash
-cd src-tauri
-cargo test
-```
-
-也可以在项目根目录运行前端类型检查与构建：
-
-```bash
 pnpm build
+cargo test --manifest-path src-tauri/Cargo.toml
+pnpm tauri build
 ```
 
-## Windows Rust 工具链注意事项
+如果 Windows GNU Rust 工具链缺少 `dlltool.exe` 等 binutils，`cargo test` 或 `pnpm tauri build` 可能失败。此时需要安装 GNU binutils，或切换到可用的 MSVC Rust 工具链。
 
-如果使用 Windows GNU Rust 工具链，`cargo test` 和 `pnpm tauri build` 可能需要 GNU binutils，例如 `dlltool.exe`。如果缺少这些工具，可以安装对应 binutils，或改用 MSVC Rust 工具链。
+## 基本使用流程
+
+1. 新建空白角色卡，或导入已有 JSON、PNG/APNG、CHARX 文件。
+2. 依次填写基础信息、提示词、开场白、世界书和资源。
+3. 在预览页检查最终数据结构和 prompt preview。
+4. 在 Token 统计页查看总量、最大字段、开场白预览和世界书条目占用。
+5. 在校验页处理错误和警告。
+6. 可选：配置 AI 服务，用 Guide 模式询问建议，或用 Edit 模式生成可确认的结构化修改。
+7. 保存或导出 JSON、PNG/APNG、CHARX，用于 SillyTavern 或备份归档。
 
 ## 技术栈
 
@@ -127,4 +99,3 @@ pnpm build
 - Rust
 - Zustand
 - Zod
-

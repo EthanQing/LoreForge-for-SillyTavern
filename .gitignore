@@ -9,5 +9,8 @@ src-tauri/gen/
 *.tmp
 *.tsbuildinfo
 
+docs/ai-kb/
+docs/ai-assistant-prompts.md
+
 .DS_Store
 Thumbs.db
