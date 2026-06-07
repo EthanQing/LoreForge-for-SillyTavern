@@ -17,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::open_card_file,
+            commands::path_exists,
             commands::save_card_json,
             commands::export_card_png,
             commands::import_card_png,

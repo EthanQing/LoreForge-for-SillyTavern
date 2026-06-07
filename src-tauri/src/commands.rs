@@ -23,6 +23,11 @@ pub fn open_card_file(path: String) -> Result<ParsedCard, String> {
 }
 
 #[tauri::command]
+pub fn path_exists(path: String) -> bool {
+    PathBuf::from(path).exists()
+}
+
+#[tauri::command]
 pub fn save_card_json(path: String, card: CharacterCardV3) -> Result<ParsedCard, String> {
     save_card_json_inner(PathBuf::from(path), card).map_err(command_error)
 }

@@ -74,6 +74,10 @@ export async function openCardFile(path: string): Promise<ParsedCard> {
   return await invoke<ParsedCard>("open_card_file", { path });
 }
 
+export async function pathExists(path: string): Promise<boolean> {
+  return await invoke<boolean>("path_exists", { path });
+}
+
 export async function saveCardJson(path: string, card: CharacterCardV3): Promise<ParsedCard> {
   return await invoke<ParsedCard>("save_card_json", { path, card });
 }

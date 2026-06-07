@@ -9,6 +9,7 @@ import {
   exportCardPng,
   exportCharx,
   openCardFile,
+  pathExists,
   pickCardSavePath,
   pickCharxSavePath,
   pickJsonSavePath,
@@ -56,6 +57,18 @@ function defaultToPngPath(path: string): string {
   return isPngPath(path) ? path : `${path}.png`;
 }
 
+function isMissingFileError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("os error 2") ||
+    normalized.includes("no such file or directory") ||
+    normalized.includes("cannot find the file") ||
+    normalized.includes("cannot find the path") ||
+    normalized.includes("找不到指定的文件")
+  );
+}
+
 interface SaveCurrentCardOptions {
   promptIfUnbound?: boolean;
   savedStatus?: string;
@@ -76,6 +89,14 @@ export function useProjectActions() {
   const refreshValidation = useCardStore((state) => state.refreshValidation);
   const removeAsset = useCardStore((state) => state.removeAsset);
   const removeRecent = useCardStore((state) => state.removeRecent);
+
+  const removeMissingRecent = useCallback(
+    (path: string) => {
+      removeRecent(path);
+      setStatus(t("status.recentMissingRemoved", { path }));
+    },
+    [removeRecent, setStatus, t]
+  );
 
   const confirmDanger = useCallback(
     async (message: string, title = t("confirm.dangerTitle")) => {
@@ -103,13 +124,20 @@ export function useProjectActions() {
   const openCard = useCallback(
     async (forcedPath?: string) => {
       try {
-        if (!(await confirmDiscardIfDirty())) {
-          return;
-        }
         const path = forcedPath ?? (await pickOpenCardPath());
         if (!path) {
           return;
         }
+
+        if (forcedPath && !(await pathExists(path))) {
+          removeMissingRecent(path);
+          return;
+        }
+
+        if (!(await confirmDiscardIfDirty())) {
+          return;
+        }
+
         const parsed = await openCardFile(path);
         replaceCard(parsed.card, {
           dirty: false,
@@ -117,10 +145,14 @@ export function useProjectActions() {
           status: parsed.warnings.length > 0 ? parsed.warnings.join(" ") : t("status.cardOpened"),
         });
       } catch (error) {
+        if (forcedPath && isMissingFileError(error)) {
+          removeMissingRecent(forcedPath);
+          return;
+        }
         setStatus(error instanceof Error ? error.message : String(error));
       }
     },
-    [confirmDiscardIfDirty, replaceCard, setStatus, t]
+    [confirmDiscardIfDirty, removeMissingRecent, replaceCard, setStatus, t]
   );
 
   const createNewCard = useCallback(async () => {
