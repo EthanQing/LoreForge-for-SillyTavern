@@ -126,6 +126,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   const requestTokenRef = useRef(0);
   const historyMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
+  const workflowMenuRef = useRef<HTMLDivElement>(null);
   const mentionMenuRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const skipNextHistorySaveRef = useRef(false);
@@ -221,7 +222,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
   }, [open, mode]);
 
   useEffect(() => {
-    if (!historyMenuOpen && !settingsMenuOpen) {
+    if (!historyMenuOpen && !settingsMenuOpen && !showWorkflowMenu) {
       return undefined;
     }
 
@@ -236,6 +237,11 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       if (settingsMenuOpen && !settingsMenuRef.current?.contains(target)) {
         setSettingsMenuOpen(false);
       }
+      if (showWorkflowMenu && !workflowMenuRef.current?.contains(target)) {
+        setWorkflowMenuOpen(false);
+        setWorkflowMenuSuppressed(Boolean(workflowQuery));
+        setWorkflowActiveIndex(0);
+      }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -244,6 +250,9 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       }
       setHistoryMenuOpen(false);
       setSettingsMenuOpen(false);
+      setWorkflowMenuOpen(false);
+      setWorkflowMenuSuppressed(Boolean(workflowQuery));
+      setWorkflowActiveIndex(0);
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -252,7 +261,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [historyMenuOpen, settingsMenuOpen]);
+  }, [historyMenuOpen, settingsMenuOpen, showWorkflowMenu, workflowQuery]);
 
   useEffect(() => {
     if (!open || messages.length === 0) {
@@ -1037,7 +1046,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
           <div className="ai-chat-composer-toolbar">
             <div className="ai-chat-composer-tools">
               {mode === "edit" ? (
-                <div className="ai-workflow-shell">
+                <div className="ai-workflow-shell" ref={workflowMenuRef}>
                   {showWorkflowMenu ? (
                     <div className="ai-workflow-menu" role="listbox" aria-label={t("aiWorkflow.title" as never)}>
                       {workflowSuggestions.map((action, index) => (
