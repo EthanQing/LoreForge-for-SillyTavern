@@ -145,6 +145,7 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
     () => filterWorkflowActions(workflowActions, workflowQuery?.query ?? "", (action) => t(`aiWorkflow.${action}` as never)),
     [t, workflowQuery?.query]
   );
+  const activeWorkflowLabel = draftWorkflowAction ? t(`aiWorkflow.${draftWorkflowAction}` as never) : "";
   const showWorkflowMenu =
     mode === "edit" && !workflowMenuSuppressed && (workflowMenuOpen || Boolean(workflowQuery)) && workflowSuggestions.length > 0;
   const showMentionSuggestions = !showWorkflowMenu && !mentionMenuSuppressed && Boolean(mentionQuery && mentionSuggestions.length > 0);
@@ -1076,6 +1077,23 @@ export function AiChatDrawer({ open, onClose }: AiChatDrawerProps) {
                   >
                     <Plus size={16} aria-hidden="true" />
                   </button>
+                </div>
+              ) : null}
+              {draftWorkflowAction ? (
+                <div className="ai-workflow-pill" title={activeWorkflowLabel}>
+                  <button
+                    className="ai-workflow-pill-remove"
+                    disabled={busy}
+                    type="button"
+                    aria-label={`${t("common.discard")} ${activeWorkflowLabel}`}
+                    onClick={() => {
+                      setDraftWorkflowAction(undefined);
+                      window.requestAnimationFrame(() => composerRef.current?.focus());
+                    }}
+                  >
+                    <X size={12} aria-hidden="true" />
+                  </button>
+                  <span>{activeWorkflowLabel}</span>
                 </div>
               ) : null}
             </div>

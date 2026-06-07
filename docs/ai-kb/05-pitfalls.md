@@ -90,7 +90,7 @@ The chat drawer stop control is a soft cancel. It should increment the local req
 
 Structured edit and workflow requests should ask the backend for JSON object responses. If Agent workflows such as token optimization are sent as ordinary prose chat, thinking-capable models may stream reasoning for a long time and then return output that `parseAiAgentResponse` cannot use.
 
-Workflow command menu selections should prefill the composer instead of immediately sending. Users often need to add direction after choosing a broad workflow such as token optimization, and the selected workflow action can still be carried into `runAgentRequest` when the final message is sent.
+Workflow command menu selections should prefill the composer instead of immediately sending. Users often need to add direction after choosing a broad workflow such as token optimization. Keep the selected workflow visible as a removable composer pill, and carry the selected workflow action into `runAgentRequest` when the final message is sent.
 
 ## Native Select Dropdowns In Tauri
 
