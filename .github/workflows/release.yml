@@ -51,7 +51,20 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
-          releaseBody: "See CHANGELOG.md for user-visible changes."
+          releaseBody: |
+            ## 更新内容
+
+            - 修复 AI 模型选择模式问题，模型列表选择和手动输入模式现在能按设置正确切换。
+            - 修复在开场白页将备用开场白设为第一条消息时，原第一条消息没有回到备用开场白列表的问题；现在会交换两者，避免备用列表项被直接移除。
+            - 新增安装版自动更新能力：应用会检查 GitHub Release 的 `latest.json`，发现新版本后可确认下载、安装并重启。
+            - 新增设置页更新控制：可开启/关闭启动自动检查，也可以手动检查更新。
+            - 新增 GitHub Actions 发布流程：推送 `v*.*.*` SemVer tag 后构建 Windows 安装包，并上传 updater 所需的 `latest.json`。
+            - 调整版本策略：自动更新版本改用合法三段 SemVer，本次版本为 `v0.1.2`。
+
+            ## 安装包
+
+            - NSIS：下载 `SillyTavern Card Creator_0.1.2_x64-setup.exe`
+            - MSI：下载 `SillyTavern Card Creator_0.1.2_x64_en-US.msi`
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
