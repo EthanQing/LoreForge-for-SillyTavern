@@ -28,6 +28,13 @@ export function SettingsPanel() {
   const [testContent, setTestContent] = useState("");
   const [testReasoning, setTestReasoning] = useState("");
 
+  const updateManualModelInput = (manualModelInput: boolean) => {
+    updateAiSettings({
+      manualModelInput,
+      model: manualModelInput ? aiSettings.model : aiSettings.availableModels[0]?.id ?? aiSettings.model
+    });
+  };
+
   const fetchModels = async () => {
     setModelsLoading(true);
     setPanelMessage(t("settings.fetchingModels"));
@@ -136,20 +143,37 @@ export function SettingsPanel() {
             onChange={(event) => updateAiSettings({ apiKey: event.currentTarget.value })}
           />
           <div className="model-row">
-            <TextField
-              label={t("settings.model")}
-              list="ai-model-list"
-              spellCheck={false}
-              value={aiSettings.model}
-              onChange={(event) => updateAiSettings({ model: event.currentTarget.value })}
-            />
-            <datalist id="ai-model-list">
-              {aiSettings.availableModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.ownedBy ?? model.id}
-                </option>
-              ))}
-            </datalist>
+            <div className="model-field-stack">
+              {aiSettings.manualModelInput ? (
+                <TextField
+                  label={t("settings.model")}
+                  spellCheck={false}
+                  value={aiSettings.model}
+                  onChange={(event) => updateAiSettings({ model: event.currentTarget.value })}
+                />
+              ) : (
+                <SelectField
+                  label={t("settings.model")}
+                  value={aiSettings.model}
+                  onChange={(event) => updateAiSettings({ model: event.currentTarget.value })}
+                >
+                  {aiSettings.availableModels.length ? null : <option value={aiSettings.model}>{aiSettings.model}</option>}
+                  {aiSettings.availableModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.ownedBy ? `${model.id} (${model.ownedBy})` : model.id}
+                    </option>
+                  ))}
+                </SelectField>
+              )}
+              <label className="toggle-row model-manual-toggle">
+                <input
+                  checked={aiSettings.manualModelInput}
+                  type="checkbox"
+                  onChange={(event) => updateManualModelInput(event.currentTarget.checked)}
+                />
+                <span>{t("settings.manualModelInput")}</span>
+              </label>
+            </div>
             <Button
               disabled={modelsLoading || !aiSettings.baseUrl.trim() || !aiSettings.apiKey.trim()}
               icon={modelsLoading ? <LoaderCircle className="spin" size={18} /> : <RefreshCcw size={18} />}

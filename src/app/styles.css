@@ -1769,8 +1769,16 @@ select.input {
   gap: var(--space-3);
 }
 
-.model-row .field {
+.model-field-stack {
+  min-width: 0;
+}
+
+.model-field-stack .field {
   margin-top: var(--space-4);
+}
+
+.model-manual-toggle {
+  margin-top: var(--space-2);
 }
 
 .model-row .button {

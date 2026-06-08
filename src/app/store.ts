@@ -212,8 +212,8 @@ export const useCardStore = create<CardStore>((set, get) => ({
   },
   setAiModels: (models) => {
     const current = get().aiSettings;
-    const model = models.some((item) => item.id === current.model) ? current.model : models[0]?.id ?? current.model;
-    const next = normalizeAiSettings({ ...current, availableModels: models, model });
+    const model = models[0]?.id ?? current.model;
+    const next = normalizeAiSettings({ ...current, availableModels: models, manualModelInput: false, model });
     saveAiSettings(next);
     set({ aiSettings: next, status: models.length ? translate("status.modelsLoaded", { count: models.length }) : translate("status.noModelsReturned") });
   },

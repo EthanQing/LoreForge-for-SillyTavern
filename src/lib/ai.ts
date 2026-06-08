@@ -17,6 +17,7 @@ export interface AiSettings {
   baseUrl: string;
   apiKey: string;
   model: string;
+  manualModelInput: boolean;
   availableModels: AiModel[];
   stream: boolean;
   showReasoning: boolean;
@@ -59,6 +60,7 @@ export const defaultAiSettings: AiSettings = {
   baseUrl: "https://api.deepseek.com",
   apiKey: "",
   model: "deepseek-v4-flash",
+  manualModelInput: false,
   availableModels: [],
   stream: true,
   showReasoning: true,
@@ -82,6 +84,7 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl : defaultAiSettings.baseUrl,
     apiKey: typeof raw.apiKey === "string" ? raw.apiKey : "",
     model: typeof raw.model === "string" ? raw.model : defaultAiSettings.model,
+    manualModelInput: typeof raw.manualModelInput === "boolean" ? raw.manualModelInput : defaultAiSettings.manualModelInput,
     availableModels: Array.isArray(raw.availableModels)
       ? raw.availableModels.filter((model): model is AiModel => Boolean(model) && typeof model.id === "string")
       : [],
