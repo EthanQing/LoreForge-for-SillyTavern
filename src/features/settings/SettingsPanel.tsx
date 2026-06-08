@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { Bot, BrainCircuit, CheckCircle2, LoaderCircle, PlugZap, RefreshCcw } from "lucide-react";
+import { Bot, BrainCircuit, CheckCircle2, Download, LoaderCircle, PlugZap, RefreshCcw } from "lucide-react";
 import { Button } from "../../components/Button";
 import { FieldShell, SelectField, TextField } from "../../components/Field";
 import { useCardStore } from "../../app/store";
 import { useI18n, type Locale, type TranslationKey } from "../../lib/i18n";
 import { AI_MAX_OUTPUT_TOKENS, AI_MAX_TIMEOUT_MS, fetchAiModels, testAiConnection, type AiThinkingEffort, type AiThinkingMode } from "../../lib/ai";
+import {
+  checkForUpdates,
+  loadUpdatePreferences,
+  setAutoCheckUpdates,
+  type AvailableUpdate,
+  type UpdatePreferences,
+  type UpdateProgress
+} from "../../lib/updater";
 
 const thinkingOptions = [
   { value: "high", labelKey: "common.high" },
@@ -27,12 +35,64 @@ export function SettingsPanel() {
   const [panelMessage, setPanelMessage] = useState("");
   const [testContent, setTestContent] = useState("");
   const [testReasoning, setTestReasoning] = useState("");
+  const [updatePreferences, setUpdatePreferencesState] = useState<UpdatePreferences>(() => loadUpdatePreferences());
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [manualUpdate, setManualUpdate] = useState<AvailableUpdate | null>(null);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
 
   const updateManualModelInput = (manualModelInput: boolean) => {
     updateAiSettings({
       manualModelInput,
       model: manualModelInput ? aiSettings.model : aiSettings.availableModels[0]?.id ?? aiSettings.model
     });
+  };
+
+  const updateAutoCheck = (autoCheckUpdates: boolean) => {
+    setUpdatePreferencesState(setAutoCheckUpdates(autoCheckUpdates));
+    setPanelMessage(autoCheckUpdates ? t("updates.autoCheckEnabled") : t("updates.autoCheckDisabled"));
+  };
+
+  const checkUpdates = async () => {
+    setUpdateLoading(true);
+    setManualUpdate(null);
+    setUpdateProgress(null);
+    setPanelMessage(t("updates.checking"));
+    try {
+      const result = await checkForUpdates({ manual: true });
+      if (result.status === "available") {
+        setManualUpdate(result.update);
+        setPanelMessage(t("updates.availableStatus", { version: result.update.version }));
+      } else if (result.status === "current") {
+        setPanelMessage(t("updates.current", { version: result.currentVersion }));
+      } else if (result.status === "skipped") {
+        setPanelMessage(t("updates.availableStatus", { version: result.version }));
+      } else {
+        setPanelMessage(t("updates.autoCheckDisabled"));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setPanelMessage(t("updates.checkFailed", { message }));
+      setStatus(t("updates.checkFailed", { message }));
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  const installManualUpdate = async () => {
+    if (!manualUpdate?.install) {
+      return;
+    }
+    setUpdateInstalling(true);
+    setUpdateProgress(null);
+    try {
+      await manualUpdate.install(setUpdateProgress);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setPanelMessage(t("updates.installFailed", { message }));
+      setStatus(t("updates.installFailed", { message }));
+      setUpdateInstalling(false);
+    }
   };
 
   const fetchModels = async () => {
@@ -101,6 +161,38 @@ export function SettingsPanel() {
             </option>
           ))}
         </SelectField>
+      </div>
+
+      <div className="subpanel">
+        <div className="subpanel-heading">
+          <h3>{t("updates.title")}</h3>
+          <Button disabled={updateLoading} icon={updateLoading ? <LoaderCircle className="spin" size={18} /> : <RefreshCcw size={18} />} onClick={() => void checkUpdates()}>
+            {t("updates.checkNow")}
+          </Button>
+        </div>
+        <label className="toggle-row">
+          <input checked={updatePreferences.autoCheckUpdates} type="checkbox" onChange={(event) => updateAutoCheck(event.currentTarget.checked)} />
+          <span>{t("updates.autoCheck")}</span>
+        </label>
+        <p className="muted">{t("updates.sourceInstallPolicy")}</p>
+        {manualUpdate ? (
+          <div className="update-settings-result">
+            <div>
+              <strong>{t("updates.available", { version: manualUpdate.version })}</strong>
+              <span>
+                {manualUpdate.mode === "installer"
+                  ? t("updates.installerDetail", { current: manualUpdate.currentVersion })
+                  : t("updates.sourceDetail", { current: manualUpdate.currentVersion })}
+              </span>
+              {updateProgress ? <small>{formatUpdateProgress(updateProgress)}</small> : null}
+            </div>
+            {manualUpdate.install ? (
+              <Button disabled={updateInstalling} icon={<Download size={16} />} onClick={() => void installManualUpdate()}>
+                {updateInstalling ? t("updates.installing") : t("updates.installNow")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="settings-layout">
@@ -309,4 +401,22 @@ export function SettingsPanel() {
       </div>
     </section>
   );
+}
+
+function formatUpdateProgress(progress: UpdateProgress): string {
+  if (progress.finished) {
+    return "100%";
+  }
+  if (!progress.total || progress.total <= 0) {
+    return `${formatBytes(progress.downloaded)} downloaded`;
+  }
+  const percent = Math.min(100, Math.round((progress.downloaded / progress.total) * 100));
+  return `${percent}% (${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)})`;
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024 * 1024) {
+    return `${Math.max(0, Math.round(value / 1024))} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }

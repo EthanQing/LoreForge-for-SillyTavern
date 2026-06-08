@@ -3,6 +3,7 @@ import {
   BookOpen,
   BarChart3,
   CheckCircle2,
+  Download,
   FileBox,
   FileText,
   Home,
@@ -33,6 +34,7 @@ import { AiChatDrawer } from "../features/ai-chat/AiChatDrawer";
 import { ContextMenu } from "../components/ContextMenu";
 import { getCardDisplayName, getCardIdentity } from "./cardIdentity";
 import { useProjectActions } from "./useProjectActions";
+import { checkForUpdates, skipUpdateVersion, type AvailableUpdate, type UpdateProgress } from "../lib/updater";
 
 import { PageTransition } from "../components/PageTransition";
 
@@ -78,6 +80,9 @@ function ActivePanel() {
 export function App() {
   const { locale, t } = useI18n();
   const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
   const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
   const scrollPositionsRef = useRef<Record<string, number>>({});
   const activeTabRef = useRef("home");
@@ -89,12 +94,32 @@ export function App() {
   const cardOrigin = useCardStore((state) => state.cardOrigin);
   const theme = useCardStore((state) => state.theme);
   const setTheme = useCardStore((state) => state.setTheme);
+  const setStatus = useCardStore((state) => state.setStatus);
   const report = useCardStore((state) => state.report);
   const { saveCurrentCard } = useProjectActions();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    let mounted = true;
+    void checkForUpdates()
+      .then((result) => {
+        if (!mounted || result.status !== "available") {
+          return;
+        }
+        setAvailableUpdate(result.update);
+        setStatus(t("updates.availableStatus", { version: result.update.version }));
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(t("updates.checkFailed", { message }));
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [locale, setStatus]);
 
   useLayoutEffect(() => {
     activeTabRef.current = activeTab;
@@ -151,6 +176,29 @@ export function App() {
   }, [saveCurrentCard]);
 
   const cardIdentity = getCardIdentity(cardOrigin, currentPath, t);
+  const installAvailableUpdate = async () => {
+    if (!availableUpdate?.install) {
+      return;
+    }
+    setUpdateInstalling(true);
+    setUpdateProgress(null);
+    try {
+      await availableUpdate.install(setUpdateProgress);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus(t("updates.installFailed", { message }));
+      setUpdateInstalling(false);
+    }
+  };
+
+  const dismissAvailableUpdate = () => {
+    if (availableUpdate) {
+      skipUpdateVersion(availableUpdate.version);
+    }
+    setAvailableUpdate(null);
+    setUpdateInstalling(false);
+    setUpdateProgress(null);
+  };
 
   return (
     <main className="app-shell" data-context-menu="workspace">
@@ -216,6 +264,29 @@ export function App() {
             </span>
           </div>
         </header>
+        {availableUpdate ? (
+          <div className="update-banner" role="status" aria-live="polite">
+            <div>
+              <strong>{t("updates.available", { version: availableUpdate.version })}</strong>
+              <span>
+                {availableUpdate.mode === "installer"
+                  ? t("updates.installerDetail", { current: availableUpdate.currentVersion })
+                  : t("updates.sourceDetail", { current: availableUpdate.currentVersion })}
+              </span>
+              {updateProgress ? <small>{formatUpdateProgress(updateProgress)}</small> : null}
+            </div>
+            <div className="update-banner-actions">
+              {availableUpdate.install ? (
+                <Button disabled={updateInstalling} icon={<Download size={15} />} onClick={() => void installAvailableUpdate()}>
+                  {updateInstalling ? t("updates.installing") : t("updates.installNow")}
+                </Button>
+              ) : null}
+              <Button variant="ghost" onClick={dismissAvailableUpdate}>
+                {t("updates.later")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <div className="workspace-scroll" ref={workspaceScrollRef} onScroll={handleWorkspaceScroll}>
           <ErrorBoundary resetKey={activeTab}>
             <PageTransition activeKey={activeTab}>
@@ -233,4 +304,22 @@ export function App() {
       <ContextMenu />
     </main>
   );
+}
+
+function formatUpdateProgress(progress: UpdateProgress): string {
+  if (progress.finished) {
+    return "100%";
+  }
+  if (!progress.total || progress.total <= 0) {
+    return `${formatBytes(progress.downloaded)} downloaded`;
+  }
+  const percent = Math.min(100, Math.round((progress.downloaded / progress.total) * 100));
+  return `${percent}% (${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)})`;
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024 * 1024) {
+    return `${Math.max(0, Math.round(value / 1024))} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }

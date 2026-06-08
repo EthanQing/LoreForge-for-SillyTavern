@@ -21,6 +21,7 @@
 - **AI Edit 模式**：通过结构化 JSON patch 生成修改预览，用户确认后才应用到角色卡。
 - **快捷工作流**：在 AI Edit 模式中可通过底部 `+` 菜单或 `/` 命令运行角色卡体检、一键补全、资料提取、一致性修复、Token 优化、世界书构建和导入清洗。
 - **字段级 AI 助手**：长文本字段可局部润色、扩写、重写、补全、缩短、翻译、检查冲突、提取关键词或生成候选版本。
+- **自动更新**：安装版启动时检查 GitHub Release 更新；源码/dev 启动只提示新版本，不会自动修改本地仓库。
 
 当前版本专注于本地角色卡编辑与可确认的 AI JSON patch 预览。
 
@@ -79,6 +80,19 @@ pnpm tauri build
 ```
 
 如果 Windows GNU Rust 工具链缺少 `dlltool.exe` 等 binutils，`cargo test` 或 `pnpm tauri build` 可能失败。此时需要安装 GNU binutils，或切换到可用的 MSVC Rust 工具链。
+
+## 自动更新与发布
+
+安装版使用 Tauri updater。应用启动时会检查 GitHub Release 的 `latest.json`；发现新版本后会提示用户确认下载和安装。源码/dev 启动只显示新版本提醒，需要手动 `git pull` 并重新构建。
+
+自动更新版本必须使用合法 SemVer tag，例如 `v0.1.2`、`v0.1.3`。四段 tag（例如 `v0.1.0.2`）不用于 updater。
+
+发布前需要在 GitHub Secrets 中配置：
+
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+推送 `v*.*.*` tag 会触发 `.github/workflows/release.yml`，构建 Windows 安装包并上传 updater 所需的 `latest.json`。
 
 ## 基本使用流程
 

@@ -1,6 +1,6 @@
 [package]
 name = "sillytavern-card-creator"
-version = "0.1.0"
+version = "0.1.2"
 description = "Local-first CCv3 character card editor"
 authors = ["Ethan"]
 edition = "2021"
@@ -11,7 +11,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = ["tauri-app"]
-tauri-app = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:rusqlite"]
+tauri-app = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-process", "dep:tauri-plugin-updater", "dep:rusqlite"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -28,6 +28,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tauri = { version = "2", features = [], optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-process = { version = "2.3.1", optional = true }
+tauri-plugin-updater = { version = "2.10.1", features = ["rustls-tls"], optional = true }
 thiserror = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
