@@ -183,6 +183,13 @@ export function reorderLorebookEntriesForDisplay(entries: LorebookEntry[], from:
   return movedEntries;
 }
 
+export function promoteAlternateGreetingToFirst(firstMessage: string, alternateGreetings: string[], index: number): string[] {
+  if (index < 0 || index >= alternateGreetings.length) {
+    return alternateGreetings;
+  }
+  return alternateGreetings.map((greeting, itemIndex) => (itemIndex === index ? firstMessage : greeting));
+}
+
 const initialCard = typeof window === "undefined" ? createBlankCard() : loadDraft();
 const initialDraftMeta =
   typeof window === "undefined" || !hasStoredDraft() ? ({ currentPath: null, origin: "new", dirty: false } satisfies DraftMeta) : loadDraftMeta();

@@ -1,6 +1,6 @@
 import { GripVertical, Plus, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useCardStore } from "../../app/store";
+import { promoteAlternateGreetingToFirst, useCardStore } from "../../app/store";
 import { AiFieldAssistant } from "../../components/AiFieldAssistant";
 import { Button } from "../../components/Button";
 import { CodeEditor } from "../../components/CodeEditor";
@@ -100,6 +100,7 @@ export function GreetingsPanel() {
   const { t } = useI18n();
   const data = useCardStore((state) => state.card.data);
   const updateData = useCardStore((state) => state.updateData);
+  const updateCard = useCardStore((state) => state.updateCard);
 
   return (
     <section className="panel">
@@ -118,11 +119,14 @@ export function GreetingsPanel() {
         values={data.alternate_greetings}
         onChange={(values) => updateData("alternate_greetings", values)}
         onPromote={(value, index) => {
-          updateData("first_mes", value);
-          updateData(
-            "alternate_greetings",
-            data.alternate_greetings.filter((_, itemIndex) => itemIndex !== index)
-          );
+          updateCard((card) => ({
+            ...card,
+            data: {
+              ...card.data,
+              first_mes: value,
+              alternate_greetings: promoteAlternateGreetingToFirst(card.data.first_mes, card.data.alternate_greetings, index)
+            }
+          }));
         }}
       />
       <GreetingList path="" aiEnabled={false} title={t("greetings.groupOnlyGreetings")} values={data.group_only_greetings} onChange={(values) => updateData("group_only_greetings", values)} />
