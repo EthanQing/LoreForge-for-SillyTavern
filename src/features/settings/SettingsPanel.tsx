@@ -174,7 +174,6 @@ export function SettingsPanel() {
           <input checked={updatePreferences.autoCheckUpdates} type="checkbox" onChange={(event) => updateAutoCheck(event.currentTarget.checked)} />
           <span>{t("updates.autoCheck")}</span>
         </label>
-        <p className="muted">{t("updates.sourceInstallPolicy")}</p>
         {manualUpdate ? (
           <div className="update-settings-result">
             <div>
