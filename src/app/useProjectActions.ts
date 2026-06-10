@@ -1,6 +1,7 @@
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback } from "react";
 import { useCardStore } from "./store";
+import { keepEditorAssetsAfterMetadataExport } from "./exportState";
 import { dataImageToPngDataUrl, fileUriToPath, findMainIconAsset, isDataImageUri } from "../lib/imageAssets";
 import { useI18n } from "../lib/i18n";
 import type { CardAsset, CharacterCardV3 } from "../lib/schema";
@@ -173,7 +174,7 @@ export function useProjectActions() {
         return;
       }
       const parsed = await saveCardJson(path, card);
-      markSaved(parsed.card, path);
+      markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, card), path);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -196,7 +197,7 @@ export function useProjectActions() {
         return;
       }
       const parsed = await exportCardPng(path, cardToSave, { compatibility_v2: true }, pickedBasePath ? { basePngPath: pickedBasePath } : base);
-      markSaved(parsed.card, path);
+      markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, cardToSave), path);
     },
     [card, markSaved]
   );
@@ -205,7 +206,7 @@ export function useProjectActions() {
     async (path: string, overwriteBasePath?: string | null, cardToSave: CharacterCardV3 = card) => {
       if (isJsonPath(path)) {
         const parsed = await saveCardJson(path, cardToSave);
-        markSaved(parsed.card, path);
+        markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, cardToSave), path);
         return;
       }
 
@@ -216,7 +217,7 @@ export function useProjectActions() {
 
       if (isCharxPath(path)) {
         const parsed = await exportCharx(path, cardToSave, []);
-        markSaved(parsed.card, path);
+        markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, cardToSave), path);
         return;
       }
 
@@ -284,7 +285,7 @@ export function useProjectActions() {
         return;
       }
       const parsed = await exportCharx(path, card, []);
-      markSaved(parsed.card, path);
+      markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, card), path);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }

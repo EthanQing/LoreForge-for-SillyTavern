@@ -71,6 +71,7 @@ Global save:
 - If the active `currentPath` points to an existing JSON, PNG/APNG, or CHARX card, Save writes back to that same path without opening a save dialog.
 - JSON Save uses `save_card_json`; PNG/APNG Save uses `export_card_png`; CHARX Save uses `export_charx`.
 - For PNG/APNG Save, the current main icon/cover asset is used as the base image when present. If no cover asset exists, the current image path is used as the fallback base before writing back to the same path.
+- Backend export returns the stripped metadata card. Frontend save paths must call `keepEditorAssetsAfterMetadataExport()` before `markSaved()` so editor-only inline cover assets stay visible and reusable after saving.
 - New cards, local drafts, and unrecognized paths use a save dialog with PNG as the default format while still allowing JSON or CHARX.
 - Keep `exportJson()`, `exportPng()`, and `exportCharxFile()` as explicit save-as/export paths that always prompt for a destination.
 
@@ -87,7 +88,7 @@ JSON:
 - `open_card_file` routes `.json` to migration.
 - `save_card_json` prepares export card, validates, writes pretty JSON.
 - Export preparation normalizes embedded lorebooks for SillyTavern so blank entry memos are filled and key settings such as `position`, `depth`, `probability`, and `case_sensitive` are available under `entry.extensions`.
-- Export preparation strips inline image `data:image/...` asset URIs from saved card metadata. PNG export still uses the cover asset as the actual base image, but the JSON/PNG metadata should not duplicate large base64 images because SillyTavern imports can reject oversized metadata as invalid or corrupted.
+- Export preparation strips inline image `data:image/...` asset URIs from saved card metadata. PNG export still uses the cover asset as the actual base image, but the JSON/PNG metadata should not duplicate large base64 images because SillyTavern imports can reject oversized metadata as invalid or corrupted. This stripping is for the written file only; the editor draft should retain the cover asset.
 
 PNG/APNG:
 
