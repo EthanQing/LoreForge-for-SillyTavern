@@ -42,6 +42,8 @@ Do not export inline image `data:image/...` asset URIs inside JSON/PNG card meta
 
 After such an export, do not pass the backend-returned stripped card directly to `markSaved()`. Merge editor assets back with `keepEditorAssetsAfterMetadataExport()` so the Resources panel does not go empty and later PNG saves can still reuse the uploaded cover.
 
+Some generated or edited PNG covers include private C2PA/provenance chunks such as `caBX`. SillyTavern can report these PNG cards as invalid/corrupted even when `chara`/`ccv3` metadata is small and valid. Strip `caBX` when writing card PNGs.
+
 ## Asset Uploads After Deletes
 
 Asset uploads read files asynchronously. Do not append uploaded assets using a captured `assets` array from the component render, because deletes or other edits can make that snapshot stale before `FileReader` finishes. Use store append helpers that read the latest card state, and keep cover upload separate from ordinary image upload.

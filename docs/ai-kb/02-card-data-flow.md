@@ -95,6 +95,7 @@ PNG/APNG:
 - Import reads card metadata chunks. If no card metadata exists, it creates a blank card and imports the image as an `icon` asset.
 - Export requires a base PNG from either a path or a base64 data URL.
 - Export writes CCv3 metadata and can also write legacy compatibility metadata when enabled.
+- Export removes `caBX` C2PA/provenance PNG chunks from the cover image because some SillyTavern PNG import paths can reject images containing those private chunks even when card metadata is valid.
 
 CHARX:
 

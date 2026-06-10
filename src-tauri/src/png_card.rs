@@ -94,7 +94,7 @@ pub fn write_text_chunks(base_png: &[u8], entries: &[(&str, String)]) -> CardRes
             inserted = true;
         }
 
-        if !is_replaced_text_chunk(chunk_type, &base_png[data_start..data_end]) {
+        if !is_removed_export_chunk(chunk_type, &base_png[data_start..data_end]) {
             output.extend_from_slice(&base_png[offset..next]);
         }
 
@@ -151,11 +151,13 @@ fn downgrade_to_v2(card: &CharacterCardV3) -> Value {
     value
 }
 
-fn is_replaced_text_chunk(chunk_type: &[u8], data: &[u8]) -> bool {
-    if chunk_type != b"tEXt" {
-        return false;
+fn is_removed_export_chunk(chunk_type: &[u8], data: &[u8]) -> bool {
+    if chunk_type == b"caBX" {
+        return true;
     }
-    data.strip_prefix(b"ccv3\0").is_some() || data.strip_prefix(b"chara\0").is_some()
+    chunk_type == b"tEXt"
+        && (data.strip_prefix(b"ccv3\0").is_some()
+            || data.strip_prefix(b"chara\0").is_some())
 }
 
 fn encode_text_chunk(key: &str, value: &str) -> Vec<u8> {
@@ -199,5 +201,19 @@ mod tests {
         let (value, source) = read_card_value(&output).unwrap().unwrap();
         assert_eq!(source, "png-ccv3");
         assert_eq!(value["spec"], "chara_card_v3");
+    }
+
+    #[test]
+    fn strips_c2pa_box_chunks_on_export() {
+        let mut png = Vec::from(PNG_SIGNATURE.as_slice());
+        png.extend_from_slice(&encode_chunk(*b"IHDR", &[0; 13]));
+        png.extend_from_slice(&encode_chunk(*b"caBX", b"provenance"));
+        png.extend_from_slice(&encode_chunk(*b"IEND", &[]));
+
+        let card = CharacterCardV3::blank(1);
+        let output = write_card_chunks(&png, &card, false).unwrap();
+
+        assert!(!output.windows(4).any(|window| window == b"caBX"));
+        assert!(text_chunks(&output).unwrap().contains_key("ccv3"));
     }
 }
