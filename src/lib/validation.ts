@@ -118,6 +118,9 @@ export function validateCard(card: CharacterCardV3): ValidationReport {
     if (/^http:\/\//i.test(asset.uri)) {
       warnings.push(issue("warning", "http_asset", `data.assets.${index}.uri`, translate("validation.httpAsset")));
     }
+    if (/^data:image\//i.test(asset.uri)) {
+      warnings.push(issue("warning", "inline_image_asset", `data.assets.${index}.uri`, translate("validation.inlineImageAsset")));
+    }
     if (asset.ext !== asset.ext.toLowerCase() || asset.ext.startsWith(".")) {
       warnings.push(issue("warning", "asset_ext", `data.assets.${index}.ext`, translate("validation.assetExt")));
     }

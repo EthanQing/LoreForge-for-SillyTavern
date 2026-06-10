@@ -65,9 +65,21 @@ pub fn normalize_card(mut card: CharacterCardV3) -> CharacterCardV3 {
 pub fn touch_for_export(mut card: CharacterCardV3) -> CharacterCardV3 {
     card = normalize_card(card);
     normalize_lorebook_for_export(&mut card);
+    strip_inline_image_assets_for_export(&mut card);
     card.spec_version = "3.0".to_string();
     card.data.modification_date = Some(current_unix_seconds());
     card
+}
+
+fn strip_inline_image_assets_for_export(card: &mut CharacterCardV3) {
+    let Some(assets) = &mut card.data.assets else {
+        return;
+    };
+
+    assets.retain(|asset| !asset.uri.trim_start().to_ascii_lowercase().starts_with("data:image/"));
+    if assets.is_empty() {
+        card.data.assets = None;
+    }
 }
 
 fn normalize_lorebook_for_export(card: &mut CharacterCardV3) {
@@ -324,5 +336,37 @@ mod tests {
             entry.extensions.get("probability").and_then(Value::as_i64),
             Some(80)
         );
+    }
+
+    #[test]
+    fn export_strips_inline_image_assets() {
+        let (card, _, _) = migrate_value_to_v3(json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {
+                "name": "Test",
+                "assets": [
+                    {
+                        "type": "icon",
+                        "name": "main",
+                        "ext": "png",
+                        "uri": "data:image/png;base64,abcdef"
+                    },
+                    {
+                        "type": "background",
+                        "name": "city",
+                        "ext": "png",
+                        "uri": "https://example.test/city.png"
+                    }
+                ]
+            }
+        }))
+        .unwrap();
+
+        let card = touch_for_export(card);
+        let assets = card.data.assets.as_ref().unwrap();
+
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].uri, "https://example.test/city.png");
     }
 }

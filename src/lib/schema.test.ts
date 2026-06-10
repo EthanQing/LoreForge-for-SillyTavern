@@ -117,4 +117,13 @@ describe("ccv3 schema helpers", () => {
     const report = validateCard(card);
     expect(report.errors.some((error) => error.code === "invalid_main_icon")).toBe(true);
   });
+
+  it("warns when an exported card contains inline image assets", () => {
+    const card = createBlankCard();
+    card.data.assets = [{ type: "icon", uri: "data:image/png;base64,abcdef", name: "main", ext: "png" }];
+
+    const report = validateCard(card);
+
+    expect(report.warnings.some((warning) => warning.code === "inline_image_asset")).toBe(true);
+  });
 });

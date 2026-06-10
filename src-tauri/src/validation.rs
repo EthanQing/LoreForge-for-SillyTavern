@@ -150,6 +150,14 @@ pub fn validate_card_report(card: &CharacterCardV3) -> ValidationReport {
                     "HTTP asset URI is not secure.",
                 ));
             }
+            if asset.uri.trim_start().to_ascii_lowercase().starts_with("data:image/") {
+                warnings.push(issue(
+                    "warning",
+                    "inline_image_asset",
+                    &format!("data.assets.{index}.uri"),
+                    "Inline image assets are removed on export; PNG uses the cover image itself.",
+                ));
+            }
             if asset.ext.starts_with('.') || asset.ext != asset.ext.to_ascii_lowercase() {
                 warnings.push(issue(
                     "warning",
@@ -311,5 +319,23 @@ mod tests {
             .errors
             .iter()
             .any(|error| error.code == "invalid_main_icon"));
+    }
+
+    #[test]
+    fn inline_image_asset_is_warning() {
+        let mut card = CharacterCardV3::blank(1);
+        card.data.assets = Some(vec![CardAsset {
+            r#type: "icon".to_string(),
+            uri: "data:image/png;base64,abcdef".to_string(),
+            name: "main".to_string(),
+            ext: "png".to_string(),
+            extra: Default::default(),
+        }]);
+
+        let report = validate_card_report(&card);
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "inline_image_asset"));
     }
 }
