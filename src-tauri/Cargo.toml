@@ -1,6 +1,6 @@
 [package]
 name = "sillytavern-card-creator"
-version = "0.1.2"
+version = "0.2.0"
 description = "Local-first CCv3 character card editor"
 authors = ["Ethan"]
 edition = "2021"
@@ -19,8 +19,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
+bytes = "1"
 crc32fast = "1"
 futures-util = "0.3"
+keyring = { version = "4.1.5", features = ["windows-native-keyring-store"] }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }

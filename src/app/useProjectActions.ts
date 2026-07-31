@@ -76,6 +76,8 @@ interface SaveCurrentCardOptions {
   unboundStatus?: string;
 }
 
+export type SaveCardSnapshotResult = "saved" | "draft-only" | "failed";
+
 export function useProjectActions() {
   const { t } = useI18n();
   const card = useCardStore((state) => state.card);
@@ -226,14 +228,14 @@ export function useProjectActions() {
     [card, markSaved, savePngToPath]
   );
 
-  const saveCardSnapshot = useCallback(async (cardToSave: CharacterCardV3, options: SaveCurrentCardOptions = {}) => {
+  const saveCardSnapshot = useCallback(async (cardToSave: CharacterCardV3, options: SaveCurrentCardOptions = {}): Promise<SaveCardSnapshotResult> => {
     try {
       if (isJsonPath(currentPath) || isCharxPath(currentPath)) {
         await saveToPath(currentPath, undefined, cardToSave);
         if (options.savedStatus) {
           setStatus(options.savedStatus);
         }
-        return;
+        return "saved";
       }
 
       if (isPngPath(currentPath)) {
@@ -241,24 +243,26 @@ export function useProjectActions() {
         if (options.savedStatus) {
           setStatus(options.savedStatus);
         }
-        return;
+        return "saved";
       }
 
       if (options.promptIfUnbound === false) {
         setStatus(options.unboundStatus ?? t("status.draftAutosaved"));
-        return;
+        return "draft-only";
       }
 
       const path = await pickCardSavePath();
       if (!path) {
-        return;
+        return "draft-only";
       }
       await saveToPath(path, undefined, cardToSave);
       if (options.savedStatus) {
         setStatus(options.savedStatus);
       }
+      return "saved";
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+      return "failed";
     }
   }, [card, currentPath, saveToPath, setStatus, t]);
 

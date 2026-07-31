@@ -1,5 +1,17 @@
 # Pitfalls
 
+## Agent Proposal Safety
+
+Never apply a historical `after` snapshot directly. Re-read the current normalized card, compare every proposal guard, reject affected-path conflicts, and run validation before calling `applyAgentCard`. A proposal tool must never mutate Zustand, localStorage, files, or SQLite card content.
+
+## Credential Boundary
+
+Do not put a real API key in AI settings, SQLite entries, event payloads, logs, or model error previews. `tauriFetch` may carry only the `tauri-managed` placeholder; Rust removes Authorization and injects the key from the OS credential store.
+
+## Tauri Stream Cancellation
+
+Keep a request handle per `requestId` and replace the header-request handle with a body-stream handle after response metadata arrives. Cancelling only the initial request leaves an SSE body alive and can continue emitting chunks.
+
 ## Unknown Field Preservation
 
 Both TypeScript schemas and Rust models are intended to preserve unknown CCv3 fields where possible. Avoid replacing card objects with narrow reconstructed objects unless you deliberately carry through existing fields.
@@ -62,7 +74,7 @@ The Greetings panel has field-level AI targets such as `/alternateGreetings/0`. 
 
 ## AI History Applied State
 
-An AI chat preview marked `applied` means the patch was applied to the editor state at that time; it is not proof that an external card file was saved. AI preview apply now silently saves existing bound card files, but unbound drafts remain local-only. For recovery, re-inject stored history patches against the current card instead of copying an old `preview.after` snapshot over newer edits.
+An Agent proposal marked `applied` means the guarded patch was applied to the current editor state; it is not proof that an external card file was saved. Persist `saveState` separately (`saved`, `draft-only`, or `failed`) and keep the card dirty after a save failure. For recovery, re-inject stored patches against the current card instead of copying an old after snapshot over newer edits.
 
 ## AI History Rendering Cost
 

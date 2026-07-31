@@ -4,7 +4,7 @@ import { createBlankCard, createBlankLorebook, createBlankLorebookEntry, unixNow
 import { prepareCardForExport } from "../lib/migrations";
 import { validateCard } from "../lib/validation";
 import type { AiModel, AiSettings } from "../lib/ai";
-import { defaultAiSettings, normalizeAiSettings } from "../lib/ai";
+import { defaultAiSettings, migrateLegacyAiCredential, normalizeAiSettings } from "../lib/ai";
 import { translate } from "../lib/i18n";
 
 const DRAFT_KEY = "sillytavern-card-creator:draft";
@@ -18,6 +18,8 @@ interface DraftMeta {
   currentPath: string | null;
   origin: CardOrigin;
   dirty: boolean;
+  workspaceId: string;
+  cardRevision: number;
 }
 
 export interface RecentItem {
@@ -28,6 +30,8 @@ export interface RecentItem {
 
 interface CardStore {
   card: CharacterCardV3;
+  workspaceId: string;
+  cardRevision: number;
   report: ValidationReport;
   dirty: boolean;
   currentPath: string | null;
@@ -42,7 +46,7 @@ interface CardStore {
   setTheme: (theme: "light" | "dark") => void;
   updateAiSettings: (settings: Partial<AiSettings>) => void;
   setAiModels: (models: AiModel[]) => void;
-  replaceCard: (card: CharacterCardV3, options?: { dirty?: boolean; status?: string; path?: string; origin?: CardOrigin }) => void;
+  replaceCard: (card: CharacterCardV3, options?: { dirty?: boolean; status?: string; path?: string; origin?: CardOrigin; workspaceId?: string }) => void;
   updateData: <K extends keyof CharacterCardV3["data"]>(key: K, value: CharacterCardV3["data"][K]) => void;
   updateCard: (updater: (card: CharacterCardV3) => CharacterCardV3) => void;
   applyAgentCard: (card: CharacterCardV3, status?: string) => void;
@@ -105,7 +109,7 @@ function loadDraftMeta(): DraftMeta {
   try {
     const raw = localStorage.getItem(DRAFT_META_KEY);
     if (!raw) {
-      return { currentPath: null, origin: "draft", dirty: false };
+      return { currentPath: null, origin: "draft", dirty: false, workspaceId: createWorkspaceId(), cardRevision: 0 };
     }
     const parsed = JSON.parse(raw) as Partial<DraftMeta>;
     const currentPath = typeof parsed.currentPath === "string" && parsed.currentPath.trim() ? parsed.currentPath : null;
@@ -113,17 +117,27 @@ function loadDraftMeta(): DraftMeta {
     return {
       currentPath,
       origin,
-      dirty: Boolean(parsed.dirty)
+      dirty: Boolean(parsed.dirty),
+      workspaceId: typeof parsed.workspaceId === "string" && parsed.workspaceId.trim() ? parsed.workspaceId : createWorkspaceId(),
+      cardRevision: typeof parsed.cardRevision === "number" && Number.isInteger(parsed.cardRevision) && parsed.cardRevision >= 0 ? parsed.cardRevision : 0
     };
   } catch {
-    return { currentPath: null, origin: "draft", dirty: false };
+    return { currentPath: null, origin: "draft", dirty: false, workspaceId: createWorkspaceId(), cardRevision: 0 };
   }
 }
 
 function loadAiSettings(): AiSettings {
   try {
     const raw = localStorage.getItem(AI_SETTINGS_KEY);
-    return raw ? normalizeAiSettings(JSON.parse(raw)) : defaultAiSettings;
+    const settings = raw ? normalizeAiSettings(JSON.parse(raw)) : { ...defaultAiSettings };
+    if (settings.apiKey.trim()) {
+      void migrateLegacyAiCredential(settings).then((migrated) => {
+        if (migrated) {
+          saveAiSettings({ ...settings, apiKey: "" });
+        }
+      });
+    }
+    return settings;
   } catch {
     return defaultAiSettings;
   }
@@ -146,7 +160,8 @@ function saveRecent(recent: RecentItem[]): void {
 }
 
 function saveAiSettings(settings: AiSettings): void {
-  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(settings));
+  const { apiKey: _apiKey, ...safeSettings } = settings;
+  localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(safeSettings));
 }
 
 function addRecent(recent: RecentItem[], path?: string, card?: CharacterCardV3): RecentItem[] {
@@ -183,6 +198,21 @@ export function reorderLorebookEntriesForDisplay(entries: LorebookEntry[], from:
   return movedEntries;
 }
 
+function createWorkspaceId(path?: string | null): string {
+  if (path) {
+    let hash = 2166136261;
+    for (const character of path.replaceAll("\\", "/").toLowerCase()) {
+      hash ^= character.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `workspace-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+  }
+  if (globalThis.crypto?.randomUUID) {
+    return `workspace-${globalThis.crypto.randomUUID()}`;
+  }
+  return `workspace-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function promoteAlternateGreetingToFirst(firstMessage: string, alternateGreetings: string[], index: number): string[] {
   if (index < 0 || index >= alternateGreetings.length) {
     return alternateGreetings;
@@ -192,11 +222,15 @@ export function promoteAlternateGreetingToFirst(firstMessage: string, alternateG
 
 const initialCard = typeof window === "undefined" ? createBlankCard() : loadDraft();
 const initialDraftMeta =
-  typeof window === "undefined" || !hasStoredDraft() ? ({ currentPath: null, origin: "new", dirty: false } satisfies DraftMeta) : loadDraftMeta();
+  typeof window === "undefined" || !hasStoredDraft()
+    ? ({ currentPath: null, origin: "new", dirty: false, workspaceId: createWorkspaceId(), cardRevision: 0 } satisfies DraftMeta)
+    : loadDraftMeta();
 const initialAiSettings = typeof window === "undefined" ? defaultAiSettings : loadAiSettings();
 
 export const useCardStore = create<CardStore>((set, get) => ({
   card: initialCard,
+  workspaceId: initialDraftMeta.workspaceId,
+  cardRevision: initialDraftMeta.cardRevision,
   report: validateCard(initialCard),
   dirty: initialDraftMeta.dirty,
   currentPath: initialDraftMeta.currentPath,
@@ -230,10 +264,14 @@ export const useCardStore = create<CardStore>((set, get) => ({
     const dirty = options?.dirty ?? false;
     const currentPath = options?.path ?? null;
     const cardOrigin = currentPath ? "file" : options?.origin ?? "draft";
+    const workspaceId = options?.workspaceId ?? (currentPath ? createWorkspaceId(currentPath) : get().workspaceId);
+    const cardRevision = workspaceId === get().workspaceId ? get().cardRevision + 1 : 0;
     saveDraft(normalized);
-    saveDraftMeta({ currentPath, origin: cardOrigin, dirty });
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty, workspaceId, cardRevision });
     set((state) => ({
       card: normalized,
+      workspaceId,
+      cardRevision,
       report,
       dirty,
       currentPath,
@@ -256,29 +294,32 @@ export const useCardStore = create<CardStore>((set, get) => ({
     const report = validateCard(card);
     const { currentPath, cardOrigin } = get();
     saveDraft(card);
-    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: true });
-    set({ card, report, dirty: true, status: translate("status.draftSavedLocally") });
+    const cardRevision = get().cardRevision + 1;
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: true, workspaceId: get().workspaceId, cardRevision });
+    set({ card, report, dirty: true, cardRevision, status: translate("status.draftSavedLocally") });
   },
   applyAgentCard: (card, status) => {
     const applied = prepareCardForExport(card);
     const report = validateCard(applied);
     const { currentPath, cardOrigin } = get();
     saveDraft(applied);
-    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: true });
-    set({ card: applied, report, dirty: true, status: status ?? translate("status.draftSavedLocally") });
+    const cardRevision = get().cardRevision + 1;
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: true, workspaceId: get().workspaceId, cardRevision });
+    set({ card: applied, report, dirty: true, cardRevision, status: status ?? translate("status.draftSavedLocally") });
   },
   newCard: () => {
     const card = createBlankCard();
+    const workspaceId = createWorkspaceId();
     saveDraft(card);
-    saveDraftMeta({ currentPath: null, origin: "new", dirty: false });
-    set({ card, report: validateCard(card), dirty: false, currentPath: null, cardOrigin: "new", status: translate("status.newCardCreated"), activeTab: "basic" });
+    saveDraftMeta({ currentPath: null, origin: "new", dirty: false, workspaceId, cardRevision: 0 });
+    set({ card, workspaceId, cardRevision: 0, report: validateCard(card), dirty: false, currentPath: null, cardOrigin: "new", status: translate("status.newCardCreated"), activeTab: "basic" });
   },
   markSaved: (card, path) => {
     const saved = card ?? prepareCardForExport(get().card);
     const currentPath = path ?? get().currentPath;
     const cardOrigin = currentPath ? "file" : get().cardOrigin;
     saveDraft(saved);
-    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: false });
+    saveDraftMeta({ currentPath, origin: cardOrigin, dirty: false, workspaceId: get().workspaceId, cardRevision: get().cardRevision });
     set((state) => ({
       card: saved,
       report: validateCard(saved),

@@ -3192,3 +3192,627 @@ select.input {
 .state-pill-hot {
   animation: statePulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
 }
+
+/* Card Workshop / Agent Studio */
+:root {
+  --workbench: #0f1214;
+  --iron: #171c1f;
+  --workshop-line: #30383b;
+  --paper: #dce5e1;
+  --copper: #c98245;
+  --sage: #6fa383;
+}
+
+:root[data-theme="light"] {
+  --workbench: #eef1ef;
+  --iron: #f8faf9;
+  --workshop-line: #c6d0cc;
+  --paper: #17201d;
+  --copper: #a85e2c;
+  --sage: #4c8062;
+}
+
+.card-workshop-shell {
+  display: block;
+  min-height: 100vh;
+  background: var(--workbench);
+  color: var(--paper);
+}
+
+.card-workshop-topbar {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--workshop-line);
+  background: var(--workbench);
+}
+
+.card-workshop-topbar-copy,
+.card-workshop-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-workshop-topbar-copy {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.card-workshop-topbar-copy span,
+.agent-studio-eyebrow,
+.agent-studio-section-label,
+.agent-inspector-label {
+  color: var(--muted-color);
+  font: 600 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.card-workshop-topbar-copy strong {
+  font-size: 15px;
+  letter-spacing: .02em;
+}
+
+.card-workshop-update {
+  margin: 12px 20px 0;
+}
+
+.agent-studio {
+  --sidebar-width: 250px;
+  --inspector-width: 0px;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--inspector-width);
+  min-height: calc(100vh - 59px);
+  background: var(--workbench);
+}
+
+.agent-studio-inspector-open {
+  --inspector-width: 560px;
+}
+
+.agent-studio-sidebar,
+.agent-studio-inspector {
+  background: var(--iron);
+  border-color: var(--workshop-line);
+}
+
+.agent-studio-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 14px;
+  border-right: 1px solid var(--workshop-line);
+}
+
+.agent-studio-brand,
+.agent-studio-card-summary,
+.agent-studio-session,
+.agent-studio-nav button,
+.agent-studio-archive-item,
+.agent-status-chip,
+.agent-composer-footer,
+.agent-proposal-heading,
+.agent-proposal-actions,
+.agent-block-title {
+  display: flex;
+  align-items: center;
+}
+
+.agent-studio-brand {
+  gap: 10px;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid var(--workshop-line);
+}
+
+.agent-studio-brand > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-studio-brand span {
+  color: var(--muted-color);
+  font: 600 9px ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .14em;
+}
+
+.agent-studio-mark,
+.agent-empty-icon {
+  display: grid;
+  place-items: center;
+  color: var(--copper);
+  border: 1px solid var(--copper);
+}
+
+.agent-studio-mark {
+  width: 30px;
+  height: 30px;
+}
+
+.agent-studio-card-summary {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--workshop-line);
+  background: var(--workbench);
+}
+
+.agent-studio-card-summary span {
+  color: var(--muted-color);
+  font-size: 11px;
+}
+
+.agent-studio-card-summary strong {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-studio-card-summary small,
+.agent-mini-proposal span,
+.agent-muted {
+  color: var(--muted-color);
+  font-size: 11px;
+}
+
+.agent-studio-session,
+.agent-studio-nav button,
+.agent-studio-archive-item {
+  width: 100%;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+  text-align: left;
+}
+
+.agent-studio-session.active,
+.agent-studio-nav button:hover,
+.agent-studio-archive-item:hover {
+  border-color: var(--workshop-line);
+  background: var(--workbench);
+}
+
+.agent-studio-session span {
+  flex: 1;
+}
+
+.agent-studio-new-session {
+  justify-content: flex-start;
+}
+
+.agent-studio-archive {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--workshop-line);
+}
+
+.agent-studio-nav {
+  display: grid;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.agent-studio-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  background: var(--workbench);
+}
+
+.agent-studio-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 26px 32px 18px;
+  border-bottom: 1px solid var(--workshop-line);
+}
+
+.agent-studio-header h2 {
+  margin: 6px 0 0;
+  font-size: clamp(20px, 3vw, 30px);
+  letter-spacing: -.02em;
+}
+
+.agent-studio-header-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.agent-status-chip {
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid var(--workshop-line);
+  color: var(--sage);
+  font: 600 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.agent-status-chip.danger,
+.agent-danger {
+  color: var(--danger);
+}
+
+.agent-stop-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid var(--workshop-line);
+  background: transparent;
+  color: var(--muted-color);
+  cursor: pointer;
+}
+
+.agent-stop-button:not(:disabled):hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.agent-stop-button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.agent-studio-transcript {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 28px 32px;
+}
+
+.agent-empty-state {
+  width: min(680px, 100%);
+  margin: auto;
+  text-align: center;
+}
+
+.agent-empty-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 16px;
+}
+
+.agent-empty-state h3 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.agent-empty-state p {
+  margin: 0 auto 18px;
+  color: var(--muted-color);
+  line-height: 1.7;
+}
+
+.agent-suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.agent-suggestion-row button {
+  padding: 7px 10px;
+  border: 1px solid var(--workshop-line);
+  background: var(--iron);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.agent-message {
+  width: min(820px, 100%);
+  padding: 12px 14px;
+  border-left: 2px solid var(--workshop-line);
+  background: var(--iron);
+}
+
+.agent-message-user {
+  align-self: flex-end;
+  border-left: 0;
+  border-right: 2px solid var(--copper);
+  text-align: right;
+}
+
+.agent-message-toolResult {
+  border-left-color: var(--sage);
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.agent-message-role {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted-color);
+  font: 600 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-transform: uppercase;
+}
+
+.agent-runtime-status {
+  color: var(--muted-color);
+  font-size: 12px;
+}
+
+.agent-composer {
+  margin: 0 32px 24px;
+  border: 1px solid var(--workshop-line);
+  background: var(--iron);
+}
+
+.agent-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--paper);
+  padding: 13px 14px;
+}
+
+.agent-composer-footer {
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--workshop-line);
+  color: var(--muted-color);
+  font-size: 11px;
+}
+
+.agent-composer-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.agent-composer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-studio-inspector {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--workshop-line);
+}
+
+.agent-inspector-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--workshop-line);
+  font-weight: 700;
+}
+
+.agent-inspector-heading button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-color);
+  cursor: pointer;
+  font-size: 22px;
+}
+
+.agent-inspector-overview {
+  display: grid;
+  gap: 22px;
+  padding: 20px 18px;
+}
+
+.agent-inspector-block {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-index-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.agent-index-grid button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  border: 1px solid var(--workshop-line);
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+  text-align: left;
+}
+
+.agent-index-grid button:hover {
+  border-color: var(--copper);
+}
+
+.agent-block-title {
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.agent-block-title b {
+  min-width: 22px;
+  padding: 2px 5px;
+  border: 1px solid var(--copper);
+  color: var(--copper);
+  font: 600 11px ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-align: center;
+}
+
+.agent-good {
+  color: var(--sage);
+}
+
+.agent-mini-proposal {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-left: 2px solid var(--copper);
+  background: var(--workbench);
+}
+
+.agent-proposal-card {
+  width: min(820px, 100%);
+  padding: 14px;
+  border: 1px solid var(--copper);
+  background: var(--iron);
+}
+
+.agent-proposal-card.conflicted {
+  border-color: var(--danger);
+}
+
+.agent-proposal-heading {
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--copper);
+  font: 600 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-transform: uppercase;
+}
+
+.agent-proposal-heading code,
+.agent-proposal-diffs code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.agent-proposal-diffs {
+  display: grid;
+  gap: 5px;
+  margin: 12px 0;
+}
+
+.agent-proposal-diffs div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.35fr) 1fr;
+  gap: 8px;
+  padding: 6px;
+  background: var(--workbench);
+  font-size: 12px;
+}
+
+.agent-proposal-diffs span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-proposal-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.agent-inspector-loading {
+  padding: 24px 18px;
+  color: var(--muted-color);
+}
+
+.agent-inspector-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.agent-inspector-resizer:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: -1px;
+}
+
+@media (max-width: 1279px) {
+  .agent-studio {
+    --sidebar-width: 68px;
+  }
+  .agent-studio-brand > div:last-child,
+  .agent-studio-card-summary,
+  .agent-studio-session span,
+  .agent-studio-session svg:last-child,
+  .agent-studio-new-session span,
+  .agent-studio-archive,
+  .agent-studio-nav button:not(:has(svg)) {
+    display: none;
+  }
+  .agent-studio-sidebar {
+    align-items: center;
+    padding-inline: 8px;
+  }
+  .agent-studio-session,
+  .agent-studio-nav button {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1099px) {
+  .agent-studio {
+    --sidebar-width: 0px;
+    --inspector-width: 0px;
+  }
+  .agent-studio-sidebar {
+    display: none;
+  }
+  .agent-studio-inspector-open {
+    --inspector-width: min(100vw, 620px);
+  }
+  .agent-studio-inspector {
+    position: fixed;
+    z-index: 20;
+    top: 59px;
+    right: 0;
+    bottom: 0;
+    box-shadow: -16px 0 0 rgba(0, 0, 0, .12);
+  }
+}
+
+@media (max-width: 700px) {
+  .card-workshop-topbar {
+    padding-inline: 12px;
+  }
+  .card-workshop-topbar-copy strong {
+    font-size: 13px;
+  }
+  .card-workshop-topbar-actions .button {
+    padding-inline: 8px;
+  }
+  .agent-studio-header,
+  .agent-studio-transcript {
+    padding-inline: 16px;
+  }
+  .agent-studio-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .agent-studio-header-status {
+    justify-content: flex-start;
+  }
+  .agent-composer {
+    margin-inline: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-workshop-shell *,
+  .card-workshop-shell *::before,
+  .card-workshop-shell *::after {
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

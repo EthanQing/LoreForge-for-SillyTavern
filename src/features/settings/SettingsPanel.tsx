@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bot, BrainCircuit, CheckCircle2, Download, LoaderCircle, PlugZap, RefreshCcw } from "lucide-react";
 import { Button } from "../../components/Button";
 import { FieldShell, SelectField, TextField } from "../../components/Field";
 import { useCardStore } from "../../app/store";
 import { useI18n, type Locale, type TranslationKey } from "../../lib/i18n";
 import { AI_MAX_OUTPUT_TOKENS, AI_MAX_TIMEOUT_MS, fetchAiModels, testAiConnection, type AiThinkingEffort, type AiThinkingMode } from "../../lib/ai";
+import { invoke } from "@tauri-apps/api/core";
 import {
   checkForUpdates,
   loadUpdatePreferences,
@@ -35,11 +36,19 @@ export function SettingsPanel() {
   const [panelMessage, setPanelMessage] = useState("");
   const [testContent, setTestContent] = useState("");
   const [testReasoning, setTestReasoning] = useState("");
+  const [credentialConfigured, setCredentialConfigured] = useState(false);
   const [updatePreferences, setUpdatePreferencesState] = useState<UpdatePreferences>(() => loadUpdatePreferences());
   const [updateLoading, setUpdateLoading] = useState(false);
   const [manualUpdate, setManualUpdate] = useState<AvailableUpdate | null>(null);
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
+  const credentialBlocked = Boolean(aiSettings.apiKey.trim()) && !credentialConfigured;
+
+  useEffect(() => {
+    void invoke<{ configured: boolean }>("ai_credential_status", { credentialId: aiSettings.credentialId })
+      .then((status) => setCredentialConfigured(status.configured))
+      .catch(() => setCredentialConfigured(Boolean(aiSettings.apiKey.trim())));
+  }, [aiSettings.apiKey, aiSettings.credentialId]);
 
   const updateManualModelInput = (manualModelInput: boolean) => {
     updateAiSettings({
@@ -130,6 +139,9 @@ export function SettingsPanel() {
       });
       setTestContent((current) => current || result.content);
       setTestReasoning((current) => current || result.reasoning);
+      if (result.toolCalling) {
+        updateAiSettings({ toolCalling: result.toolCalling });
+      }
       setPanelMessage(t("settings.connected", { model: result.model }));
       setStatus(t("status.aiConnectionTested"));
     } catch (error) {
@@ -145,8 +157,8 @@ export function SettingsPanel() {
     <section className="panel">
       <div className="panel-heading">
         <h2>{t("settings.title")}</h2>
-        <span className={aiSettings.apiKey ? "state-pill" : "state-pill state-pill-hot"}>
-          {aiSettings.apiKey ? t("settings.aiReady") : t("settings.apiKeyMissing")}
+        <span className={credentialBlocked ? "state-pill state-pill-hot" : credentialConfigured ? "state-pill" : "state-pill state-pill-hot"}>
+          {credentialBlocked ? "系统凭据迁移未完成，请重新保存" : credentialConfigured ? "系统凭据已配置" : t("settings.apiKeyMissing")}
         </span>
       </div>
 
@@ -227,7 +239,7 @@ export function SettingsPanel() {
           </div>
           <TextField
             autoComplete="off"
-            label={t("settings.apiKey")}
+            label="API Key（仅写入系统凭据库）"
             spellCheck={false}
             type="password"
             value={aiSettings.apiKey}
@@ -266,7 +278,7 @@ export function SettingsPanel() {
               </label>
             </div>
             <Button
-              disabled={modelsLoading || !aiSettings.baseUrl.trim() || !aiSettings.apiKey.trim()}
+              disabled={modelsLoading || !aiSettings.baseUrl.trim() || (!aiSettings.apiKey.trim() && !credentialConfigured)}
               icon={modelsLoading ? <LoaderCircle className="spin" size={18} /> : <RefreshCcw size={18} />}
               onClick={fetchModels}
             >
@@ -373,7 +385,7 @@ export function SettingsPanel() {
         <div className="subpanel-heading">
           <h3>{t("settings.connectionTest")}</h3>
           <Button
-            disabled={testLoading || !aiSettings.apiKey.trim() || !aiSettings.baseUrl.trim() || !aiSettings.model.trim()}
+            disabled={testLoading || (!aiSettings.apiKey.trim() && !credentialConfigured) || !aiSettings.baseUrl.trim() || !aiSettings.model.trim()}
             icon={testLoading ? <LoaderCircle className="spin" size={18} /> : <PlugZap size={18} />}
             onClick={testConnection}
           >

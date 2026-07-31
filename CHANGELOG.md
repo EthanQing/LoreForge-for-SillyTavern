@@ -2,6 +2,27 @@
 
 本文档按日期记录用户可见功能、行为变化、修复和文档变化。项目仍处于早期快速迭代阶段，版本号以 `package.json` 为准。
 
+## v0.2.0 - 2026-07-31
+
+### 新增
+
+- Agent Studio 成为默认入口，提供卡片级会话、工具轨迹、提案审核和三栏编辑台。
+- 引入 Pi Agent Core 0.83.0 与 Pi AI 0.83.0；Agent 只读取卡片领域数据并创建待审核提案。
+- 增加 workspace、cardRevision、Agent 会话、消息和提案的 SQLite 持久化与旧历史只读迁移。
+- 增加 Rust HTTP/SSE 代理、请求取消、HTTPS/loopback 策略和系统凭据库管理。
+
+### 变更
+
+- DeepSeek 与 OpenAI-compatible Chat Completions 统一通过可注入 fetch 接入，模型网络不再由 WebView 直连。
+- Guide/Edit 双模式、旧 AI 抽屉和模型直接返回 JSON 的生产流程移除；字段级 AI 操作统一生成同一种提案。
+- Node 基线升级到 22.19.0，应用版本升级到 0.2.0。
+
+### 安全与兼容
+
+- API key 不再写入 localStorage、设置 JSON、SQLite、事件或错误信息；旧 key 仅执行一次迁移。
+- 用户确认前卡片和文件不发生修改；冲突提案禁止强制覆盖。
+- JSON、PNG/APNG、CHARX、校验、Token 统计和现有编辑器继续保留。
+
 ## v0.1.2 - 2026-06-08
 
 ### 新增

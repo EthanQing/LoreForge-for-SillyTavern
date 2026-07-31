@@ -22,7 +22,7 @@ describe("checkForUpdates", () => {
   it("returns an available source update when GitHub has a newer SemVer release", async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ tag_name: "v0.1.3", body: "New release", published_at: "2026-06-08T00:00:00Z" })
+      json: async () => ({ tag_name: "v0.2.1", body: "New release", published_at: "2026-06-08T00:00:00Z" })
     })) as unknown as typeof fetch;
 
     const result = await checkForUpdates({ manual: true, fetchImpl });
@@ -35,7 +35,7 @@ describe("checkForUpdates", () => {
   it("does not report an update when GitHub has the current version", async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ tag_name: "v0.1.2" })
+      json: async () => ({ tag_name: "v0.2.0" })
     })) as unknown as typeof fetch;
 
     const result = await checkForUpdates({ manual: true, fetchImpl });
