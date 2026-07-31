@@ -3816,3 +3816,404 @@ select.input {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Card Workshop surface pass
+   Keep the legacy editor panels usable inside the Agent Studio inspector. */
+.card-workshop-shell {
+  --bg: var(--workbench);
+  --panel: var(--iron);
+  --panel-solid: var(--iron);
+  --panel-strong: var(--workbench);
+  --panel-strong-solid: var(--workbench);
+  --line: var(--workshop-line);
+  --line-strong: #465156;
+  --line-focus: var(--copper);
+  --text: var(--paper);
+  --text-secondary: #b7c2bd;
+  --muted-color: #8b9993;
+  --accent: var(--copper);
+  --accent-hover: #dc9a65;
+  --accent-subtle: rgba(201, 130, 69, 0.12);
+  --accent-text: #fffaf4;
+  --accent-glow: none;
+  --gradient-accent: none;
+  --gradient-accent-subtle: none;
+  --input: #121719;
+  --input-solid: #121719;
+  --input-focus-ring: 0 0 0 2px rgba(201, 130, 69, 0.24);
+  --glass-blur: none;
+  --glass-border: 1px solid var(--workshop-line);
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--workbench);
+  color: var(--paper);
+}
+
+:root[data-theme="light"] .card-workshop-shell {
+  --workbench: #f0f3f1;
+  --iron: #fbfcfb;
+  --workshop-line: #cbd5d0;
+  --paper: #17201d;
+  --text-secondary: #4f5f58;
+  --muted-color: #6c7d74;
+  --line-strong: #aebbb4;
+  --accent-hover: #8d4f27;
+  --input: #ffffff;
+  --input-solid: #ffffff;
+  background: var(--workbench);
+}
+
+.card-workshop-shell .panel,
+.card-workshop-shell .subpanel,
+.card-workshop-shell .context-menu,
+.card-workshop-shell .agent-studio-sidebar,
+.card-workshop-shell .agent-studio-inspector {
+  border-color: var(--workshop-line);
+  border-radius: 10px;
+  background: var(--iron);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.card-workshop-shell .panel,
+.card-workshop-shell .subpanel {
+  animation: none;
+}
+
+.card-workshop-shell .panel {
+  padding: 22px 20px 28px;
+}
+
+.card-workshop-shell .subpanel {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--workbench);
+}
+
+.card-workshop-shell .button {
+  border-color: var(--workshop-line);
+  border-radius: 7px;
+  background: var(--iron);
+  color: var(--paper);
+  box-shadow: none;
+  transform: none;
+}
+
+.card-workshop-shell .button:hover {
+  border-color: var(--copper);
+  background: var(--workbench);
+  color: var(--paper);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.card-workshop-shell .button-primary {
+  border-color: var(--copper);
+  background: var(--copper);
+  color: #fffaf4;
+}
+
+.card-workshop-shell .button-primary:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: #fffaf4;
+  box-shadow: none;
+}
+
+.card-workshop-shell .button-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.card-workshop-shell .button-ghost:hover {
+  border-color: var(--workshop-line);
+  background: var(--workbench);
+}
+
+.card-workshop-shell .button:focus-visible,
+.card-workshop-shell a:focus-visible,
+.card-workshop-shell input:focus-visible,
+.card-workshop-shell select:focus-visible,
+.card-workshop-shell textarea:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: 2px;
+}
+
+.card-workshop-shell .input,
+.card-workshop-shell .textarea,
+.card-workshop-shell .cm-editor,
+.card-workshop-shell .status-line,
+.card-workshop-shell .stream-preview {
+  border-color: var(--workshop-line);
+  border-radius: 7px;
+  background: var(--workbench);
+  color: var(--paper);
+  box-shadow: none;
+}
+
+.card-workshop-shell .input:focus,
+.card-workshop-shell .textarea:focus,
+.card-workshop-shell .cm-editor.cm-focused {
+  border-color: var(--copper);
+  box-shadow: var(--input-focus-ring);
+}
+
+.card-workshop-shell .toggle-row input[type="checkbox"] {
+  accent-color: var(--copper);
+}
+
+.card-workshop-shell ::selection {
+  background: rgba(201, 130, 69, 0.24);
+  color: var(--paper);
+}
+
+.card-workshop-shell .cm-macro-token {
+  background: rgba(201, 130, 69, 0.16);
+  color: var(--copper);
+}
+
+.card-workshop-shell .chip,
+.card-workshop-shell .source-item,
+.card-workshop-shell .list-editor,
+.card-workshop-shell .lore-entry,
+.card-workshop-shell .asset-card,
+.card-workshop-shell .issue-section,
+.card-workshop-shell .token-summary-metric,
+.card-workshop-shell .token-section,
+.card-workshop-shell .agent-index-grid button,
+.card-workshop-shell .agent-suggestion-row button {
+  border-color: var(--workshop-line);
+  border-radius: 7px;
+  background: var(--iron);
+}
+
+.card-workshop-shell .list-editor:hover,
+.card-workshop-shell .lore-entry:hover,
+.card-workshop-shell .agent-index-grid button:hover {
+  border-color: var(--copper);
+}
+
+.card-workshop-shell .action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.card-workshop-shell .action-grid .button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: left;
+}
+
+.card-workshop-shell .preview-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.card-workshop-shell .profile-preview {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 16px;
+}
+
+.card-workshop-shell .profile-preview .avatar-preview {
+  grid-row: 1 / span 4;
+  width: 132px;
+  height: 132px;
+  margin: 0;
+  border: 1px solid var(--copper);
+  border-radius: 8px;
+  background: var(--workbench);
+  box-shadow: none;
+}
+
+.card-workshop-shell .profile-preview h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 22px;
+}
+
+.card-workshop-shell .profile-preview p,
+.card-workshop-shell .profile-preview .chip-list {
+  grid-column: 2;
+}
+
+.card-workshop-shell .profile-preview .chip-list {
+  align-content: start;
+}
+
+.card-workshop-shell .message-preview {
+  border-color: var(--workshop-line);
+  border-radius: 7px;
+  background: var(--iron);
+}
+
+.card-workshop-shell .message-preview::before {
+  height: 2px;
+  border-radius: 7px 7px 0 0;
+  background: var(--copper);
+}
+
+.card-workshop-shell .settings-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.card-workshop-shell .settings-layout > .subpanel {
+  min-width: 0;
+}
+
+.card-workshop-shell .settings-layout .two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.card-workshop-shell .agent-studio {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+
+.card-workshop-shell .agent-studio-sidebar {
+  min-height: 0;
+  overflow: auto;
+  border-radius: 0;
+}
+
+.card-workshop-shell .agent-studio-main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.card-workshop-shell .agent-studio-transcript {
+  min-height: 0;
+}
+
+.card-workshop-shell .agent-studio-inspector {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0;
+}
+
+.card-workshop-shell .agent-studio-inspector > .panel {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 0;
+  background: var(--iron);
+}
+
+.card-workshop-shell .agent-inspector-heading-copy {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-workshop-shell .agent-inspector-overview-button {
+  padding: 4px 7px;
+  border: 1px solid var(--workshop-line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-color);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.card-workshop-shell .agent-inspector-overview-button:hover {
+  border-color: var(--copper);
+  color: var(--paper);
+}
+
+.card-workshop-shell .agent-inspector-toggle {
+  min-height: 30px;
+  padding: 5px 9px;
+}
+
+.card-workshop-shell .agent-inspector-overview {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.card-workshop-shell .agent-inspector-resizer {
+  z-index: 2;
+  touch-action: none;
+}
+
+.card-workshop-shell .agent-inspector-backdrop {
+  display: none;
+}
+
+@media (max-width: 1099px) {
+  .card-workshop-shell .agent-studio {
+    --inspector-width: 0px !important;
+  }
+
+  .card-workshop-shell .agent-studio-inspector {
+    width: min(640px, 100vw);
+    max-width: 100vw;
+    box-shadow: -12px 0 0 rgba(15, 18, 20, 0.12);
+  }
+
+  .card-workshop-shell .agent-inspector-backdrop {
+    position: fixed;
+    z-index: 19;
+    inset: 58px 0 0;
+    display: block;
+    width: 100%;
+    border: 0;
+    background: rgba(15, 18, 20, 0.3);
+    cursor: default;
+  }
+}
+
+@media (max-width: 560px) {
+  .card-workshop-shell .agent-studio-inspector > .panel {
+    padding-inline: 14px;
+  }
+
+  .card-workshop-shell .settings-layout .two-column,
+  .card-workshop-shell .action-grid,
+  .card-workshop-shell .profile-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card-workshop-shell .profile-preview .avatar-preview {
+    grid-row: auto;
+    width: 112px;
+    height: 112px;
+  }
+
+  .card-workshop-shell .profile-preview p,
+  .card-workshop-shell .profile-preview .chip-list {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 700px) {
+  .card-workshop-shell .card-workshop-topbar-copy strong {
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-workshop-shell .card-workshop-topbar-actions .button span {
+    display: none;
+  }
+}

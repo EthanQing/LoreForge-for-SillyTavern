@@ -128,6 +128,10 @@ The main workspace scroll is owned by `.workspace-scroll`. Do not wrap tab panel
 
 The same `.workspace-scroll` element is reused across tabs. Preserve the per-tab scroll memory in `src/app/App.tsx`; otherwise scrolling a long panel such as Token Stats to the bottom will make the next panel open at that inherited offset.
 
+## Inspector-Nested Panel Overflow
+
+Legacy editor panels are also rendered inside the Agent Studio inspector. Do not reuse their full-page grid minimums there: `.settings-layout` must stack at inspector width, `.action-grid` must use `minmax(0, 1fr)`, and the inspector itself must own the scroll region. Otherwise a 560px editor desk clips base URLs, model controls, and project actions instead of allowing the panel to reflow.
+
 ## Windows Rust Toolchain
 
 On this machine, Rust verification can fail because the GNU toolchain lacks `dlltool.exe`. This is an environment limitation, not necessarily a code failure.

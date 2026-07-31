@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Check, ChevronRight, CircleStop, FileText, FolderOpen, MessageSquarePlus, PanelRight, Plus, Send, Settings2, ShieldCheck, Sparkles, SquarePen } from "lucide-react";
 import { useCardStore } from "../../app/store";
 import { useProjectActions } from "../../app/useProjectActions";
@@ -40,11 +40,13 @@ export function AgentStudio(): ReactNode {
   const [events, setEvents] = useState<AgentControllerEvent[]>([]);
   const [proposals, setProposals] = useState<CardProposal[]>([]);
   const [rightOpen, setRightOpen] = useState(true);
+  const [inspectorWidth, setInspectorWidth] = useState(560);
   const [focusedEditor, setFocusedEditor] = useState<StudioEditorTab | null>(null);
   const controllerRef = useRef<CardAgentController | null>(null);
   const inspectorRef = useRef<HTMLElement | null>(null);
   const inspectorCloseRef = useRef<HTMLButtonElement | null>(null);
   const lastFocusRef = useRef<HTMLElement | null>(null);
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
     const nextSessionId = readSessionId(workspaceId);
@@ -201,8 +203,48 @@ export function AgentStudio(): ReactNode {
     lastFocusRef.current?.focus();
   };
 
+  const reopenInspector = () => {
+    setRightOpen(true);
+    requestAnimationFrame(() => inspectorCloseRef.current?.focus());
+  };
+
+  const returnToOverview = () => {
+    setFocusedEditor(null);
+    requestAnimationFrame(() => inspectorCloseRef.current?.focus());
+  };
+
+  const handleInspectorResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth < 1100) return;
+    resizeRef.current = { startX: event.clientX, startWidth: inspectorWidth };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const handleMove = (moveEvent: PointerEvent) => {
+      const resize = resizeRef.current;
+      if (!resize) return;
+      const nextWidth = clamp(resize.startWidth + resize.startX - moveEvent.clientX, 420, 720);
+      setInspectorWidth(nextWidth);
+    };
+    const handleUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
+
+  const handleInspectorResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const amount = event.key === "ArrowLeft" ? 24 : -24;
+    setInspectorWidth((current) => clamp(current + amount, 420, 720));
+  };
+
   return (
-    <section className={rightOpen ? "agent-studio agent-studio-inspector-open" : "agent-studio"} aria-label="Agent Studio">
+    <section
+      className={rightOpen ? "agent-studio agent-studio-inspector-open" : "agent-studio"}
+      style={{ "--inspector-width": rightOpen ? `${inspectorWidth}px` : "0px" } as CSSProperties}
+      aria-label="Agent Studio"
+    >
       <aside className="agent-studio-sidebar">
         <div className="agent-studio-brand"><div className="agent-studio-mark"><Sparkles size={18} /></div><div><strong>Card Workshop</strong><span>AGENT STUDIO</span></div></div>
         <div className="agent-studio-card-summary"><span>当前卡片</span><strong>{getCardDisplayName(card, t)}</strong><small>{workspaceId.slice(0, 18)} · rev {cardRevision}</small></div>
@@ -217,7 +259,7 @@ export function AgentStudio(): ReactNode {
       </aside>
 
       <section className="agent-studio-main">
-        <header className="agent-studio-header"><div><span className="agent-studio-eyebrow">当前工作区</span><h2>{getCardDisplayName(card, t)}</h2></div><div className="agent-studio-header-status"><span className={report.valid ? "agent-status-chip" : "agent-status-chip danger"}><ShieldCheck size={14} />{report.valid ? "校验通过" : report.errors.length + " 个阻塞错误"}</span><span className="agent-status-chip">rev {cardRevision}</span><button type="button" className="agent-stop-button" onClick={() => controller.abort()} disabled={!controller.isStreaming}><CircleStop size={15} />停止</button></div></header>
+        <header className="agent-studio-header"><div><span className="agent-studio-eyebrow">当前工作区</span><h2>{getCardDisplayName(card, t)}</h2></div><div className="agent-studio-header-status"><span className={report.valid ? "agent-status-chip" : "agent-status-chip danger"}><ShieldCheck size={14} />{report.valid ? "校验通过" : report.errors.length + " 个阻塞错误"}</span><span className="agent-status-chip">rev {cardRevision}</span><button type="button" className="agent-stop-button" onClick={() => controller.abort()} disabled={!controller.isStreaming}><CircleStop size={15} />停止</button>{!rightOpen ? <Button className="agent-inspector-toggle" variant="ghost" icon={<PanelRight size={15} />} onClick={reopenInspector}>打开纲要</Button> : null}</div></header>
         <div className="agent-studio-transcript" aria-live="polite">
           {messages.length === 0 ? <div className="agent-empty-state"><div className="agent-empty-icon"><Sparkles size={24} /></div><h3>从卡片事实开始</h3><p>先读取当前卡片、校验或 Token 统计，再让 Agent 创建待审核提案。用户确认前不会修改卡片或文件。</p><div className="agent-suggestion-row">{["检查这张卡的问题", "读取提示词和开场白", "优化 Token 占用"].map((suggestion) => <button type="button" key={suggestion} onClick={() => setInput(suggestion)}>{suggestion}</button>)}</div></div> : messages.map((message, index) => <AgentMessageView key={index} message={message} />)}
           {events.filter((event) => event.type === "status").slice(-3).map((event, index) => <div className="agent-runtime-status" key={(event.message ?? "status") + "-" + index}>{event.message}</div>)}
@@ -226,10 +268,22 @@ export function AgentStudio(): ReactNode {
         <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => handleComposerKeyDown(event, submit)} placeholder="描述你想检查、整理或提出的修改… 支持 @目标范围" rows={3} /><div className="agent-composer-footer"><span><SquarePen size={14} />Agent 只读 + 提案模式</span><div className="agent-composer-actions"><Button type="button" variant="ghost" icon={<MessageSquarePlus size={14} />} disabled={!input.trim() || !controller.isStreaming} onClick={() => void queueFollowUp()}>完成后继续</Button><Button type="submit" icon={<Send size={15} />} disabled={!input.trim()}>发送</Button></div></div></form>
       </section>
 
+      {rightOpen ? <button className="agent-inspector-backdrop" type="button" aria-label="关闭编辑台" onClick={closeInspector} /> : null}
       <aside ref={inspectorRef} className="agent-studio-inspector" role={rightOpen ? "dialog" : undefined} aria-modal={rightOpen ? true : undefined} aria-label="卡片纲要与编辑台">
-        <div className="agent-inspector-heading"><span>卡片纲要</span><button ref={inspectorCloseRef} type="button" onClick={closeInspector} aria-label="关闭编辑台">×</button></div>
+        <div className="agent-inspector-heading"><div className="agent-inspector-heading-copy"><span>{focusedEditor ? getEditorLabel(focusedEditor) : "卡片纲要"}</span>{focusedEditor ? <button className="agent-inspector-overview-button" type="button" onClick={returnToOverview}>返回纲要</button> : null}</div><button ref={inspectorCloseRef} type="button" onClick={closeInspector} aria-label="关闭编辑台">×</button></div>
         {focusedEditor ? <Suspense fallback={<div className="agent-inspector-loading">正在加载编辑台…</div>}><EditorPanel tab={focusedEditor} /></Suspense> : <InspectorOverview card={card} report={report} proposals={proposals} onOpenEditor={openEditor} />}
-        <div className="agent-inspector-resizer" role="separator" aria-orientation="vertical" aria-label="调整编辑台宽度" tabIndex={0} aria-valuemin={320} aria-valuemax={720} aria-valuenow={rightOpen ? 560 : 0} />
+        <div
+          className="agent-inspector-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整编辑台宽度"
+          tabIndex={0}
+          aria-valuemin={420}
+          aria-valuemax={720}
+          aria-valuenow={rightOpen ? inspectorWidth : 0}
+          onPointerDown={handleInspectorResize}
+          onKeyDown={handleInspectorResizeKeyDown}
+        />
       </aside>
     </section>
   );
@@ -247,6 +301,21 @@ function EditorPanel({ tab }: { tab: StudioEditorTab }) {
     case "validation": return <ValidationPanel />;
     case "settings": return <SettingsPanel />;
     default: return <ImportExportPanel />;
+  }
+}
+
+function getEditorLabel(tab: StudioEditorTab): string {
+  switch (tab) {
+    case "home": return "资源与文件";
+    case "basic": return "基础信息";
+    case "prompts": return "提示词";
+    case "greetings": return "开场白";
+    case "lorebook": return "世界书";
+    case "assets": return "资源";
+    case "preview": return "预览";
+    case "tokenStats": return "Token 统计";
+    case "validation": return "校验";
+    case "settings": return "设置";
   }
 }
 
@@ -291,6 +360,10 @@ function saveSessionId(workspaceId: string, sessionId: string): void {
 
 function createSessionId(): string {
   return globalThis.crypto?.randomUUID?.() ?? "agent-session-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 async function persistAgentEvent(workspaceId: string, sessionId: string, event: AgentControllerEvent): Promise<void> {

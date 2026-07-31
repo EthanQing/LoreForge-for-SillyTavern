@@ -48,6 +48,8 @@ The following are inspector entry points, not separate Guide/Edit AI modes:
 
 Panel modules live under `src/features/*`. Reusable UI components live under `src/components/*`.
 
+The inspector owns its own scroll region and is treated as a 560px editing desk by default. Its separator is a keyboard and pointer resize handle clamped to 420–720px. At 1100px and below the inspector becomes a focus-managed overlay with a dismissible backdrop; settings groups stack vertically, preview content uses a single readable column, and project actions collapse from two columns to one on narrow windows. The Agent Studio surface uses the Workbench/Iron/Line/Paper/Copper/Sage tokens and does not rely on gradients, glass blur, or heavy shadows.
+
 Global project/file actions that need to be reused outside the import/export panel live in `src/app/useProjectActions.ts`. Prefer this hook for open, new-card, save, export, copy, validation refresh, and context-menu actions instead of duplicating import/export logic in UI components.
 
 ## State Model
