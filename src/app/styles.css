@@ -3550,6 +3550,16 @@ select.input {
   font-size: 12px;
 }
 
+.card-workshop-shell .agent-runtime-status.is-success {
+  color: var(--sage);
+}
+
+.card-workshop-shell .agent-runtime-status.is-error,
+.card-workshop-shell .agent-runtime-status.is-aborted,
+.card-workshop-shell .agent-runtime-status.is-warning {
+  color: var(--copper);
+}
+
 .agent-composer {
   margin: 0 32px 24px;
   border: 1px solid var(--workshop-line);
@@ -4377,6 +4387,31 @@ select.input {
 
 .card-workshop-shell .agent-message-placeholder {
   color: var(--muted-color);
+}
+
+.card-workshop-shell .agent-message-outcome {
+  display: grid;
+  gap: 4px;
+  border-left: 2px solid var(--copper);
+  color: var(--paper);
+}
+
+.card-workshop-shell .agent-message-outcome span {
+  color: var(--muted-color);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.card-workshop-shell .agent-message-outcome.is-aborted {
+  border-left-color: var(--muted-color);
+}
+
+.card-workshop-shell .agent-message-outcome.is-incomplete {
+  border-left-color: var(--copper);
+}
+
+.card-workshop-shell .agent-message-outcome ~ .agent-message-placeholder {
+  display: none;
 }
 
 .card-workshop-shell .agent-message-caret {

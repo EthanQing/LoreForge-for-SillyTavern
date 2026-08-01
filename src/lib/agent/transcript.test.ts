@@ -39,6 +39,22 @@ describe("buildAgentTranscript", () => {
   });
 });
 
+describe("assistant failure state", () => {
+  it("keeps provider failure metadata visible in the turn", () => {
+    const turns = buildAgentTranscript([
+      { role: "user", content: "regenerate" },
+      { role: "assistant", content: [], stopReason: "error", errorMessage: "SSE connection failed" }
+    ]);
+
+    expect(turns[0]).toMatchObject({
+      assistantPresent: true,
+      assistantStatus: "error",
+      assistantError: "SSE connection failed",
+      streaming: false
+    });
+  });
+});
+
 describe("formatAgentToolContent", () => {
   it("pretty prints JSON tool results", () => {
     expect(formatAgentToolContent([{ type: "text", text: '[{"name":"card"}]' }])).toBe('[\n  {\n    "name": "card"\n  }\n]');

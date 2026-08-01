@@ -11,12 +11,14 @@ import type { CardProposal } from "./contracts";
 import type { AiConnectionProfile } from "./contracts";
 import type { CardAgentSnapshot } from "./tools";
 import { invoke } from "@tauri-apps/api/core";
+import { getAgentRunOutcome, getAgentRunStatusMessage } from "./runStatus";
 
 export interface AgentControllerEvent {
   type: AgentEvent["type"] | "status" | "proposal";
   event?: AgentEvent;
   message?: string;
   proposal?: CardProposal;
+  statusTone?: "info" | "success" | "warning" | "error" | "aborted";
 }
 
 export interface CardAgentControllerOptions {
@@ -138,6 +140,7 @@ export class CardAgentController {
       return;
     }
     await this.agent.prompt(message);
+    this.assertRunSucceeded();
   }
 
   async continueAfterRun(message: string): Promise<void> {
@@ -157,7 +160,8 @@ export class CardAgentController {
     await this.abortAndWait();
     await beforeReplace?.();
     this.agent.state.messages = [...baseMessages];
-    await this.agent.prompt(createUserMessage(message));
+    await this.agent.prompt(message);
+    this.assertRunSucceeded();
   }
 
   async abortAndWait(): Promise<void> {
@@ -259,7 +263,12 @@ export class CardAgentController {
     this.unsubscribe = agent.subscribe(async (event) => {
       this.emit({ type: event.type, event });
       if (event.type === "agent_end") {
-        this.emit({ type: "status", message: "Agent 运行完成。" });
+        const outcome = getAgentRunOutcome(event.messages);
+        this.emit({
+          type: "status",
+          message: getAgentRunStatusMessage(outcome),
+          statusTone: outcome.status === "failed" ? "error" : outcome.status === "aborted" ? "aborted" : outcome.status === "incomplete" ? "warning" : "success"
+        });
       }
     });
     this.emit({ type: "status", message: "Agent Studio 已就绪。" });
@@ -267,6 +276,17 @@ export class CardAgentController {
 
   private emit(event: AgentControllerEvent): void {
     this.options.onEvent?.(event);
+  }
+
+  private assertRunSucceeded(): void {
+    if (!this.agent) {
+      throw new Error("Agent runtime is unavailable.");
+    }
+    const outcome = getAgentRunOutcome(this.agent.state.messages, this.agent.state.errorMessage);
+    if (outcome.status === "completed") {
+      return;
+    }
+    throw new Error(outcome.message ?? getAgentRunStatusMessage(outcome));
   }
 }
 
@@ -315,7 +335,7 @@ function createTauriFetch(profile: AiConnectionProfile): typeof globalThis.fetch
 }
 
 function createUserMessage(content: string): AgentMessage {
-  return { role: "user", content, timestamp: Date.now() };
+  return { role: "user", content: [{ type: "text", text: content }], timestamp: Date.now() };
 }
 
 function buildSystemPrompt(profile: AiConnectionProfile): string {

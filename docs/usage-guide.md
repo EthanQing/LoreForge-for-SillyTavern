@@ -9,6 +9,8 @@
     pnpm install
     pnpm tauri dev
 
+如果重新生成或编辑重发没有得到新回复，请查看最后一个 Agent 气泡和运行状态。现在失败、中断和成功会分别显示；错误信息可用于检查凭据、模型地址、SSE 流或网络连接。失败/中断的消息可以再次点击“重新生成”。
+
 只调试前端时运行 pnpm dev。Windows PowerShell 若拦截 pnpm.ps1，可使用 pnpm.cmd。
 
 ## Agent Studio 布局

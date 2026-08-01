@@ -473,7 +473,7 @@ export function AgentStudio(): ReactNode {
             onResend={() => void replaceConversation("resending", editedUserText)}
             onRegenerate={() => void replaceConversation("regenerating")}
           />)}
-          {events.filter((event) => event.type === "status").slice(-3).map((event, index) => <div className="agent-runtime-status" key={(event.message ?? "status") + "-" + index}>{event.message}</div>)}
+          {events.filter((event) => event.type === "status").slice(-3).map((event, index) => <div className={`agent-runtime-status${event.statusTone ? ` is-${event.statusTone}` : ""}`} role={event.statusTone === "error" ? "alert" : "status"} key={(event.message ?? "status") + "-" + index}>{event.message}</div>)}
           {proposals.filter((proposal) => proposal.state === "pending" || proposal.state === "conflicted").map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} disabled={actionBusy} onApply={() => void applyProposal(proposal)} onDiscard={() => discardProposal(proposal)} />)}
         </div>
         <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => handleComposerKeyDown(event, submit)} placeholder="描述你想检查、整理或提出的修改… 支持 @目标范围" rows={3} disabled={editingLastUser || conversationOperation !== "idle"} /><div className="agent-composer-footer"><span><SquarePen size={14} />Agent 只读 + 提案模式</span><div className="agent-composer-actions"><Button type="button" variant="ghost" icon={<MessageSquarePlus size={14} />} disabled={!input.trim() || !controller.isStreaming || editingLastUser || conversationOperation !== "idle"} onClick={() => void queueFollowUp()}>完成后继续</Button><Button type="submit" icon={<Send size={15} />} disabled={!input.trim() || editingLastUser || conversationOperation !== "idle"}>发送</Button></div></div></form>
@@ -607,6 +607,7 @@ function AgentTranscriptTurnView({
     </div> : null}
     {hasAssistantContent ? <article className="agent-message agent-message-assistant" aria-busy={turn.streaming}>
       <span className="agent-message-role">Agent</span>
+      {turn.assistantStatus ? <div className={`agent-message-content agent-message-outcome is-${turn.assistantStatus}`} role="alert"><strong>{turn.assistantStatus === "aborted" ? "本轮生成已中断" : turn.assistantStatus === "incomplete" ? "本轮生成未完成" : "本轮生成失败"}</strong>{turn.assistantError ? <span>{turn.assistantError}</span> : <span>{turn.assistantStatus === "aborted" ? "可以重新生成本轮 Agent 消息。" : "未收到有效的 Agent 回复，可以重新生成。"}</span>}</div> : null}
       {turn.assistantText ? <><MarkdownMessage className="agent-message-content" text={turn.assistantText} />{turn.streaming ? <span className="agent-message-caret" aria-label="正在生成">▍</span> : null}</> : <div className="agent-message-content agent-message-placeholder">正在读取卡片信息…</div>}
       {turn.tools.length > 0 ? <AgentToolTrace tools={turn.tools} /> : null}
       {isLatestAssistant && !editingUser ? <div className="agent-message-actions agent-message-actions-agent"><button type="button" className="agent-message-action-button" onClick={onRegenerate} disabled={actionBusy} aria-busy={operation === "regenerating"}>

@@ -26,6 +26,8 @@
     pnpm install
     pnpm tauri dev
 
+重生成或编辑重发失败时，消息气泡会显示具体的模型、网络或中断原因；只有 `stopReason` 正常结束时才显示“Agent 运行完成”。失败或中断的最后一条 Agent 消息仍可再次点击“重新生成”。
+
 仅启动前端开发服务器：
 
     pnpm dev

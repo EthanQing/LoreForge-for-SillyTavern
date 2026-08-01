@@ -8,6 +8,8 @@ export interface AgentTranscriptTurn {
   userText: string;
   assistantText: string;
   assistantPresent: boolean;
+  assistantStatus?: "error" | "aborted" | "incomplete";
+  assistantError?: string;
   tools: AgentTranscriptTool[];
   streaming: boolean;
 }
@@ -17,6 +19,8 @@ interface AgentMessageRecord {
   content?: unknown;
   toolName?: string;
   isError?: boolean;
+  stopReason?: string;
+  errorMessage?: string;
 }
 
 export function buildAgentTranscript(messages: unknown[], streamingMessage?: unknown): AgentTranscriptTurn[] {
@@ -52,6 +56,7 @@ export function buildAgentTranscript(messages: unknown[], streamingMessage?: unk
       const turn = ensureTurn();
       turn.assistantPresent = true;
       appendAssistantText(turn, readAgentMessageContent(message.content));
+      setAssistantStatus(turn, message);
       continue;
     }
 
@@ -109,6 +114,23 @@ function appendAssistantText(turn: AgentTranscriptTurn, text: string): void {
   const normalized = text.trim();
   if (!normalized) return;
   turn.assistantText = turn.assistantText ? `${turn.assistantText}\n\n${normalized}` : normalized;
+}
+
+function setAssistantStatus(turn: AgentTranscriptTurn, message: AgentMessageRecord): void {
+  if (message.stopReason === "aborted") {
+    turn.assistantStatus = "aborted";
+    turn.assistantError = message.errorMessage;
+    return;
+  }
+  if (message.stopReason === "length") {
+    turn.assistantStatus = "incomplete";
+    turn.assistantError = "Agent 输出达到长度限制，内容可能不完整。";
+    return;
+  }
+  if (message.stopReason === "error" || message.errorMessage) {
+    turn.assistantStatus = "error";
+    turn.assistantError = message.errorMessage;
+  }
 }
 
 function toAgentMessageRecord(message: unknown): AgentMessageRecord | undefined {
