@@ -12,6 +12,10 @@ Do not put a real API key in AI settings, SQLite entries, event payloads, logs, 
 
 Keep a request handle per `requestId` and replace the header-request handle with a body-stream handle after response metadata arrives. Cancelling only the initial request leaves an SSE body alive and can continue emitting chunks.
 
+## Agent Session Tool Results
+
+`tool_execution_end` is execution metadata, not a second tool-result message. When hydrating Agent history, use the persisted `message_end` tool result as the canonical entry and only synthesize a fallback when no result message was persisted. The fallback must include the original `toolCallId`; otherwise OpenAI-compatible APIs reject the next request with a missing `tool_call_id` error.
+
 ## Unknown Field Preservation
 
 Both TypeScript schemas and Rust models are intended to preserve unknown CCv3 fields where possible. Avoid replacing card objects with narrow reconstructed objects unless you deliberately carry through existing fields.

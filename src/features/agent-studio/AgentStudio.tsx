@@ -11,6 +11,7 @@ import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts"
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
 import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser } from "../../lib/agent/conversationActions";
 import { getProposalStateLabel, getProposalSummary, isReviewableProposal } from "../../lib/agent/proposalPresentation";
+import { hydrateAgentMessages, type PersistedAgentEntry } from "../../lib/agent/sessionMessages";
 import { buildAgentTranscript, formatAgentToolContent, readAgentMessageContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
 import type { CharacterCardV3 } from "../../lib/schema";
 import { useI18n } from "../../lib/i18n";
@@ -777,36 +778,10 @@ async function persistWorkspace(workspaceId: string, currentPath: string | null,
   }
 }
 
-async function hydrateAgentSession(sessionId: string): Promise<unknown[]> {
+async function hydrateAgentSession(sessionId: string): Promise<AgentMessage[]> {
   try {
-    const entries = await invoke<Array<{ payload?: unknown }>>("list_agent_entries", { sessionId });
-    const inFlight = new Map<string, string>();
-    const messages: unknown[] = [];
-    entries.forEach((entry) => {
-      const payload = entry.payload;
-      if (!payload || typeof payload !== "object") return;
-      const type = "type" in payload ? (payload as { type?: string }).type : undefined;
-      if (type === "agent_conversation_branch") {
-        const branch = payload as { baseMessages?: unknown[] };
-        messages.splice(0, messages.length, ...(branch.baseMessages ?? []));
-        inFlight.clear();
-        return;
-      }
-      if (type === "tool_execution_start") {
-        const tool = payload as { toolCallId?: string; toolName?: string };
-        if (tool.toolCallId) inFlight.set(tool.toolCallId, tool.toolName ?? "tool");
-        return;
-      }
-      if (type === "tool_execution_end") {
-        const tool = payload as { toolCallId?: string; toolName?: string; result?: unknown; isError?: boolean };
-        if (tool.toolCallId) inFlight.delete(tool.toolCallId);
-        messages.push({ role: "toolResult", toolName: tool.toolName, isError: tool.isError, content: JSON.stringify(tool.result ?? null) });
-        return;
-      }
-      if ("message" in payload) messages.push((payload as { message: unknown }).message);
-    });
-    inFlight.forEach((toolName) => messages.push({ role: "toolResult", toolName, isError: true, content: "上次运行在工具返回前中断。" }));
-    return messages.filter(Boolean);
+    const entries = await invoke<PersistedAgentEntry[]>("list_agent_entries", { sessionId });
+    return hydrateAgentMessages(entries);
   } catch {
     return [];
   }
