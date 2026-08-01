@@ -40,6 +40,7 @@ pub fn run() {
             ai_history::delete_ai_chat_session,
             ai_history::clear_ai_chat_sessions,
             ai_history::list_agent_sessions,
+            ai_history::list_agent_session_history,
             ai_history::list_agent_entries,
             ai_history::save_agent_session,
             ai_history::append_agent_entry,

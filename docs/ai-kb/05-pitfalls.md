@@ -118,6 +118,10 @@ PI can emit multiple assistant messages around sequential tool calls during one 
 
 Agent text is Markdown and must not be inserted with `dangerouslySetInnerHTML`. Keep the renderer React-based, render raw HTML as text, and validate link protocols before creating anchors. The app shell must also be allowed to shrink below the old 960px legacy minimum; otherwise narrow-window screenshots and element bounds include an invisible page-wide overflow area. Message bubbles should use a content-sized width with a capped `max-width`, while tables and code blocks handle their own bounded overflow.
 
+## Workspace-Grouped Agent History
+
+`list_agent_sessions` is intentionally scoped to one workspace and cannot populate the left history for users who switch between cards. Use the cross-workspace `list_agent_session_history` query and group by `workspaceId` in the UI. Keep the five-session limit and expanded state inside each group; a single global expanded boolean makes one card's older records appear under another card. When restoring a session from another card, require its persisted path and reopen the card before changing the active session.
+
 ## AI Request Cancellation
 
 The chat drawer stop control is a soft cancel. It should increment the local request token, clear `busy`, and ignore stale stream/result callbacks, because Tauri `invoke` calls cannot currently be aborted from the frontend wrapper. Do not let stale responses mutate messages after the user has stopped a generation or started a newer request.

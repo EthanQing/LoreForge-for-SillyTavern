@@ -28,6 +28,8 @@ AI settings keep apiKey only as a transient migration/input field. store.ts stri
 
 Each card has workspaceId and monotonically increasing cardRevision. Agent sessions and proposals are persisted in Rust SQLite tables card_workspaces, workspace_paths, agent_sessions, agent_entries, and agent_proposals. Completed messages are appended on message_end, including assistant tool calls and tool results.
 
+The left history uses `list_agent_session_history` to load sessions across workspaces, then groups them by card workspace. `AgentSessionHistory` shows the five newest sessions in each group by default; older sessions are revealed by a toggle stored under that workspace ID, so expanding one card never expands another. A session from another card can be selected only when its persisted workspace path can be reopened.
+
 The old sessions/messages tables are retained for idempotent migration. Rows without a workspace are legacy_read_only archives. Copying a legacy archive into a card creates a new session; old pending previews cannot be applied directly.
 
 ## Field-level actions

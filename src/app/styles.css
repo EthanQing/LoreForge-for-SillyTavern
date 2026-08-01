@@ -4504,3 +4504,153 @@ select.input {
     display: none;
   }
 }
+
+.card-workshop-shell .agent-session-history {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0 -4px;
+}
+
+.card-workshop-shell .agent-session-group {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding-top: 9px;
+  border-top: 1px solid var(--workshop-line);
+}
+
+.card-workshop-shell .agent-session-group-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 0 4px;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.card-workshop-shell .agent-session-group-title {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.card-workshop-shell .agent-session-group-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-workshop-shell .agent-session-group-title small,
+.card-workshop-shell .agent-session-current-label {
+  color: var(--muted-color);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.card-workshop-shell .agent-session-current-label {
+  flex: none;
+  color: var(--sage);
+}
+
+.card-workshop-shell .agent-session-list {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.card-workshop-shell .agent-session-history-item {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+  text-align: left;
+}
+
+.card-workshop-shell .agent-session-history-item:hover,
+.card-workshop-shell .agent-session-history-item.active {
+  border-color: var(--workshop-line);
+  background: var(--workbench);
+}
+
+.card-workshop-shell .agent-session-history-item:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.card-workshop-shell .agent-session-history-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.card-workshop-shell .agent-session-history-copy strong,
+.card-workshop-shell .agent-session-history-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-workshop-shell .agent-session-history-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.card-workshop-shell .agent-session-history-copy small {
+  color: var(--muted-color);
+  font-size: 10px;
+}
+
+.card-workshop-shell .agent-session-history-marker {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--copper);
+}
+
+.card-workshop-shell .agent-session-history-toggle {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-color);
+  cursor: pointer;
+  font-size: 10px;
+  text-align: left;
+}
+
+.card-workshop-shell .agent-session-history-toggle:hover {
+  color: var(--paper);
+}
+
+.card-workshop-shell .agent-session-history-item:focus-visible,
+.card-workshop-shell .agent-session-history-toggle:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1279px) {
+  .card-workshop-shell .agent-session-history {
+    display: none;
+  }
+}

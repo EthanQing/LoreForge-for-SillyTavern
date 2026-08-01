@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -57,6 +57,12 @@ pub struct AgentSessionRecord {
     pub updated_at: i64,
     #[serde(default)]
     pub summary: Option<String>,
+    #[serde(default)]
+    pub card_name: Option<String>,
+    #[serde(default)]
+    pub current_path: Option<String>,
+    #[serde(default)]
+    pub entry_count: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -87,6 +93,8 @@ pub struct AgentProposalRecord {
 #[serde(rename_all = "camelCase")]
 pub struct CardWorkspaceRecord {
     pub id: String,
+    #[serde(default)]
+    pub card_name: Option<String>,
     pub current_path: Option<String>,
     pub card_revision: i64,
     pub created_at: i64,
@@ -101,14 +109,15 @@ pub fn save_card_workspace(app: AppHandle, workspace: CardWorkspaceRecord) -> Re
     }
     conn.execute(
         r#"
-        INSERT INTO card_workspaces (id, current_path, card_revision, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5)
+        INSERT INTO card_workspaces (id, card_name, current_path, card_revision, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         ON CONFLICT(id) DO UPDATE SET
+          card_name = excluded.card_name,
           current_path = excluded.current_path,
           card_revision = excluded.card_revision,
           updated_at = excluded.updated_at
         "#,
-        params![workspace.id, workspace.current_path, workspace.card_revision.max(0), workspace.created_at, workspace.updated_at],
+        params![workspace.id, workspace.card_name, workspace.current_path, workspace.card_revision.max(0), workspace.created_at, workspace.updated_at],
     )
     .map_err(|error| error.to_string())?;
     if let Some(path) = workspace.current_path.as_deref().filter(|path| !path.trim().is_empty()) {
@@ -126,17 +135,18 @@ pub fn workspace_for_path(app: AppHandle, normalized_path: String) -> Result<Opt
     let conn = open_connection(&app)?;
     let mut statement = conn
         .prepare(
-            "SELECT w.id, w.current_path, w.card_revision, w.created_at, w.updated_at FROM card_workspaces w INNER JOIN workspace_paths p ON p.workspace_id = w.id WHERE p.normalized_path = ?1 ORDER BY w.updated_at DESC LIMIT 1",
+            "SELECT w.id, w.card_name, w.current_path, w.card_revision, w.created_at, w.updated_at FROM card_workspaces w INNER JOIN workspace_paths p ON p.workspace_id = w.id WHERE p.normalized_path = ?1 ORDER BY w.updated_at DESC LIMIT 1",
         )
         .map_err(|error| error.to_string())?;
     let mut rows = statement.query(params![normalized_path]).map_err(|error| error.to_string())?;
     if let Some(row) = rows.next().map_err(|error| error.to_string())? {
         return Ok(Some(CardWorkspaceRecord {
             id: row.get(0).map_err(|error| error.to_string())?,
-            current_path: row.get(1).map_err(|error| error.to_string())?,
-            card_revision: row.get(2).map_err(|error| error.to_string())?,
-            created_at: row.get(3).map_err(|error| error.to_string())?,
-            updated_at: row.get(4).map_err(|error| error.to_string())?,
+            card_name: row.get(1).map_err(|error| error.to_string())?,
+            current_path: row.get(2).map_err(|error| error.to_string())?,
+            card_revision: row.get(3).map_err(|error| error.to_string())?,
+            created_at: row.get(4).map_err(|error| error.to_string())?,
+            updated_at: row.get(5).map_err(|error| error.to_string())?,
         }));
     }
     Ok(None)
@@ -147,22 +157,41 @@ pub fn list_agent_sessions(app: AppHandle, workspace_id: String) -> Result<Vec<A
     let conn = open_connection(&app)?;
     let mut statement = conn
         .prepare(
-            "SELECT id, workspace_id, title, created_at, updated_at, summary FROM agent_sessions WHERE workspace_id = ?1 ORDER BY updated_at DESC LIMIT 80",
+            "SELECT s.id, s.workspace_id, s.title, s.created_at, s.updated_at, s.summary, w.card_name, w.current_path, (SELECT COUNT(*) FROM agent_entries e WHERE e.session_id = s.id) FROM agent_sessions s LEFT JOIN card_workspaces w ON w.id = s.workspace_id WHERE s.workspace_id = ?1 ORDER BY s.updated_at DESC LIMIT 80",
         )
         .map_err(|error| error.to_string())?;
     let rows = statement
-        .query_map(params![workspace_id], |row| {
-            Ok(AgentSessionRecord {
-                id: row.get(0)?,
-                workspace_id: row.get(1)?,
-                title: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                summary: row.get(5)?,
-            })
-        })
+        .query_map(params![workspace_id], map_agent_session_row)
         .map_err(|error| error.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn list_agent_session_history(app: AppHandle) -> Result<Vec<AgentSessionRecord>, String> {
+    let conn = open_connection(&app)?;
+    let mut statement = conn
+        .prepare(
+            "SELECT s.id, s.workspace_id, s.title, s.created_at, s.updated_at, s.summary, w.card_name, w.current_path, (SELECT COUNT(*) FROM agent_entries e WHERE e.session_id = s.id) FROM agent_sessions s LEFT JOIN card_workspaces w ON w.id = s.workspace_id ORDER BY s.updated_at DESC",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], map_agent_session_row)
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+}
+
+fn map_agent_session_row(row: &Row<'_>) -> rusqlite::Result<AgentSessionRecord> {
+    Ok(AgentSessionRecord {
+        id: row.get(0)?,
+        workspace_id: row.get(1)?,
+        title: row.get(2)?,
+        created_at: row.get(3)?,
+        updated_at: row.get(4)?,
+        summary: row.get(5)?,
+        card_name: row.get(6)?,
+        current_path: row.get(7)?,
+        entry_count: row.get(8)?,
+    })
 }
 
 #[tauri::command]
@@ -202,7 +231,7 @@ pub fn save_agent_session(app: AppHandle, session: AgentSessionRecord) -> Result
           workspace_id = excluded.workspace_id,
           title = excluded.title,
           updated_at = excluded.updated_at,
-          summary = excluded.summary
+          summary = COALESCE(excluded.summary, agent_sessions.summary)
         "#,
         params![session.id, session.workspace_id, session.title, session.created_at, session.updated_at, session.summary],
     )
@@ -528,6 +557,7 @@ fn init_db(conn: &Connection) -> Result<(), String> {
 
         CREATE TABLE IF NOT EXISTS card_workspaces (
           id TEXT PRIMARY KEY,
+          card_name TEXT,
           current_path TEXT,
           card_revision INTEGER NOT NULL DEFAULT 0,
           created_at INTEGER NOT NULL,
@@ -583,8 +613,25 @@ fn init_db(conn: &Connection) -> Result<(), String> {
         "#,
     )
     .map_err(|error| error.to_string())?;
+    ensure_workspace_columns(conn)?;
     ensure_session_mode_column(conn)?;
     ensure_legacy_columns(conn)
+}
+
+fn ensure_workspace_columns(conn: &Connection) -> Result<(), String> {
+    let mut statement = conn
+        .prepare("PRAGMA table_info(card_workspaces)")
+        .map_err(|error| error.to_string())?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    if !columns.iter().any(|column| column == "card_name") {
+        conn.execute("ALTER TABLE card_workspaces ADD COLUMN card_name TEXT", [])
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 fn ensure_legacy_columns(conn: &Connection) -> Result<(), String> {
@@ -621,7 +668,7 @@ fn ensure_agent_session_row(conn: &Connection, session_id: &str, workspace_id: &
         return;
     }
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO agent_sessions (id, workspace_id, title, created_at, updated_at) VALUES (?1, ?2, 'Card Agent session', ?3, ?3)",
+        "INSERT OR IGNORE INTO agent_sessions (id, workspace_id, title, created_at, updated_at) VALUES (?1, ?2, '卡片 Agent 会话', ?3, ?3)",
         params![session_id, workspace_id, positive_or(timestamp, now_millis())],
     );
 }

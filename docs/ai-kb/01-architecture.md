@@ -29,6 +29,7 @@ Agent traffic uses `src/lib/agent/tauriFetch.ts`; the WebView never connects to 
 - Topbar with active card name, active file/draft/new-card identity, dirty/saved status, and validation summary.
 - Topbar global save entry; `Ctrl/Cmd+S` is bound to the same save action.
 - Agent Studio owns the left workspace/session navigation, middle conversation, and right inspector/editor; editor panels are lazy-loaded from the inspector.
+- `src/features/agent-studio/AgentSessionHistory.tsx` renders the left message history from the cross-workspace `list_agent_session_history` query. Records are grouped by `workspaceId`, each card group shows five newest sessions by default, and its own workspace-keyed toggle reveals older records without affecting another card group. Selecting a session on another card reopens its persisted path before switching to that session.
 - Agent Studio is the mounted production shell; the former global `AiChatDrawer` is not mounted.
 - Global custom context menu via `src/components/ContextMenu.tsx`.
 - Context-sensitive right-click targets register local actions through `src/lib/contextMenuTargets.ts`; use this for component-owned actions such as field AI previews and lorebook entry open/move/delete instead of duplicating local state in the global menu.

@@ -9,9 +9,11 @@ import { buildCardTokenStats } from "../../lib/tokenStats";
 import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts";
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
 import { getProposalStateLabel, getProposalSummary, isReviewableProposal } from "../../lib/agent/proposalPresentation";
-import { buildAgentTranscript, formatAgentToolContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
+import { buildAgentTranscript, formatAgentToolContent, readAgentMessageContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
 import { useI18n } from "../../lib/i18n";
 import { invoke } from "@tauri-apps/api/core";
+import { AgentSessionHistory } from "./AgentSessionHistory";
+import type { AgentSessionHistoryRecord } from "../../lib/agent/sessionHistory";
 
 const BasicInfoPanel = lazy(() => import("../card-editor/BasicInfoPanel").then((module) => ({ default: module.BasicInfoPanel })));
 const PromptPanel = lazy(() => import("../card-editor/PromptPanel").then((module) => ({ default: module.PromptPanel })));
@@ -36,13 +38,15 @@ export function AgentStudio(): ReactNode {
   const aiSettings = useCardStore((state) => state.aiSettings);
   const setStatus = useCardStore((state) => state.setStatus);
   const applyAgentCard = useCardStore((state) => state.applyAgentCard);
-  const { saveCardSnapshot } = useProjectActions();
+  const { openCard, saveCardSnapshot } = useProjectActions();
+  const cardName = getCardDisplayName(card, t);
   const [sessionId, setSessionId] = useState(() => readSessionId(workspaceId));
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<unknown[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<unknown>();
   const [events, setEvents] = useState<AgentControllerEvent[]>([]);
   const [proposals, setProposals] = useState<CardProposal[]>([]);
+  const [sessionHistory, setSessionHistory] = useState<AgentSessionHistoryRecord[]>([]);
   const [rightOpen, setRightOpen] = useState(true);
   const [inspectorWidth, setInspectorWidth] = useState(560);
   const [focusedEditor, setFocusedEditor] = useState<StudioEditorTab | null>(null);
@@ -57,6 +61,7 @@ export function AgentStudio(): ReactNode {
     setSessionId(nextSessionId);
     setMessages([]);
     setStreamingMessage(undefined);
+    setEvents([]);
     setProposals([]);
     controllerRef.current?.dispose();
     controllerRef.current = null;
@@ -76,8 +81,16 @@ export function AgentStudio(): ReactNode {
   }, [sessionId, workspaceId]);
 
   useEffect(() => {
-    void persistWorkspace(workspaceId, currentPath, cardRevision);
-  }, [cardRevision, currentPath, workspaceId]);
+    let active = true;
+    void hydrateAgentSessionHistory().then((stored) => {
+      if (active) setSessionHistory(stored);
+    });
+    return () => { active = false; };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    void persistWorkspace(workspaceId, currentPath, cardRevision, cardName);
+  }, [cardName, cardRevision, currentPath, workspaceId]);
 
   const controller = useMemo(() => {
     const next = new CardAgentController({
@@ -106,7 +119,7 @@ export function AgentStudio(): ReactNode {
         setEvents((current) => [...current.slice(-80), event]);
         setMessages([...next.messages]);
         setStreamingMessage(next.streamingMessage);
-        void persistAgentEvent(workspaceId, sessionId, event);
+        void persistAgentEvent(workspaceId, sessionId, event).then(() => hydrateAgentSessionHistory()).then(setSessionHistory);
       },
       onProposal: (proposal) => {
         setProposals((current) => [...current.filter((item) => item.id !== proposal.id), proposal]);
@@ -197,6 +210,27 @@ export function AgentStudio(): ReactNode {
     void persistAgentProposal(discardedProposal);
   }, []);
 
+  const selectSession = useCallback(async (record: AgentSessionHistoryRecord) => {
+    if (record.workspaceId === workspaceId) {
+      saveSessionId(workspaceId, record.id);
+      if (record.id === sessionId) return;
+      controllerRef.current?.dispose();
+      controllerRef.current = null;
+      setSessionId(record.id);
+      setMessages([]);
+      setStreamingMessage(undefined);
+      setEvents([]);
+      setProposals([]);
+      return;
+    }
+    if (!record.currentPath) {
+      setStatus("该角色卡没有可重新打开的文件路径，无法切换会话。");
+      return;
+    }
+    saveSessionId(record.workspaceId, record.id);
+    await openCard(record.currentPath);
+  }, [openCard, sessionId, setStatus, workspaceId]);
+
   const openEditor = (tab: StudioEditorTab) => {
     lastFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setFocusedEditor(tab);
@@ -256,9 +290,13 @@ export function AgentStudio(): ReactNode {
     >
       <aside className="agent-studio-sidebar">
         <div className="agent-studio-brand"><div className="agent-studio-mark"><Sparkles size={18} /></div><div><strong>Card Workshop</strong><span>AGENT STUDIO</span></div></div>
-        <div className="agent-studio-card-summary"><span>当前卡片</span><strong>{getCardDisplayName(card, t)}</strong><small>{workspaceId.slice(0, 18)} · rev {cardRevision}</small></div>
-        <button className="agent-studio-session active" type="button"><MessageSquarePlus size={15} /><span>卡片 Agent 会话</span><ChevronRight size={14} /></button>
-        <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); }}>新建会话</Button>
+        <div className="agent-studio-card-summary"><span>当前卡片</span><strong>{cardName}</strong><small>{workspaceId.slice(0, 18)} · rev {cardRevision}</small></div>
+        <AgentSessionHistory
+          records={sessionHistory}
+          current={{ workspaceId, sessionId, cardName, currentPath }}
+          onSelectSession={selectSession}
+        />
+        <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); setEvents([]); setProposals([]); }}>新建会话</Button>
         <div className="agent-studio-archive"><span className="agent-studio-section-label">只读档案</span><button type="button" className="agent-studio-archive-item" onClick={() => setStatus("旧 Guide/Edit 历史以未绑定只读档案展示。")}><FileText size={14} />旧版历史</button></div>
         <nav className="agent-studio-nav" aria-label="卡片编辑入口">
           <button type="button" onClick={() => openEditor("home")}><FolderOpen size={15} />资源与文件</button>
@@ -401,10 +439,10 @@ async function persistAgentEvent(workspaceId: string, sessionId: string, event: 
       session: {
         id: sessionId,
         workspaceId,
-        title: "Card Agent session",
+        title: "卡片 Agent 会话",
         createdAt: now,
         updatedAt: now,
-        summary: message && "content" in message && typeof message.content === "string" ? message.content.slice(0, 240) : null
+        summary: message && "content" in message ? readAgentMessageContent(message.content).slice(0, 240) || null : null
       }
     });
     await invoke("append_agent_entry", {
@@ -441,12 +479,13 @@ async function persistAgentProposal(proposal: CardProposal): Promise<void> {
   }
 }
 
-async function persistWorkspace(workspaceId: string, currentPath: string | null, cardRevision: number): Promise<void> {
+async function persistWorkspace(workspaceId: string, currentPath: string | null, cardRevision: number, cardName: string): Promise<void> {
   const now = Date.now();
   try {
     await invoke("save_card_workspace", {
       workspace: {
         id: workspaceId,
+        cardName,
         currentPath,
         cardRevision,
         createdAt: now,
@@ -491,6 +530,14 @@ async function hydrateAgentProposals(workspaceId: string): Promise<CardProposal[
   try {
     const records = await invoke<Array<{ payload?: unknown }>>("list_agent_proposals", { workspaceId });
     return records.map((record) => record.payload).filter((payload): payload is CardProposal => Boolean(payload && typeof payload === "object" && "id" in payload && "workspaceId" in payload));
+  } catch {
+    return [];
+  }
+}
+
+async function hydrateAgentSessionHistory(): Promise<AgentSessionHistoryRecord[]> {
+  try {
+    return await invoke<AgentSessionHistoryRecord[]>("list_agent_session_history");
   } catch {
     return [];
   }
