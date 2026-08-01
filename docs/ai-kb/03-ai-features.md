@@ -4,7 +4,7 @@
 
 The production path is src/lib/agent/controller.ts plus src/lib/agent/tools.ts. It dynamically loads Pi Agent Core 0.83.0 and Pi AI 0.83.0, uses a stable Agent, sequential tool execution, steering/follow-up queues, abort, context compaction, and a custom Tauri fetch implementation.
 
-`CardAgentController.streamingMessage` exposes PI's current partial assistant message. Agent Studio combines it with completed messages through `src/lib/agent/transcript.ts`, so a tool loop remains one visible Agent turn and updates in place as SSE deltas arrive. Tool result JSON is formatted only when its result control is opened.
+`CardAgentController.streamingMessage` exposes PI's current partial assistant message. Agent Studio combines it with completed messages through `src/lib/agent/transcript.ts`, so a tool loop remains one visible Agent turn and updates in place as SSE deltas arrive. User and assistant text is rendered by `src/components/MarkdownMessage.tsx` with React nodes rather than raw HTML; headings, lists, tables, quotes, code blocks, links, and common inline emphasis are supported while unsafe link schemes remain plain text. Tool result JSON is formatted only when its result control is opened.
 
 The five built-in tools are inspect_card, inspect_lorebook_entry, inspect_validation, inspect_token_usage, and propose_card_changes. Inspection tools return normalized, image-free card data. The proposal tool checks cardRevision, hard allowed paths, patch types, guards, and frontend validation; it never writes Zustand, files, or card content.
 

@@ -114,6 +114,8 @@ Do not force the AI chat drawer to the bottom for every streamed delta. Respect 
 
 PI can emit multiple assistant messages around sequential tool calls during one user request. Render the request as one transcript turn and keep tool results inside a collapsed trace; mapping every raw `AgentMessage` directly to a card makes one reply look fragmented. The Agent Studio transcript must use `min-width: 0`, constrain message children to `max-width: 100%`, allow long JSON/path values to wrap, and keep horizontal overflow disabled. Do not stringify large tool results while the trace is closed; format them only after the user opens the result.
 
+Agent text is Markdown and must not be inserted with `dangerouslySetInnerHTML`. Keep the renderer React-based, render raw HTML as text, and validate link protocols before creating anchors. The app shell must also be allowed to shrink below the old 960px legacy minimum; otherwise narrow-window screenshots and element bounds include an invisible page-wide overflow area. Message bubbles should use a content-sized width with a capped `max-width`, while tables and code blocks handle their own bounded overflow.
+
 ## AI Request Cancellation
 
 The chat drawer stop control is a soft cancel. It should increment the local request token, clear `busy`, and ignore stale stream/result callbacks, because Tauri `invoke` calls cannot currently be aborted from the frontend wrapper. Do not let stale responses mutate messages after the user has stopped a generation or started a newer request.

@@ -4,6 +4,7 @@ import { useCardStore } from "../../app/store";
 import { useProjectActions } from "../../app/useProjectActions";
 import { getCardDisplayName } from "../../app/cardIdentity";
 import { Button } from "../../components/Button";
+import { MarkdownMessage } from "../../components/MarkdownMessage";
 import { buildCardTokenStats } from "../../lib/tokenStats";
 import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts";
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
@@ -338,10 +339,10 @@ function ProposalCard({ proposal, onApply, onDiscard }: { proposal: CardProposal
 function AgentTranscriptTurnView({ turn }: { turn: AgentTranscriptTurn }) {
   const hasAssistantContent = Boolean(turn.assistantText || turn.tools.length > 0 || turn.streaming);
   return <div className="agent-transcript-turn">
-    {turn.userText ? <div className="agent-message agent-message-user"><span className="agent-message-role">你</span><div className="agent-message-content">{turn.userText}</div></div> : null}
+    {turn.userText ? <div className="agent-message agent-message-user"><span className="agent-message-role">你</span><MarkdownMessage className="agent-message-content" text={turn.userText} /></div> : null}
     {hasAssistantContent ? <article className="agent-message agent-message-assistant" aria-busy={turn.streaming}>
       <span className="agent-message-role">Agent</span>
-      {turn.assistantText ? <div className="agent-message-content">{turn.assistantText}{turn.streaming ? <span className="agent-message-caret" aria-label="正在生成">▍</span> : null}</div> : <div className="agent-message-content agent-message-placeholder">正在读取卡片信息…</div>}
+      {turn.assistantText ? <><MarkdownMessage className="agent-message-content" text={turn.assistantText} />{turn.streaming ? <span className="agent-message-caret" aria-label="正在生成">▍</span> : null}</> : <div className="agent-message-content agent-message-placeholder">正在读取卡片信息…</div>}
       {turn.tools.length > 0 ? <AgentToolTrace tools={turn.tools} /> : null}
     </article> : null}
   </div>;

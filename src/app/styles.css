@@ -180,11 +180,11 @@ body,
 #root {
   width: 100%;
   height: 100%;
+  min-width: 0;
 }
 
 body {
   margin: 0;
-  min-width: 960px;
   min-height: 100%;
   overflow: hidden;
   background: var(--bg);
@@ -3214,6 +3214,10 @@ select.input {
 
 .card-workshop-shell {
   display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   min-height: 100vh;
   background: var(--workbench);
   color: var(--paper);
@@ -3849,6 +3853,10 @@ select.input {
   --shadow-xl: none;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   min-height: 100dvh;
   background: var(--workbench);
   color: var(--paper);
@@ -4079,6 +4087,8 @@ select.input {
 
 .card-workshop-shell .agent-studio {
   flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
   min-width: 0;
   height: auto;
@@ -4125,6 +4135,8 @@ select.input {
 
 .card-workshop-shell .agent-message {
   box-sizing: border-box;
+  width: fit-content;
+  max-width: min(820px, 100%);
   overflow: hidden;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -4135,6 +4147,150 @@ select.input {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.card-workshop-shell .markdown-message {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.card-workshop-shell .markdown-message > :first-child {
+  margin-top: 0;
+}
+
+.card-workshop-shell .markdown-message > :last-child {
+  margin-bottom: 0;
+}
+
+.card-workshop-shell .markdown-message p,
+.card-workshop-shell .markdown-message h1,
+.card-workshop-shell .markdown-message h2,
+.card-workshop-shell .markdown-message h3,
+.card-workshop-shell .markdown-message h4,
+.card-workshop-shell .markdown-message h5,
+.card-workshop-shell .markdown-message h6 {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.card-workshop-shell .markdown-message p {
+  margin: 0.65em 0;
+}
+
+.card-workshop-shell .markdown-message h1,
+.card-workshop-shell .markdown-message h2,
+.card-workshop-shell .markdown-message h3,
+.card-workshop-shell .markdown-message h4,
+.card-workshop-shell .markdown-message h5,
+.card-workshop-shell .markdown-message h6 {
+  line-height: 1.3;
+}
+
+.card-workshop-shell .markdown-message h1 { font-size: 1.45em; }
+.card-workshop-shell .markdown-message h2 { font-size: 1.3em; }
+.card-workshop-shell .markdown-message h3 { font-size: 1.16em; }
+.card-workshop-shell .markdown-message h4,
+.card-workshop-shell .markdown-message h5,
+.card-workshop-shell .markdown-message h6 { font-size: 1em; }
+
+.card-workshop-shell .markdown-message ul,
+.card-workshop-shell .markdown-message ol {
+  max-width: 100%;
+  margin: 0.65em 0;
+  padding-left: 1.45em;
+}
+
+.card-workshop-shell .markdown-message li + li {
+  margin-top: 0.25em;
+}
+
+.card-workshop-shell .markdown-message blockquote {
+  max-width: 100%;
+  margin: 0.75em 0;
+  padding: 0.45em 0.85em;
+  border-left: 2px solid var(--sage);
+  background: var(--workbench);
+  color: var(--text-secondary);
+}
+
+.card-workshop-shell .markdown-message blockquote p {
+  margin: 0.35em 0;
+}
+
+.card-workshop-shell .markdown-message hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--workshop-line);
+}
+
+.card-workshop-shell .markdown-message a {
+  overflow-wrap: anywhere;
+  color: var(--copper);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.card-workshop-shell .markdown-message > code,
+.card-workshop-shell .markdown-message :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--workshop-line);
+  border-radius: 4px;
+  background: var(--workbench);
+  font: 0.9em ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.card-workshop-shell .markdown-table-wrap {
+  max-width: 100%;
+  margin: 0.8em 0;
+  overflow-x: auto;
+}
+
+.card-workshop-shell .markdown-message table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.card-workshop-shell .markdown-message th,
+.card-workshop-shell .markdown-message td {
+  min-width: 0;
+  padding: 0.45em 0.6em;
+  border: 1px solid var(--workshop-line);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+.card-workshop-shell .markdown-message th {
+  background: var(--workbench);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.card-workshop-shell .markdown-table-cell-left { text-align: left; }
+.card-workshop-shell .markdown-table-cell-center { text-align: center; }
+.card-workshop-shell .markdown-table-cell-right { text-align: right; }
+
+.card-workshop-shell .markdown-code-block {
+  max-width: 100%;
+  margin: 0.8em 0;
+  padding: 0.75em;
+  border: 1px solid var(--workshop-line);
+  border-radius: 6px;
+  background: var(--workbench);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.card-workshop-shell .markdown-code-block code {
+  font: 0.86em/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .card-workshop-shell .agent-message-placeholder {
