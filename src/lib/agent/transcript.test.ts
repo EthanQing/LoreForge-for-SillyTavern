@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { buildAgentTranscript, formatAgentToolContent } from "./transcript";
+
+describe("buildAgentTranscript", () => {
+  it("combines assistant messages and tool results into one turn", () => {
+    const turns = buildAgentTranscript([
+      { role: "user", content: "检查这张卡" },
+      { role: "assistant", content: [{ type: "text", text: "我先读取卡片。" }] },
+      { role: "toolResult", toolName: "inspect_card", content: [{ type: "text", text: '{"name":""}' }] },
+      { role: "assistant", content: [{ type: "text", text: "卡片目前为空。" }] }
+    ]);
+
+    expect(turns).toEqual([{
+      userText: "检查这张卡",
+      assistantText: "我先读取卡片。\n\n卡片目前为空。",
+      tools: [{ toolName: "inspect_card", isError: false, content: '{"name":""}' }],
+      streaming: false
+    }]);
+  });
+
+  it("adds a partial assistant message to the current turn", () => {
+    const turns = buildAgentTranscript(
+      [{ role: "user", content: "继续" }, { role: "assistant", content: "前半句" }],
+      { role: "assistant", content: [{ type: "text", text: "后半句" }] }
+    );
+
+    expect(turns[0]).toMatchObject({
+      assistantText: "前半句\n\n后半句",
+      streaming: true
+    });
+  });
+});
+
+describe("formatAgentToolContent", () => {
+  it("pretty prints JSON tool results", () => {
+    expect(formatAgentToolContent([{ type: "text", text: '[{"name":"card"}]' }])).toBe('[\n  {\n    "name": "card"\n  }\n]');
+  });
+
+  it("leaves ordinary text unchanged", () => {
+    expect(formatAgentToolContent([{ type: "text", text: "工具执行失败" }])).toBe("工具执行失败");
+  });
+});

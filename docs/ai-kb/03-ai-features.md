@@ -4,6 +4,8 @@
 
 The production path is src/lib/agent/controller.ts plus src/lib/agent/tools.ts. It dynamically loads Pi Agent Core 0.83.0 and Pi AI 0.83.0, uses a stable Agent, sequential tool execution, steering/follow-up queues, abort, context compaction, and a custom Tauri fetch implementation.
 
+`CardAgentController.streamingMessage` exposes PI's current partial assistant message. Agent Studio combines it with completed messages through `src/lib/agent/transcript.ts`, so a tool loop remains one visible Agent turn and updates in place as SSE deltas arrive. Tool result JSON is formatted only when its result control is opened.
+
 The five built-in tools are inspect_card, inspect_lorebook_entry, inspect_validation, inspect_token_usage, and propose_card_changes. Inspection tools return normalized, image-free card data. The proposal tool checks cardRevision, hard allowed paths, patch types, guards, and frontend validation; it never writes Zustand, files, or card content.
 
 contracts.ts defines AiConnectionProfile, CardProposal, proposal states, deterministic hashes, diffs, and conflict-safe apply. Unrelated edits can merge. A changed affected path marks a proposal conflicted and never force-overwrites the current card.

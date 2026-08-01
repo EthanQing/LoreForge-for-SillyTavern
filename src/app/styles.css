@@ -4080,6 +4080,7 @@ select.input {
 .card-workshop-shell .agent-studio {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   height: auto;
   overflow: hidden;
 }
@@ -4092,11 +4093,141 @@ select.input {
 
 .card-workshop-shell .agent-studio-main {
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
 .card-workshop-shell .agent-studio-transcript {
+  width: 100%;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.card-workshop-shell .agent-transcript-turn,
+.card-workshop-shell .agent-message,
+.card-workshop-shell .agent-message-content,
+.card-workshop-shell .agent-tool-trace,
+.card-workshop-shell .agent-tool-trace-list,
+.card-workshop-shell .agent-tool-result {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.card-workshop-shell .agent-transcript-turn {
+  display: grid;
+  width: 100%;
+  gap: 14px;
+}
+
+.card-workshop-shell .agent-message {
+  box-sizing: border-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.card-workshop-shell .agent-message-content {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.card-workshop-shell .agent-message-placeholder {
+  color: var(--muted-color);
+}
+
+.card-workshop-shell .agent-message-caret {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--copper);
+  animation: agent-message-caret 900ms steps(1, end) infinite;
+}
+
+.card-workshop-shell .agent-tool-trace {
+  margin-top: 12px;
+  border-top: 1px solid var(--workshop-line);
+}
+
+.card-workshop-shell .agent-tool-trace summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0 3px;
+  color: var(--muted-color);
+  cursor: pointer;
+  font-size: 11px;
+  list-style-position: inside;
+}
+
+.card-workshop-shell .agent-tool-trace summary span:last-child {
+  color: var(--sage);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.card-workshop-shell .agent-tool-trace-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.card-workshop-shell .agent-tool-result {
+  padding: 8px 10px;
+  border-left: 2px solid var(--sage);
+  background: var(--workbench);
+}
+
+.card-workshop-shell .agent-tool-result.is-error {
+  border-left-color: var(--danger);
+}
+
+.card-workshop-shell .agent-tool-result-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--sage);
+  font: 600 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.card-workshop-shell .agent-tool-result.is-error .agent-tool-result-heading {
+  color: var(--danger);
+}
+
+.card-workshop-shell .agent-tool-result pre {
+  max-width: 100%;
+  margin: 7px 0 0;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.card-workshop-shell .agent-tool-result-toggle {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted-color);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.card-workshop-shell .agent-tool-result-toggle:hover {
+  color: var(--paper);
+}
+
+@keyframes agent-message-caret {
+  50% {
+    opacity: 0;
+  }
 }
 
 .card-workshop-shell .agent-studio-inspector {

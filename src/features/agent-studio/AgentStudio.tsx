@@ -7,6 +7,7 @@ import { Button } from "../../components/Button";
 import { buildCardTokenStats } from "../../lib/tokenStats";
 import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts";
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
+import { buildAgentTranscript, formatAgentToolContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
 import { useI18n } from "../../lib/i18n";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -37,6 +38,7 @@ export function AgentStudio(): ReactNode {
   const [sessionId, setSessionId] = useState(() => readSessionId(workspaceId));
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<unknown[]>([]);
+  const [streamingMessage, setStreamingMessage] = useState<unknown>();
   const [events, setEvents] = useState<AgentControllerEvent[]>([]);
   const [proposals, setProposals] = useState<CardProposal[]>([]);
   const [rightOpen, setRightOpen] = useState(true);
@@ -52,6 +54,7 @@ export function AgentStudio(): ReactNode {
     const nextSessionId = readSessionId(workspaceId);
     setSessionId(nextSessionId);
     setMessages([]);
+    setStreamingMessage(undefined);
     setProposals([]);
     controllerRef.current?.dispose();
     controllerRef.current = null;
@@ -99,7 +102,8 @@ export function AgentStudio(): ReactNode {
       }),
       onEvent: (event) => {
         setEvents((current) => [...current.slice(-80), event]);
-        setMessages(next.messages);
+        setMessages([...next.messages]);
+        setStreamingMessage(next.streamingMessage);
         void persistAgentEvent(workspaceId, sessionId, event);
       },
       onProposal: (proposal) => {
@@ -147,7 +151,8 @@ export function AgentStudio(): ReactNode {
     setEvents((current) => [...current, { type: "status", message: "正在运行 Agent…" }]);
     try {
       await controller.send(message);
-      setMessages(controller.messages);
+      setMessages([...controller.messages]);
+      setStreamingMessage(controller.streamingMessage);
       saveSessionId(workspaceId, sessionId);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -239,6 +244,8 @@ export function AgentStudio(): ReactNode {
     setInspectorWidth((current) => clamp(current + amount, 420, 720));
   };
 
+  const transcript = buildAgentTranscript(messages, streamingMessage);
+
   return (
     <section
       className={rightOpen ? "agent-studio agent-studio-inspector-open" : "agent-studio"}
@@ -249,7 +256,7 @@ export function AgentStudio(): ReactNode {
         <div className="agent-studio-brand"><div className="agent-studio-mark"><Sparkles size={18} /></div><div><strong>Card Workshop</strong><span>AGENT STUDIO</span></div></div>
         <div className="agent-studio-card-summary"><span>当前卡片</span><strong>{getCardDisplayName(card, t)}</strong><small>{workspaceId.slice(0, 18)} · rev {cardRevision}</small></div>
         <button className="agent-studio-session active" type="button"><MessageSquarePlus size={15} /><span>卡片 Agent 会话</span><ChevronRight size={14} /></button>
-        <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); }}>新建会话</Button>
+        <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); }}>新建会话</Button>
         <div className="agent-studio-archive"><span className="agent-studio-section-label">只读档案</span><button type="button" className="agent-studio-archive-item" onClick={() => setStatus("旧 Guide/Edit 历史以未绑定只读档案展示。")}><FileText size={14} />旧版历史</button></div>
         <nav className="agent-studio-nav" aria-label="卡片编辑入口">
           <button type="button" onClick={() => openEditor("home")}><FolderOpen size={15} />资源与文件</button>
@@ -261,7 +268,7 @@ export function AgentStudio(): ReactNode {
       <section className="agent-studio-main">
         <header className="agent-studio-header"><div><span className="agent-studio-eyebrow">当前工作区</span><h2>{getCardDisplayName(card, t)}</h2></div><div className="agent-studio-header-status"><span className={report.valid ? "agent-status-chip" : "agent-status-chip danger"}><ShieldCheck size={14} />{report.valid ? "校验通过" : report.errors.length + " 个阻塞错误"}</span><span className="agent-status-chip">rev {cardRevision}</span><button type="button" className="agent-stop-button" onClick={() => controller.abort()} disabled={!controller.isStreaming}><CircleStop size={15} />停止</button>{!rightOpen ? <Button className="agent-inspector-toggle" variant="ghost" icon={<PanelRight size={15} />} onClick={reopenInspector}>打开纲要</Button> : null}</div></header>
         <div className="agent-studio-transcript" aria-live="polite">
-          {messages.length === 0 ? <div className="agent-empty-state"><div className="agent-empty-icon"><Sparkles size={24} /></div><h3>从卡片事实开始</h3><p>先读取当前卡片、校验或 Token 统计，再让 Agent 创建待审核提案。用户确认前不会修改卡片或文件。</p><div className="agent-suggestion-row">{["检查这张卡的问题", "读取提示词和开场白", "优化 Token 占用"].map((suggestion) => <button type="button" key={suggestion} onClick={() => setInput(suggestion)}>{suggestion}</button>)}</div></div> : messages.map((message, index) => <AgentMessageView key={index} message={message} />)}
+          {transcript.length === 0 ? <div className="agent-empty-state"><div className="agent-empty-icon"><Sparkles size={24} /></div><h3>从卡片事实开始</h3><p>先读取当前卡片、校验或 Token 统计，再让 Agent 创建待审核提案。用户确认前不会修改卡片或文件。</p><div className="agent-suggestion-row">{["检查这张卡的问题", "读取提示词和开场白", "优化 Token 占用"].map((suggestion) => <button type="button" key={suggestion} onClick={() => setInput(suggestion)}>{suggestion}</button>)}</div></div> : transcript.map((turn, index) => <AgentTranscriptTurnView key={`${turn.userText}-${index}`} turn={turn} />)}
           {events.filter((event) => event.type === "status").slice(-3).map((event, index) => <div className="agent-runtime-status" key={(event.message ?? "status") + "-" + index}>{event.message}</div>)}
           {proposals.filter((proposal) => proposal.state === "pending" || proposal.state === "conflicted").map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onApply={() => void applyProposal(proposal)} onDiscard={() => discardProposal(proposal)} />)}
         </div>
@@ -328,18 +335,34 @@ function ProposalCard({ proposal, onApply, onDiscard }: { proposal: CardProposal
   return <article className={proposal.state === "conflicted" ? "agent-proposal-card conflicted" : "agent-proposal-card"}><div className="agent-proposal-heading"><span>{proposal.state === "conflicted" ? "冲突提案" : "待审核提案"}</span><code>{proposal.id.slice(-8)}</code></div><strong>{proposal.summary}</strong><div className="agent-proposal-diffs">{proposal.diffs.slice(0, 4).map((diff) => <div key={diff.path}><code>{diff.path}</code><span>{diff.after}</span></div>)}</div>{proposal.state === "conflicted" ? <p className="agent-danger">当前字段已被修改，请重新读取卡片后生成提案。</p> : null}<div className="agent-proposal-actions"><Button variant="ghost" onClick={onDiscard}>丢弃</Button>{proposal.state === "pending" ? <Button icon={<Check size={14} />} onClick={onApply}>确认应用</Button> : null}</div></article>;
 }
 
-function AgentMessageView({ message }: { message: unknown }) {
-  if (!message || typeof message !== "object") return null;
-  const item = message as { role?: string; content?: unknown; toolName?: string; isError?: boolean };
-  const content = readMessageContent(item.content);
-  if (!content && item.role !== "toolResult") return null;
-  return <div className={"agent-message agent-message-" + (item.role ?? "unknown")}><span className="agent-message-role">{item.role === "user" ? "你" : item.role === "toolResult" ? "工具 " + (item.toolName ?? "") : "Agent"}</span><div>{content || (item.isError ? "工具执行失败。" : "工具已返回结果。")}</div></div>;
+function AgentTranscriptTurnView({ turn }: { turn: AgentTranscriptTurn }) {
+  const hasAssistantContent = Boolean(turn.assistantText || turn.tools.length > 0 || turn.streaming);
+  return <div className="agent-transcript-turn">
+    {turn.userText ? <div className="agent-message agent-message-user"><span className="agent-message-role">你</span><div className="agent-message-content">{turn.userText}</div></div> : null}
+    {hasAssistantContent ? <article className="agent-message agent-message-assistant" aria-busy={turn.streaming}>
+      <span className="agent-message-role">Agent</span>
+      {turn.assistantText ? <div className="agent-message-content">{turn.assistantText}{turn.streaming ? <span className="agent-message-caret" aria-label="正在生成">▍</span> : null}</div> : <div className="agent-message-content agent-message-placeholder">正在读取卡片信息…</div>}
+      {turn.tools.length > 0 ? <AgentToolTrace tools={turn.tools} /> : null}
+    </article> : null}
+  </div>;
 }
 
-function readMessageContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.map((item) => typeof item === "object" && item && "text" in item ? String((item as { text: unknown }).text) : "").filter(Boolean).join("\n");
+function AgentToolTrace({ tools }: { tools: AgentTranscriptTool[] }) {
+  return <details className="agent-tool-trace">
+    <summary><span>工具轨迹</span><span>{tools.length} 次调用</span></summary>
+    <div className="agent-tool-trace-list">
+      {tools.map((tool, index) => <AgentToolResultView key={`${tool.toolName}-${index}`} tool={tool} />)}
+    </div>
+  </details>;
+}
+
+function AgentToolResultView({ tool }: { tool: AgentTranscriptTool }) {
+  const [open, setOpen] = useState(false);
+  return <div className={tool.isError ? "agent-tool-result is-error" : "agent-tool-result"}>
+    <div className="agent-tool-result-heading"><span>{tool.toolName}</span><span>{tool.isError ? "失败" : "已完成"}</span></div>
+    {open && tool.content ? <pre>{formatAgentToolContent(tool.content)}</pre> : <span className="agent-muted">{tool.isError ? "工具执行失败。" : "工具已返回结果。"}</span>}
+    <button className="agent-tool-result-toggle" type="button" onClick={() => setOpen((current) => !current)} aria-expanded={open}>{open ? "收起结果" : "查看结果"}</button>
+  </div>;
 }
 
 function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, submit: () => void) {

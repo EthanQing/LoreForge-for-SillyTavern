@@ -110,6 +110,10 @@ Do not render a persistent `@` target guide in the AI chat composer. World book 
 
 Do not force the AI chat drawer to the bottom for every streamed delta. Respect manual upward scrolling by auto-following only while the message list is already near the bottom; otherwise expanded reasoning panels and earlier messages become impossible to inspect or collapse during streaming.
 
+## Agent Transcript Grouping And Overflow
+
+PI can emit multiple assistant messages around sequential tool calls during one user request. Render the request as one transcript turn and keep tool results inside a collapsed trace; mapping every raw `AgentMessage` directly to a card makes one reply look fragmented. The Agent Studio transcript must use `min-width: 0`, constrain message children to `max-width: 100%`, allow long JSON/path values to wrap, and keep horizontal overflow disabled. Do not stringify large tool results while the trace is closed; format them only after the user opens the result.
+
 ## AI Request Cancellation
 
 The chat drawer stop control is a soft cancel. It should increment the local request token, clear `busy`, and ignore stale stream/result callbacks, because Tauri `invoke` calls cannot currently be aborted from the frontend wrapper. Do not let stale responses mutate messages after the user has stopped a generation or started a newer request.

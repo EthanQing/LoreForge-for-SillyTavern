@@ -41,6 +41,7 @@ interface AgentLike {
     model: Model<any>;
     tools: AgentTool[];
     messages: AgentMessage[];
+    streamingMessage?: AgentMessage;
     isStreaming: boolean;
     errorMessage?: string;
   };
@@ -101,6 +102,10 @@ export class CardAgentController {
 
   get messages(): AgentMessage[] {
     return this.agent?.state.messages ?? [];
+  }
+
+  get streamingMessage(): AgentMessage | undefined {
+    return this.agent?.state.streamingMessage;
   }
 
   async start(): Promise<void> {
