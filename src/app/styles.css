@@ -3526,7 +3526,7 @@ select.input {
 }
 
 .agent-message-user {
-  align-self: flex-end;
+  justify-self: end;
   border-left: 0;
   border-right: 2px solid var(--copper);
   text-align: right;
@@ -4131,6 +4131,7 @@ select.input {
   display: grid;
   width: 100%;
   gap: 14px;
+  justify-items: start;
 }
 
 .card-workshop-shell .agent-message {
@@ -4140,6 +4141,10 @@ select.input {
   overflow: hidden;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.card-workshop-shell .agent-message-user {
+  justify-self: end;
 }
 
 .card-workshop-shell .agent-message-content {

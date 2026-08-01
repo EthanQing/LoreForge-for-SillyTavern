@@ -118,6 +118,8 @@ PI can emit multiple assistant messages around sequential tool calls during one 
 
 Agent text is Markdown and must not be inserted with `dangerouslySetInnerHTML`. Keep the renderer React-based, render raw HTML as text, and validate link protocols before creating anchors. The app shell must also be allowed to shrink below the old 960px legacy minimum; otherwise narrow-window screenshots and element bounds include an invisible page-wide overflow area. Message bubbles should use a content-sized width with a capped `max-width`, while tables and code blocks handle their own bounded overflow.
 
+The transcript turns use CSS Grid. Do not use Flexbox's `align-self: flex-end` to position the user bubble; in Grid that controls the block axis and leaves the bubble on the left. Set the turn's inline alignment explicitly and use `justify-self: end` for the user bubble so wide windows retain the left-Agent/right-user conversation rhythm.
+
 ## Workspace-Grouped Agent History
 
 `list_agent_sessions` is intentionally scoped to one workspace and cannot populate the left history for users who switch between cards. Use the cross-workspace `list_agent_session_history` query and group by `workspaceId` in the UI. Keep the five-session limit and expanded state inside each group; a single global expanded boolean makes one card's older records appear under another card. When restoring a session from another card, require its persisted path and reopen the card before changing the active session.
