@@ -84,6 +84,8 @@ The production prompt is tool-oriented rather than raw-JSON-response-oriented. T
 
 The model must read the current card before proposing changes, include the observed `cardRevision`, and stay within the user’s `@` scope. The UI rechecks scope and revision; a user confirmation is required before the existing card store or save flow is called. The model must not access files, arbitrary tools, credentials, or network endpoints.
 
+The Agent Studio UI uses Simplified Chinese by default. User-facing responses and `propose_card_changes.summary` should be concise Chinese unless the user requests another language; JSON paths, field names, code, and identifiers remain unchanged.
+
 The previous Guide/Edit JSON response contract remains readable for legacy history migration only. It is not used by the Agent Studio production path.
 
 ## CCv3 Mapping

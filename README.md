@@ -10,6 +10,7 @@
 - CCv3 字段编辑、世界书、资源、预览、校验、Token 统计与导入导出继续保留。
 - 支持 JSON、PNG/APNG 和 CHARX，保留未知字段并沿用现有保存流程。
 - Pi Agent Core 0.83.0 通过内置卡片工具读取卡片；修改只能以 AiPatch 提案形式产生，应用前执行 revision、路径和校验冲突检查。
+- 右侧“待审核修改”只显示等待确认或存在冲突的提案；状态使用中文，用户确认后才会写入卡片。
 - DeepSeek 与 OpenAI-compatible Chat Completions；模型网络由 Rust HTTP/SSE 代理处理，API key 只写入系统凭据库。
 - 每张卡片拥有独立 workspace 和会话；旧 Guide/Edit 历史作为未绑定只读档案保留。
 - Agent Studio 使用 Workbench / Iron / Copper / Sage 视觉令牌；右侧编辑台默认 560px，可拖拽或用方向键调整，窄窗口会切换为带遮罩和焦点管理的覆盖层。

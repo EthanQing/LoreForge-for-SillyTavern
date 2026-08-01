@@ -76,6 +76,8 @@ The Greetings panel has field-level AI targets such as `/alternateGreetings/0`. 
 
 An Agent proposal marked `applied` means the guarded patch was applied to the current editor state; it is not proof that an external card file was saved. Persist `saveState` separately (`saved`, `draft-only`, or `failed`) and keep the card dirty after a save failure. For recovery, re-inject stored patches against the current card instead of copying an old after snapshot over newer edits.
 
+Do not mix `applied` or `discarded` proposals into the active `待审核修改` inspector section. Only `pending` and `conflicted` proposals need user action there; localize state labels such as `待确认`, `存在冲突`, `已应用`, and `已丢弃`. Model-generated summaries are untrusted presentation text, so request the app locale in the Agent system prompt while preserving the original summary content.
+
 ## AI History Rendering Cost
 
 AI agent previews can contain large normalized card JSON and world book payloads. Do not eagerly `JSON.stringify` every preview in the chat history; render/stringify preview JSON only when its details panel is opened, and keep old applied/discarded previews collapsed by default. After saving a chat session, update the visible session summary locally instead of immediately re-querying the entire history list.

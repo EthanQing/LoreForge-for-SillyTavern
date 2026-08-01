@@ -8,6 +8,8 @@ The production path is src/lib/agent/controller.ts plus src/lib/agent/tools.ts. 
 
 The five built-in tools are inspect_card, inspect_lorebook_entry, inspect_validation, inspect_token_usage, and propose_card_changes. Inspection tools return normalized, image-free card data. The proposal tool checks cardRevision, hard allowed paths, patch types, guards, and frontend validation; it never writes Zustand, files, or card content.
 
+The right inspector's `待审核修改` section contains only `pending` and `conflicted` proposals. Applied and discarded proposals are not active review items and are not shown there. Proposal state labels are localized in the UI, and the Agent system prompt asks for Chinese user-facing summaries unless the user requests another language.
+
 contracts.ts defines AiConnectionProfile, CardProposal, proposal states, deterministic hashes, diffs, and conflict-safe apply. Unrelated edits can merge. A changed affected path marks a proposal conflicted and never force-overwrites the current card.
 
 The default Agent boundary includes only normalized card roots. Field-level Agent actions pass a single target path as an additional hard boundary. The Agent receives no file, shell, or arbitrary network tools.
