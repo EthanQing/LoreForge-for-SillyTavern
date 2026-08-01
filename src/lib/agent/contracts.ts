@@ -47,6 +47,7 @@ export interface CardProposal {
   validationReport: ValidationReport;
   state: ProposalState;
   saveState: "not-needed" | "saved" | "draft-only" | "failed";
+  rollbackCard?: CharacterCardV3;
   createdAt: number;
   updatedAt: number;
 }

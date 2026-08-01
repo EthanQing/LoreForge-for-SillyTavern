@@ -48,6 +48,8 @@ Windows PowerShell 如果拦截 pnpm.ps1，可使用 pnpm.cmd。
 
 停止会调用 Agent abort 并取消 Rust 网络流；运行期间再次发送会进入 steering，完成后继续可使用 follow-up。
 
+最后一条 Agent 消息下方提供“重新生成”；最后一条用户消息可编辑后“重新发送”。两项操作都会截断当前显示分支并重新运行，已应用的本轮提案会先用应用前快照回退，原始消息仍以追加式历史保留。
+
 ## 检查命令
 
     pnpm test

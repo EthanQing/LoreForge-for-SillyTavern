@@ -7,6 +7,7 @@ export interface AgentTranscriptTool {
 export interface AgentTranscriptTurn {
   userText: string;
   assistantText: string;
+  assistantPresent: boolean;
   tools: AgentTranscriptTool[];
   streaming: boolean;
 }
@@ -24,7 +25,7 @@ export function buildAgentTranscript(messages: unknown[], streamingMessage?: unk
 
   const ensureTurn = (): AgentTranscriptTurn => {
     if (!current) {
-      current = { userText: "", assistantText: "", tools: [], streaming: false };
+      current = { userText: "", assistantText: "", assistantPresent: false, tools: [], streaming: false };
     }
     return current;
   };
@@ -43,12 +44,14 @@ export function buildAgentTranscript(messages: unknown[], streamingMessage?: unk
 
     if (message.role === "user") {
       flushTurn();
-      current = { userText: readAgentMessageContent(message.content), assistantText: "", tools: [], streaming: false };
+      current = { userText: readAgentMessageContent(message.content), assistantText: "", assistantPresent: false, tools: [], streaming: false };
       continue;
     }
 
     if (message.role === "assistant") {
-      appendAssistantText(ensureTurn(), readAgentMessageContent(message.content));
+      const turn = ensureTurn();
+      turn.assistantPresent = true;
+      appendAssistantText(turn, readAgentMessageContent(message.content));
       continue;
     }
 
@@ -64,11 +67,10 @@ export function buildAgentTranscript(messages: unknown[], streamingMessage?: unk
   const streaming = toAgentMessageRecord(streamingMessage);
   if (streaming?.role === "assistant") {
     const text = readAgentMessageContent(streaming.content);
-    if (text) {
-      const turn = ensureTurn();
-      appendAssistantText(turn, text);
-      turn.streaming = true;
-    }
+    const turn = ensureTurn();
+    turn.assistantPresent = true;
+    appendAssistantText(turn, text);
+    turn.streaming = true;
   }
 
   flushTurn();

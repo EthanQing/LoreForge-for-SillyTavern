@@ -48,6 +48,8 @@
 
 停止按钮会调用 Agent abort 并取消 Rust 网络请求。生成期间再次发送会 steering 当前轮次；完成后继续使用 follow-up。Ctrl/Cmd+Enter 发送消息。
 
+最后一条、且后面没有新用户消息的 Agent 气泡底部有“重新生成”。中断、未完成或本轮提案尚未应用时会直接重新运行；如果本轮提案已经应用，系统先恢复应用前的卡片快照，再开始新生成。最后一条用户气泡可点“编辑”，修改后只保留“重新发送”操作；发送会移除该消息之后的当前分支并用新文本生成 Agent 回复。操作期间发送、提案应用和另一种消息操作会互相锁定，历史记录仍追加保存以便恢复。
+
 ## AI 设置与凭据
 
 设置中支持 DeepSeek 和 OpenAI-compatible Chat Completions。填写 base URL、模型、上下文窗口、最大输出、温度和超时；工具调用探针会记录 supported、unsupported 或 unknown。

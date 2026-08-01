@@ -199,7 +199,7 @@ pub fn list_agent_entries(app: AppHandle, session_id: String) -> Result<Vec<Agen
     let conn = open_connection(&app)?;
     let mut statement = conn
         .prepare(
-            "SELECT e.id, s.workspace_id, e.session_id, e.role, e.payload_json, e.created_at, e.position FROM agent_entries e INNER JOIN agent_sessions s ON s.id = e.session_id WHERE e.session_id = ?1 ORDER BY e.position ASC LIMIT 400",
+            "SELECT e.id, s.workspace_id, e.session_id, e.role, e.payload_json, e.created_at, e.position FROM agent_entries e INNER JOIN agent_sessions s ON s.id = e.session_id WHERE e.session_id = ?1 ORDER BY e.position ASC, e.created_at ASC, e.rowid ASC",
         )
         .map_err(|error| error.to_string())?;
     let rows = statement

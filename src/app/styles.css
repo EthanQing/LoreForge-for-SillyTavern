@@ -4147,6 +4147,83 @@ select.input {
   justify-self: end;
 }
 
+.card-workshop-shell .agent-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid var(--workshop-line);
+}
+
+.card-workshop-shell .agent-message-actions-user {
+  justify-content: flex-end;
+}
+
+.card-workshop-shell .agent-message-actions-agent {
+  justify-content: flex-start;
+}
+
+.card-workshop-shell .agent-message-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--workshop-line);
+  background: transparent;
+  color: var(--muted-color);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.card-workshop-shell .agent-message-action-button:hover:not(:disabled),
+.card-workshop-shell .agent-message-action-button:focus-visible {
+  border-color: var(--copper);
+  color: var(--paper);
+}
+
+.card-workshop-shell .agent-message-action-button.primary {
+  border-color: var(--copper);
+  color: var(--copper);
+}
+
+.card-workshop-shell .agent-message-action-button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.card-workshop-shell .agent-message-edit-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--workshop-line);
+  outline: none;
+  background: var(--workbench);
+  color: var(--paper);
+  font: inherit;
+  line-height: 1.6;
+}
+
+.card-workshop-shell .agent-message-edit-input:focus {
+  border-color: var(--copper);
+  box-shadow: var(--input-focus-ring);
+}
+
+.card-workshop-shell .agent-action-spinner {
+  animation: agent-action-spin 900ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-workshop-shell .agent-action-spinner {
+    animation: none;
+  }
+}
+
 .card-workshop-shell .agent-message-content {
   line-height: 1.7;
   overflow-wrap: anywhere;
@@ -4388,6 +4465,12 @@ select.input {
 @keyframes agent-message-caret {
   50% {
     opacity: 0;
+  }
+}
+
+@keyframes agent-action-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

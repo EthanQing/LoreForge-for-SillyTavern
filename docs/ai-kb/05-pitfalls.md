@@ -118,6 +118,10 @@ PI can emit multiple assistant messages around sequential tool calls during one 
 
 Agent text is Markdown and must not be inserted with `dangerouslySetInnerHTML`. Keep the renderer React-based, render raw HTML as text, and validate link protocols before creating anchors. The app shell must also be allowed to shrink below the old 960px legacy minimum; otherwise narrow-window screenshots and element bounds include an invisible page-wide overflow area. Message bubbles should use a content-sized width with a capped `max-width`, while tables and code blocks handle their own bounded overflow.
 
+## Conversation Replacement Must Be Append-Only
+
+Regeneration and edit/resend are branch replacements, not destructive history rewrites. Before replacing the current turn, save the message prefix, the current proposals, and the card snapshot in memory; persist an `agent_conversation_branch` entry containing the new prefix, then append new message/tool entries. Hydration must replay entries in position order and reset the active message list at each branch marker. If a proposal was applied, restore its earliest pre-apply `rollbackCard` before starting the new prompt; if the snapshot is missing or cannot be saved, stop the operation instead of generating against an unknown card state. Keep the action lock shared by regenerate, edit/resend, proposal apply/discard, and new-session navigation so two branches cannot race.
+
 The transcript turns use CSS Grid. Do not use Flexbox's `align-self: flex-end` to position the user bubble; in Grid that controls the block axis and leaves the bubble on the left. Set the turn's inline alignment explicitly and use `justify-self: end` for the user bubble so wide windows retain the left-Agent/right-user conversation rhythm.
 
 ## Workspace-Grouped Agent History

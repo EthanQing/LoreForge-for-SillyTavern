@@ -53,6 +53,8 @@ The inspector owns its own scroll region and is treated as a 560px editing desk 
 
 The middle transcript uses `src/lib/agent/transcript.ts` to group one user request and all assistant/tool-loop messages into one turn. The assistant text is rendered as one bubble through `src/components/MarkdownMessage.tsx`, PI's `streamingMessage` is rendered in that same bubble while a run is active, and tool results are nested under a collapsed trace. The transcript owns vertical scrolling, places Agent bubbles at the left and user bubbles at the right of the available message area, constrains child widths, sizes bubbles to their content up to a capped width, and wraps long JSON/path content so tool payloads cannot create horizontal overflow.
 
+The last eligible assistant turn exposes regeneration and the last user turn exposes edit/resend. `AgentStudio` uses `src/lib/agent/conversationActions.ts` to require that no later user message exists, then asks `CardAgentController.replaceConversation()` to abort/clear queues, restore the prefix before the last user message, and prompt a fresh user message. Applied proposals keep a pre-apply `rollbackCard`; the replacement path restores that snapshot before discarding the turn's proposals. The original entries remain in SQLite and a `agent_conversation_branch` entry records the new active prefix, so hydration follows the latest branch without deleting the old history.
+
 Global project/file actions that need to be reused outside the import/export panel live in `src/app/useProjectActions.ts`. Prefer this hook for open, new-card, save, export, copy, validation refresh, and context-menu actions instead of duplicating import/export logic in UI components.
 
 ## State Model

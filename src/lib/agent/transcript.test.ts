@@ -13,6 +13,7 @@ describe("buildAgentTranscript", () => {
     expect(turns).toEqual([{
       userText: "检查这张卡",
       assistantText: "我先读取卡片。\n\n卡片目前为空。",
+      assistantPresent: true,
       tools: [{ toolName: "inspect_card", isError: false, content: '{"name":""}' }],
       streaming: false
     }]);
@@ -26,8 +27,15 @@ describe("buildAgentTranscript", () => {
 
     expect(turns[0]).toMatchObject({
       assistantText: "前半句\n\n后半句",
+      assistantPresent: true,
       streaming: true
     });
+  });
+
+  it("keeps an empty streaming assistant turn visible", () => {
+    const turns = buildAgentTranscript([{ role: "user", content: "读取" }], { role: "assistant", content: [] });
+
+    expect(turns[0]).toMatchObject({ assistantPresent: true, streaming: true });
   });
 });
 

@@ -32,6 +32,8 @@ The left history uses `list_agent_session_history` to load sessions across works
 
 The old sessions/messages tables are retained for idempotent migration. Rows without a workspace are legacy_read_only archives. Copying a legacy archive into a card creates a new session; old pending previews cannot be applied directly.
 
+Conversation actions are serialized by `AgentStudio`: only the latest assistant turn without a later user message can regenerate, and only the latest user message can enter edit/resend mode. `replaceConversation()` aborts active work, clears steering/follow-up queues, restores the message prefix before the last user message, and prompts the retained or edited user text. Each replacement appends a `agent_conversation_branch` marker instead of deleting entries. Hydration resets the in-memory message list at each marker and then replays newer entries. Applied `CardProposal` records include `rollbackCard`; pending/conflicted proposals from the replaced turn are discarded, while applied proposals are rolled back and then discarded.
+
 ## Field-level actions
 
 AiFieldAssistant creates a short-lived CardAgentController with one target path. It asks the Agent to read the current revision and create a proposal, previews the normalized result, and calls the existing editor callback only after the user confirms. Direct JSON response parsing is not part of the production path.

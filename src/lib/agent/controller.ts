@@ -46,11 +46,12 @@ interface AgentLike {
     errorMessage?: string;
   };
   subscribe(listener: (event: AgentEvent, signal: AbortSignal) => Promise<void> | void): () => void;
-  prompt(message: string): Promise<void>;
+  prompt(message: AgentMessage | AgentMessage[] | string): Promise<void>;
   steer(message: AgentMessage): void;
   followUp(message: AgentMessage): void;
   abort(): void;
   waitForIdle(): Promise<void>;
+  clearAllQueues(): void;
 }
 
 interface ModelsLike {
@@ -87,6 +88,7 @@ export class CardAgentController {
   private agent?: AgentLike;
   private unsubscribe?: () => void;
   private loading?: Promise<void>;
+  private restoredMessages: AgentMessage[] = [];
 
   constructor(options: CardAgentControllerOptions) {
     this.options = options;
@@ -106,6 +108,13 @@ export class CardAgentController {
 
   get streamingMessage(): AgentMessage | undefined {
     return this.agent?.state.streamingMessage;
+  }
+
+  restoreMessages(messages: AgentMessage[]): void {
+    this.restoredMessages = [...messages];
+    if (this.agent && !this.agent.state.isStreaming) {
+      this.agent.state.messages = [...this.restoredMessages];
+    }
   }
 
   async start(): Promise<void> {
@@ -138,6 +147,27 @@ export class CardAgentController {
     }
     this.agent.followUp(createUserMessage(message));
     this.emit({ type: "status", message: "已加入完成后的 follow-up 队列。" });
+  }
+
+  async replaceConversation(baseMessages: AgentMessage[], message: string, beforeReplace?: () => Promise<void>): Promise<void> {
+    await this.start();
+    if (!this.agent) {
+      throw new Error("Agent runtime is unavailable.");
+    }
+    await this.abortAndWait();
+    await beforeReplace?.();
+    this.agent.state.messages = [...baseMessages];
+    await this.agent.prompt(createUserMessage(message));
+  }
+
+  async abortAndWait(): Promise<void> {
+    if (!this.agent) return;
+    this.agent.clearAllQueues();
+    if (this.agent.state.isStreaming) {
+      this.agent.abort();
+      await this.agent.waitForIdle();
+    }
+    this.agent.clearAllQueues();
   }
 
   abort(): void {
@@ -209,7 +239,7 @@ export class CardAgentController {
         model,
         thinkingLevel: this.options.profile.thinkingLevel as ThinkingLevel,
         tools,
-        messages: []
+        messages: [...this.restoredMessages]
       },
       sessionId: this.options.sessionId,
       streamFn,
