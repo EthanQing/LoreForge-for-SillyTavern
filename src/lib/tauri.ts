@@ -46,6 +46,7 @@ export async function pickCardSavePath(): Promise<string | null> {
 
 export async function pickPngOpenPath(): Promise<string | null> {
   const selected = await open({
+    title: translate("dialog.selectPngCover"),
     multiple: false,
     filters: [{ name: translate("dialog.pngImage"), extensions: ["png", "apng"] }]
   });
@@ -54,6 +55,7 @@ export async function pickPngOpenPath(): Promise<string | null> {
 
 export async function pickPngSavePath(): Promise<string | null> {
   return await save({
+    title: translate("dialog.exportPngCard"),
     filters: [{ name: translate("dialog.pngCard"), extensions: ["png"] }],
     defaultPath: "card.png"
   });

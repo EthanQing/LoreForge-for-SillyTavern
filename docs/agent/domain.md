@@ -18,7 +18,7 @@ Zustand store 维护当前卡片、文件路径/来源、工作区 ID、卡片 r
 
 - 支持打开 JSON、PNG/APNG 和 CHARX。
 - JSON、PNG/APNG、CHARX 保存分别调用 Rust 的 `save_card_json`、`export_card_png`、`export_charx`。
-- PNG 导出需要基础 PNG；后端写入兼容的角色卡元数据，导出前执行迁移/规范化与校验。
+- PNG 导出需要基础 PNG；没有可用主封面时，前端先提示选择封面图片，再显示导出保存路径，避免保存路径确认后再次弹出文件选择窗口。后端写入兼容的角色卡元数据，导出前执行迁移/规范化与校验。
 - 前端和 Rust 都有校验与迁移逻辑。共享规则变更应保持两侧一致。
 
 资源位于 `card.data.assets`。内联图片可用作编辑器预览和 PNG 导出基础，但导出元数据会做兼容性处理；保存返回后，前端使用 `keepEditorAssetsAfterMetadataExport()` 保留编辑器所需资源。

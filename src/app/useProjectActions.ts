@@ -2,7 +2,6 @@ import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback } from "react";
 import { useCardStore } from "./store";
 import { keepEditorAssetsAfterMetadataExport } from "./exportState";
-import { dataImageToPngDataUrl, fileUriToPath, findMainIconAsset, isDataImageUri } from "../lib/imageAssets";
 import { useI18n } from "../lib/i18n";
 import type { CardAsset, CharacterCardV3 } from "../lib/schema";
 import { prepareCardForExport } from "../lib/migrations";
@@ -15,11 +14,10 @@ import {
   pickCharxSavePath,
   pickJsonSavePath,
   pickOpenCardPath,
-  pickPngOpenPath,
-  pickPngSavePath,
   type PngExportBase,
   saveCardJson,
 } from "../lib/tauri";
+import { pickPngExportRequest, resolvePngExportBase } from "./pngExportFlow";
 
 async function copyText(text: string): Promise<void> {
   try {
@@ -183,22 +181,17 @@ export function useProjectActions() {
   }, [card, markSaved, setStatus]);
 
   const savePngToPath = useCallback(
-    async (path: string, fallbackBasePngPath?: string | null, cardToSave: CharacterCardV3 = card) => {
-      const cover = findMainIconAsset(cardToSave);
-      const coverUri = typeof cover?.uri === "string" ? cover.uri : "";
-      const coverBase =
-        coverUri && isDataImageUri(coverUri)
-          ? { basePngDataUrl: await dataImageToPngDataUrl(coverUri) }
-          : coverUri
-            ? { basePngPath: fileUriToPath(coverUri) }
-            : {};
-      const base: PngExportBase =
-        coverBase.basePngDataUrl || coverBase.basePngPath ? coverBase : fallbackBasePngPath ? { basePngPath: fallbackBasePngPath } : {};
-      const pickedBasePath = base.basePngDataUrl || base.basePngPath ? null : await pickPngOpenPath();
-      if (!base.basePngDataUrl && !base.basePngPath && !pickedBasePath) {
+    async (
+      path: string,
+      fallbackBasePngPath?: string | null,
+      cardToSave: CharacterCardV3 = card,
+      resolvedBase?: PngExportBase
+    ) => {
+      const base = resolvedBase ?? (await resolvePngExportBase(cardToSave, fallbackBasePngPath));
+      if (!base) {
         return;
       }
-      const parsed = await exportCardPng(path, cardToSave, pickedBasePath ? { basePngPath: pickedBasePath } : base);
+      const parsed = await exportCardPng(path, cardToSave, base);
       markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, cardToSave), path);
     },
     [card, markSaved]
@@ -272,15 +265,15 @@ export function useProjectActions() {
 
   const exportPng = useCallback(async () => {
     try {
-      const path = await pickPngSavePath();
-      if (!path) {
+      const request = await pickPngExportRequest(card);
+      if (!request) {
         return;
       }
-      await savePngToPath(path);
+      await savePngToPath(request.path, null, card, request.base);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [savePngToPath, setStatus]);
+  }, [card, savePngToPath, setStatus]);
 
   const exportCharxFile = useCallback(async () => {
     try {
