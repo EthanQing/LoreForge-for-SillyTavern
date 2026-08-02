@@ -270,10 +270,13 @@ export function useProjectActions() {
         return;
       }
       await savePngToPath(request.path, null, card, request.base);
+      if (card.data.character_book?.entries.length) {
+        setStatus(t("status.pngExportedWithLorebook"));
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [card, savePngToPath, setStatus]);
+  }, [card, savePngToPath, setStatus, t]);
 
   const exportCharxFile = useCallback(async () => {
     try {

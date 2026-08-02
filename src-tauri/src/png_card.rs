@@ -207,6 +207,7 @@ fn encode_chunk(chunk_type: [u8; 4], data: &[u8]) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::card_schema::CharacterCardV3;
+    use serde_json::json;
 
     fn one_pixel_png() -> Vec<u8> {
         STANDARD
@@ -272,6 +273,42 @@ mod tests {
         let (value, source) = read_card_value(&output).unwrap().unwrap();
         assert_eq!(source, "png-ccv3");
         assert_eq!(value["spec"], "chara_card_v3");
+    }
+
+    #[test]
+    fn preserves_embedded_lorebook_in_both_character_chunks() {
+        let card: CharacterCardV3 = serde_json::from_value(json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {
+                "name": "Lorekeeper",
+                "character_book": {
+                    "name": "Embedded Lore",
+                    "extensions": {},
+                    "entries": [{
+                        "id": 7,
+                        "keys": ["city"],
+                        "content": "City lore.",
+                        "extensions": { "position": 0 },
+                        "enabled": true,
+                        "insertion_order": 10,
+                        "use_regex": false
+                    }]
+                }
+            }
+        }))
+        .unwrap();
+
+        let output = write_card_chunks(&one_pixel_png(), &card).unwrap();
+        let chunks = text_chunks(&output).unwrap();
+
+        for key in ["chara", "ccv3"] {
+            let value = decode_json_chunk(&chunks[key]).unwrap();
+            let book = &value["data"]["character_book"];
+            assert_eq!(book["name"], "Embedded Lore");
+            assert_eq!(book["entries"].as_array().unwrap().len(), 1);
+            assert_eq!(book["entries"][0]["content"], "City lore.");
+        }
     }
 
     #[test]
