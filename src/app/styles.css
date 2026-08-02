@@ -2595,6 +2595,11 @@ select.input {
   padding: 13px 14px;
 }
 
+.card-workshop-shell .agent-composer textarea:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--copper) 72%, transparent);
+  outline-offset: -1px;
+}
+
 .agent-composer-scope-row {
   display: flex;
   align-items: center;
