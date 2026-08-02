@@ -1,3 +1,5 @@
+import { PENDING_AGENT_SESSION_TITLE } from "./sessionTitle";
+
 export const MAX_VISIBLE_AGENT_SESSIONS = 5;
 
 export interface AgentSessionHistoryRecord {
@@ -6,7 +8,6 @@ export interface AgentSessionHistoryRecord {
   title: string;
   createdAt: number;
   updatedAt: number;
-  summary: string | null;
   cardName: string | null;
   currentPath: string | null;
   entryCount: number;
@@ -61,10 +62,9 @@ export function buildAgentSessionGroups(
     currentGroup.sessions.unshift({
       id: current.sessionId,
       workspaceId: current.workspaceId,
-      title: "当前会话",
+      title: PENDING_AGENT_SESSION_TITLE,
       createdAt: now,
       updatedAt: now,
-      summary: null,
       cardName: current.cardName,
       currentPath: current.currentPath,
       entryCount: 0
@@ -93,8 +93,7 @@ export function getHiddenAgentSessionCount(sessions: AgentSessionHistoryRecord[]
 }
 
 export function getAgentSessionTitle(record: AgentSessionHistoryRecord): string {
-  const title = record.title.trim() === "Card Agent session" ? "卡片 Agent 会话" : record.title.trim();
-  return truncate(record.summary?.trim() || title || "未命名会话", 72);
+  return truncate(record.title.trim() || PENDING_AGENT_SESSION_TITLE, 24);
 }
 
 export function formatAgentSessionTime(timestamp: number): string {

@@ -7,6 +7,7 @@ import { getCardDisplayName } from "../../app/cardIdentity";
 import { Button } from "../../components/Button";
 import { MarkdownMessage } from "../../components/MarkdownMessage";
 import { buildCardTokenStats } from "../../lib/tokenStats";
+import { toAiConnectionProfile } from "../../lib/ai";
 import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts";
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
 import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser } from "../../lib/agent/conversationActions";
@@ -33,8 +34,10 @@ import {
   persistAgentBranch,
   persistAgentEvent,
   persistAgentProposal,
+  persistAgentSessionTitle,
   persistWorkspace
 } from "../../lib/agent/persistence";
+import { generateAgentSessionTitle, getAgentSessionTitleSource, PENDING_AGENT_SESSION_TITLE } from "../../lib/agent/sessionTitle";
 import { ProposalCard } from "./ProposalCard";
 
 const BasicInfoPanel = lazy(() => import("../card-editor/BasicInfoPanel").then((module) => ({ default: module.BasicInfoPanel })));
@@ -80,6 +83,7 @@ export function AgentStudio(): ReactNode {
   const [events, setEvents] = useState<AgentControllerEvent[]>([]);
   const [proposals, setProposals] = useState<CardProposal[]>([]);
   const [sessionHistory, setSessionHistory] = useState<AgentSessionHistoryRecord[]>([]);
+  const [generatingTitleSessionIds, setGeneratingTitleSessionIds] = useState<Set<string>>(() => new Set());
   const [rightOpen, setRightOpen] = useState(true);
   const [inspectorWidth, setInspectorWidth] = useState(560);
   const [focusedEditor, setFocusedEditor] = useState<StudioEditorTab | null>(null);
@@ -95,6 +99,7 @@ export function AgentStudio(): ReactNode {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const actionLockRef = useRef(false);
   const conversationSnapshotsRef = useRef<ConversationSnapshot[]>([]);
+  const titleAttemptedSessionIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const nextSessionId = readSessionId(workspaceId);
@@ -112,6 +117,29 @@ export function AgentStudio(): ReactNode {
     controllerRef.current?.dispose();
     controllerRef.current = null;
   }, [workspaceId]);
+
+  useEffect(() => {
+    const record = sessionHistory.find((item) => item.id === sessionId);
+    if (!record || record.title.trim() !== PENDING_AGENT_SESSION_TITLE || titleAttemptedSessionIdsRef.current.has(sessionId)) return;
+    const source = getAgentSessionTitleSource(messages as AgentMessage[]);
+    if (!source || !aiSettings.enabled || !aiSettings.baseUrl.trim() || !aiSettings.model.trim()) return;
+
+    titleAttemptedSessionIdsRef.current.add(sessionId);
+    setGeneratingTitleSessionIds((current) => new Set(current).add(sessionId));
+    void generateAgentSessionTitle(toAiConnectionProfile(aiSettings), source)
+      .then(async (title) => {
+        if (!await persistAgentSessionTitle(sessionId, title)) return;
+        setSessionHistory((current) => current.map((item) => item.id === sessionId ? { ...item, title } : item));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        setGeneratingTitleSessionIds((current) => {
+          const next = new Set(current);
+          next.delete(sessionId);
+          return next;
+        });
+      });
+  }, [aiSettings, messages, sessionHistory, sessionId]);
 
   useEffect(() => {
     let active = true;
@@ -520,6 +548,7 @@ export function AgentStudio(): ReactNode {
         <AgentSessionHistory
           records={sessionHistory}
           current={{ workspaceId, sessionId, cardName, currentPath }}
+          generatingTitleSessionIds={generatingTitleSessionIds}
           onSelectSession={selectSession}
         />
         <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} disabled={actionBusy} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); setEvents([]); setProposals([]); setEditingLastUser(false); setEditedUserText(""); conversationSnapshotsRef.current = []; }}>新建会话</Button>

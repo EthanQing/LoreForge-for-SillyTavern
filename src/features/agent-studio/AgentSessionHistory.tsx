@@ -13,10 +13,11 @@ import {
 interface AgentSessionHistoryProps {
   records: AgentSessionHistoryRecord[];
   current: CurrentAgentSession;
+  generatingTitleSessionIds: ReadonlySet<string>;
   onSelectSession: (record: AgentSessionHistoryRecord) => void | Promise<void>;
 }
 
-export function AgentSessionHistory({ records, current, onSelectSession }: AgentSessionHistoryProps): ReactNode {
+export function AgentSessionHistory({ records, current, generatingTitleSessionIds, onSelectSession }: AgentSessionHistoryProps): ReactNode {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(() => new Set());
   const groups = useMemo(() => buildAgentSessionGroups(records, current), [current, records]);
 
@@ -48,17 +49,20 @@ export function AgentSessionHistory({ records, current, onSelectSession }: Agent
           {visibleSessions.map((session) => {
             const isCurrent = session.workspaceId === current.workspaceId && session.id === current.sessionId;
             const selectable = isCurrent || session.workspaceId === current.workspaceId || Boolean(session.currentPath);
+            const generatingTitle = generatingTitleSessionIds.has(session.id);
+            const title = generatingTitle ? "正在生成标题…" : getAgentSessionTitle(session);
             return <button
               className={isCurrent ? "agent-session-history-item active" : "agent-session-history-item"}
               disabled={!selectable}
               key={session.id}
               type="button"
               aria-current={isCurrent ? "page" : undefined}
-              title={!selectable ? "该角色卡没有可重新打开的文件路径" : getAgentSessionTitle(session)}
+              aria-busy={generatingTitle || undefined}
+              title={!selectable ? "该角色卡没有可重新打开的文件路径" : title}
               onClick={() => void onSelectSession(session)}
             >
               <MessageSquare size={14} aria-hidden="true" />
-              <span className="agent-session-history-copy"><strong>{getAgentSessionTitle(session)}</strong><small>{formatAgentSessionTime(session.updatedAt) || "尚未产生消息"}</small></span>
+              <span className="agent-session-history-copy"><strong>{title}</strong><small>{formatAgentSessionTime(session.updatedAt) || "尚未产生消息"}</small></span>
               {isCurrent ? <span className="agent-session-history-marker" aria-label="当前会话" /> : <ChevronRight size={13} aria-hidden="true" />}
             </button>;
           })}

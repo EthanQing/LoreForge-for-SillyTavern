@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAgentSessionGroups,
+  getAgentSessionTitle,
   getHiddenAgentSessionCount,
   getVisibleAgentSessions,
   type AgentSessionHistoryRecord
@@ -13,7 +14,6 @@ function session(id: string, workspaceId: string, updatedAt: number): AgentSessi
     title: id,
     createdAt: updatedAt,
     updatedAt,
-    summary: null,
     cardName: workspaceId === "card-a" ? "角色卡 A" : "角色卡 B",
     currentPath: `C:/cards/${workspaceId}.json`,
     entryCount: 2
@@ -69,6 +69,15 @@ describe("agent session history", () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0].sessions[0].id).toBe("session-new");
-    expect(groups[0].sessions[0].title).toBe("当前会话");
+    expect(groups[0].sessions[0].title).toBe("新会话");
+  });
+
+  it("shows the persisted title instead of a raw message summary", () => {
+    const record = {
+      ...session("named", "card-a", 20),
+      title: "优化都市世界书",
+    };
+
+    expect(getAgentSessionTitle(record)).toBe("优化都市世界书");
   });
 });

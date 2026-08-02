@@ -4,7 +4,7 @@ import { isCardProposal, type CardProposal } from "./contracts";
 import type { AgentControllerEvent } from "./controller";
 import type { AgentSessionHistoryRecord } from "./sessionHistory";
 import { hydrateAgentMessages, type PersistedAgentEntry } from "./sessionMessages";
-import { readAgentMessageContent } from "./transcript";
+import { PENDING_AGENT_SESSION_TITLE } from "./sessionTitle";
 
 const entryPositions = new Map<string, number>();
 
@@ -37,8 +37,7 @@ export async function persistAgentEvent(workspaceId: string, sessionId: string, 
   try {
     await invoke("save_agent_session", {
       session: {
-        id: sessionId, workspaceId, title: "卡片 Agent 会话", createdAt: now, updatedAt: now,
-        summary: message && "content" in message ? readAgentMessageContent(message.content).slice(0, 240) || null : null
+        id: sessionId, workspaceId, title: PENDING_AGENT_SESSION_TITLE, createdAt: now, updatedAt: now
       }
     });
     await invoke("append_agent_entry", {
@@ -100,6 +99,15 @@ export async function hydrateAgentSessionHistory(): Promise<AgentSessionHistoryR
     return await invoke<AgentSessionHistoryRecord[]>("list_agent_session_history");
   } catch {
     return [];
+  }
+}
+
+export async function persistAgentSessionTitle(sessionId: string, title: string): Promise<boolean> {
+  try {
+    await invoke("rename_agent_session", { sessionId, title });
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -18,8 +18,6 @@ pub struct AgentSessionRecord {
     pub created_at: i64,
     pub updated_at: i64,
     #[serde(default)]
-    pub summary: Option<String>,
-    #[serde(default)]
     pub card_name: Option<String>,
     #[serde(default)]
     pub current_path: Option<String>,
@@ -88,7 +86,7 @@ pub fn save_card_workspace(app: AppHandle, workspace: CardWorkspaceRecord) -> Re
 pub fn list_agent_session_history(app: AppHandle) -> Result<Vec<AgentSessionRecord>, String> {
     let conn = open_connection(&app)?;
     let mut statement = conn.prepare(
-        "SELECT s.id, s.workspace_id, s.title, s.created_at, s.updated_at, s.summary, w.card_name, w.current_path, (SELECT COUNT(*) FROM agent_entries e WHERE e.session_id = s.id) FROM agent_sessions s LEFT JOIN card_workspaces w ON w.id = s.workspace_id ORDER BY s.updated_at DESC"
+        "SELECT s.id, s.workspace_id, s.title, s.created_at, s.updated_at, w.card_name, w.current_path, (SELECT COUNT(*) FROM agent_entries e WHERE e.session_id = s.id) FROM agent_sessions s LEFT JOIN card_workspaces w ON w.id = s.workspace_id ORDER BY s.updated_at DESC"
     ).map_err(|error| error.to_string())?;
     let rows = statement
         .query_map([], map_agent_session_row)
@@ -130,25 +128,39 @@ pub fn save_agent_session(app: AppHandle, session: AgentSessionRecord) -> Result
     ensure_workspace_row(&conn, &session.workspace_id, session.updated_at)?;
     conn.execute(
         r#"
-        INSERT INTO agent_sessions (id, workspace_id, title, created_at, updated_at, summary)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        INSERT INTO agent_sessions (id, workspace_id, title, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(id) DO UPDATE SET
           workspace_id = excluded.workspace_id,
-          title = excluded.title,
-          updated_at = excluded.updated_at,
-          summary = COALESCE(excluded.summary, agent_sessions.summary)
+          updated_at = excluded.updated_at
         "#,
         params![
             session.id,
             session.workspace_id,
             session.title,
             session.created_at,
-            session.updated_at,
-            session.summary
+            session.updated_at
         ],
     )
     .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn rename_agent_session(
+    app: AppHandle,
+    session_id: String,
+    title: String,
+) -> Result<(), String> {
+    let title = title.trim();
+    if session_id.trim().is_empty() || title.is_empty() {
+        return Err("Session id and title are required.".to_string());
+    }
+    if title.chars().count() > 24 {
+        return Err("Session title must not exceed 24 characters.".to_string());
+    }
+    let conn = open_connection(&app)?;
+    rename_agent_session_row(&conn, &session_id, title)
 }
 
 #[tauri::command]
@@ -228,10 +240,9 @@ fn map_agent_session_row(row: &Row<'_>) -> rusqlite::Result<AgentSessionRecord> 
         title: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
-        summary: row.get(5)?,
-        card_name: row.get(6)?,
-        current_path: row.get(7)?,
-        entry_count: row.get(8)?,
+        card_name: row.get(5)?,
+        current_path: row.get(6)?,
+        entry_count: row.get(7)?,
     })
 }
 
@@ -290,7 +301,6 @@ fn init_db(conn: &Connection) -> Result<(), String> {
           title TEXT NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL,
-          summary TEXT,
           FOREIGN KEY(workspace_id) REFERENCES card_workspaces(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS agent_entries (
@@ -316,8 +326,26 @@ fn init_db(conn: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS idx_agent_sessions_workspace_updated ON agent_sessions(workspace_id, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_agent_entries_session_position ON agent_entries(session_id, position ASC);
         CREATE INDEX IF NOT EXISTS idx_agent_proposals_workspace_updated ON agent_proposals(workspace_id, updated_at DESC);
+        UPDATE agent_sessions SET title = '新会话' WHERE title IN ('卡片 Agent 会话', 'Card Agent session');
         "#,
     ).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn rename_agent_session_row(
+    conn: &Connection,
+    session_id: &str,
+    title: &str,
+) -> Result<(), String> {
+    let changed = conn
+        .execute(
+            "UPDATE agent_sessions SET title = ?1 WHERE id = ?2",
+            params![title, session_id],
+        )
+        .map_err(|error| error.to_string())?;
+    if changed == 0 {
+        return Err("Agent session was not found.".to_string());
+    }
     Ok(())
 }
 
@@ -336,7 +364,7 @@ fn ensure_agent_session_row(
     now: i64,
 ) -> Result<(), String> {
     conn.execute(
-        "INSERT OR IGNORE INTO agent_sessions (id, workspace_id, title, created_at, updated_at) VALUES (?1, ?2, '卡片 Agent 会话', ?3, ?3)",
+        "INSERT OR IGNORE INTO agent_sessions (id, workspace_id, title, created_at, updated_at) VALUES (?1, ?2, '新会话', ?3, ?3)",
         params![session_id, workspace_id, now],
     ).map_err(|error| error.to_string())?;
     Ok(())
@@ -363,5 +391,46 @@ mod tests {
             .all(|path| !path.exists()));
         assert!(keep.exists());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn renames_a_session_without_changing_its_history_order() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        ensure_workspace_row(&conn, "workspace", 10).unwrap();
+        ensure_agent_session_row(&conn, "session", "workspace", 10).unwrap();
+        rename_agent_session_row(&conn, "session", "优化都市世界书").unwrap();
+
+        let (title, updated_at): (String, i64) = conn
+            .query_row(
+                "SELECT title, updated_at FROM agent_sessions WHERE id = 'session'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(title, "优化都市世界书");
+        assert_eq!(updated_at, 10);
+    }
+
+    #[test]
+    fn normalizes_pre_title_history_rows() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        ensure_workspace_row(&conn, "workspace", 10).unwrap();
+        conn.execute(
+            "INSERT INTO agent_sessions (id, workspace_id, title, created_at, updated_at) VALUES ('session', 'workspace', '卡片 Agent 会话', 10, 10)",
+            [],
+        )
+        .unwrap();
+
+        init_db(&conn).unwrap();
+        let title: String = conn
+            .query_row(
+                "SELECT title FROM agent_sessions WHERE id = 'session'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(title, "新会话");
     }
 }

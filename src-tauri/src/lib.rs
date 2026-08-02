@@ -37,6 +37,7 @@ pub fn run() {
             agent_history::list_agent_session_history,
             agent_history::list_agent_entries,
             agent_history::save_agent_session,
+            agent_history::rename_agent_session,
             agent_history::append_agent_entry,
             agent_history::save_agent_proposal,
             agent_history::list_agent_proposals,
