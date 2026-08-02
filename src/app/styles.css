@@ -1171,11 +1171,15 @@ select.input {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-.lore-entry-summary {
+.collapsible-trigger.lore-entry-summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 12px 28px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "toggle drag identity meta"
+    ". . preview preview";
   align-items: center;
-  gap: var(--space-3);
+  column-gap: var(--space-2);
+  row-gap: var(--space-3);
   cursor: grab;
   width: 100%;
   border: 0;
@@ -1186,13 +1190,17 @@ select.input {
   color: inherit;
 }
 
+.lore-entry-summary > .collapsible-icon {
+  grid-area: toggle;
+}
+
 .lore-entry-summary:active {
   cursor: grabbing;
 }
 
 .lore-entry-drag-handle {
   display: inline-flex;
-  grid-column: 1;
+  grid-area: drag;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -1213,17 +1221,24 @@ select.input {
 
 .lore-entry-summary-main {
   display: grid;
-  grid-column: 2;
+  grid-area: identity;
   min-width: 0;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
-.lore-entry-summary-main strong,
 .lore-entry-summary-main span,
 .lore-entry-preview {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lore-entry-summary-main strong {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .lore-entry-summary-main span,
@@ -1234,13 +1249,41 @@ select.input {
 
 .lore-entry-summary-meta {
   display: inline-flex;
-  grid-column: 3;
+  grid-area: meta;
   gap: var(--space-2);
   align-items: center;
+  white-space: nowrap;
 }
 
 .lore-entry-preview {
-  grid-column: 2 / -1;
+  display: -webkit-box;
+  grid-area: preview;
+  line-height: 1.55;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.lore-entry-preview-label {
+  margin-right: var(--space-2);
+  color: var(--copper);
+  font: 600 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 700px) {
+  .collapsible-trigger.lore-entry-summary {
+    grid-template-columns: 12px 28px minmax(0, 1fr);
+    grid-template-areas:
+      "toggle drag identity"
+      ". . meta"
+      ". . preview";
+  }
+
+  .lore-entry-summary-meta {
+    justify-self: start;
+  }
 }
 
 .lore-entry-body {

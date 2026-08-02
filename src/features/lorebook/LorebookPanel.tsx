@@ -538,8 +538,8 @@ export function LorebookPanel() {
                     <GripVertical size={16} aria-hidden="true" />
                   </span>
                   <span className="lore-entry-summary-main">
-                    <strong>{entryTitle}</strong>
-                    <span>{entryKeys}</span>
+                    <strong title={entryTitle}>{entryTitle}</strong>
+                    <span title={entryKeys}>关键词 · {entryKeys}</span>
                   </span>
                   <span className="lore-entry-summary-meta">
                     <span className={entry.enabled ? "state-pill" : "state-pill state-pill-hot"}>
@@ -547,7 +547,7 @@ export function LorebookPanel() {
                     </span>
                     <span className="state-pill">#{entry.insertion_order}</span>
                   </span>
-                  {entryPreview ? <span className="lore-entry-preview">{entryPreview}</span> : null}
+                  {entryPreview ? <span className="lore-entry-preview" title={entryPreview}><span className="lore-entry-preview-label">内容</span>{entryPreview}</span> : null}
                 </>
               }
             >
