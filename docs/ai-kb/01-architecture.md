@@ -1,94 +1,63 @@
 # Architecture
 
-## v0.2 Agent Studio Architecture
+## v0.3 Agent Studio Architecture
 
-`src/app/App.tsx` now enters `src/features/agent-studio/AgentStudio.tsx` directly. The production shell is a three-column card workshop: workspace/session navigation, unified Pi Agent conversation, and an expandable CCv3 inspector/editor台. The former global AI drawer and Guide/Edit split are no longer mounted. Existing editor panels remain available through the inspector and are lazy-loaded.
+The application has one production Agent path. `AgentStudio` owns the long-lived `CardAgentController`, while `AgentStudioContext` dispatches requests from the composer, field assistants, and lorebook editor into that same conversation and proposal queue.
 
-`src/lib/agent/controller.ts` owns one dynamically loaded `@earendil-works/pi-agent-core@0.83.0` `Agent` per active session. It uses sequential tool execution, steering/follow-up queues, abort, context compaction, and `@earendil-works/pi-ai@0.83.0` OpenAI-compatible streaming. Agent instances are not stored in Zustand.
+```text
+UI intent
+  -> frontend AgentPermission
+  -> CardAgentController
+  -> typed inspect/propose tool
+  -> pure domain validation and semantic compilation
+  -> CardProposal
+  -> user review/selection
+  -> atomic apply through Zustand
+```
 
-The store additionally owns a stable `workspaceId` and monotonic `cardRevision`. File opens derive a stable workspace identity from the normalized path; new cards receive a new identity and Save As keeps the current workspace. Draft metadata persists both values.
-
-`src-tauri/src/ai.rs` is now a Rust-only HTTP/SSE proxy with request cancellation, HTTPS/loopback validation, same-origin redirects, body/header caps, and system credential-store commands. `src-tauri/src/ai_history.rs` keeps the old `sessions/messages` tables for read-only legacy archives and adds `card_workspaces`, `workspace_paths`, `agent_sessions`, `agent_entries`, and `agent_proposals`.
-
-Agent traffic uses `src/lib/agent/tauriFetch.ts`; the WebView never connects to model hosts directly. Rust strips placeholder Authorization headers and reads the actual credential from Windows Credential Manager/keyring. The persisted frontend AI settings contain no API key.
+There is no Guide/Edit frontend, generic JSON patch layer, raw model response parser, field-local Controller, direct AI field setter, or read-only archive surface.
 
 ## Stack
 
-- Frontend: React 19, TypeScript, Vite 6.
-- Desktop shell/backend: Tauri v2 and Rust.
-- State: Zustand in `src/app/store.ts`.
-- Validation/schema helpers: Zod and local TypeScript helpers.
-- UI icons: `lucide-react`.
-- Editors: CodeMirror through `@uiw/react-codemirror`.
+- Tauri v2 and Rust backend
+- React, TypeScript, Vite
+- Zustand card store
+- Pi Agent Core and Pi AI runtime
+- SQLite for Agent sessions/proposals
+- OS credential store for API secrets
 
 ## Frontend Shape
 
-`src/app/App.tsx` owns the top-level theme, save shortcut, update status, and context menu, then renders `src/features/agent-studio/AgentStudio.tsx`:
+- `src/app/App.tsx`: application shell.
+- `src/app/store.ts`: canonical card, workspace, revision, dirty state, validation, settings, and draft persistence.
+- `src/features/agent-studio/AgentStudio.tsx`: shared session orchestration, transcript, inspector, and request dispatch.
+- `src/features/agent-studio/ProposalCard.tsx`: proposal review and lorebook candidate selection.
+- `src/lib/agent/uiContext.tsx`: shared UI command boundary.
+- `src/lib/agent/controller.ts`: Pi lifecycle, queue semantics, abort, and fixed active permission.
+- `src/lib/agent/permissions.ts`: scope creation, `@` parsing, capability checks, and persisted request envelopes.
+- `src/lib/agent/projection.ts`: image-free authorized card projections and stable fingerprints.
+- `src/lib/agent/changes.ts`: semantic change types, validation, SillyTavern mapping, unknown-field preservation, and compilation.
+- `src/lib/agent/tools.ts`: typed model-facing inspect and propose tools.
+- `src/lib/agent/contracts.ts`: proposals, diffs, hashes, state transitions, and conflict-safe apply.
+- `src/lib/agent/persistence.ts`: Tauri Agent history calls and hydration.
 
-- Left sidebar navigation.
-- Topbar with active card name, active file/draft/new-card identity, dirty/saved status, and validation summary.
-- Topbar global save entry; `Ctrl/Cmd+S` is bound to the same save action.
-- Agent Studio owns the left workspace/session navigation, middle conversation, and right inspector/editor; editor panels are lazy-loaded from the inspector.
-- `src/features/agent-studio/AgentSessionHistory.tsx` renders the left message history from the cross-workspace `list_agent_session_history` query. Records are grouped by `workspaceId`, each card group shows five newest sessions by default, and its own workspace-keyed toggle reveals older records without affecting another card group. Selecting a session on another card reopens its persisted path before switching to that session.
-- Agent Studio is the mounted production shell; the former global `AiChatDrawer` is not mounted.
-- Global custom context menu via `src/components/ContextMenu.tsx`.
-- Context-sensitive right-click targets register local actions through `src/lib/contextMenuTargets.ts`; use this for component-owned actions such as field AI previews and lorebook entry open/move/delete instead of duplicating local state in the global menu.
-
-The following are inspector entry points, not separate Guide/Edit AI modes:
-
-- `home`: import/export panel in the inspector.
-- `basic`: basic card fields.
-- `prompts`: prompt fields.
-- `greetings`: first message and alternate greetings.
-- `lorebook`: embedded character book.
-- `assets`: image/assets management.
-- `preview`: prompt/card preview.
-- `tokenStats`: estimated token statistics for card text, prompt previews, greetings, lorebook entries, and counted asset references.
-- `validation`: validation issues.
-- `settings`: AI/API settings.
-
-Panel modules live under `src/features/*`. Reusable UI components live under `src/components/*`.
-
-The inspector owns its own scroll region and is treated as a 560px editing desk by default. Its separator is a keyboard and pointer resize handle clamped to 420–720px. At 1100px and below the inspector becomes a focus-managed overlay with a dismissible backdrop; settings groups stack vertically, preview content uses a single readable column, and project actions collapse from two columns to one on narrow windows. The Agent Studio surface uses the Workbench/Iron/Line/Paper/Copper/Sage tokens and does not rely on gradients, glass blur, or heavy shadows.
-
-The middle transcript uses `src/lib/agent/transcript.ts` to group one user request and all assistant/tool-loop messages into one turn. The assistant text is rendered as one bubble through `src/components/MarkdownMessage.tsx`, PI's `streamingMessage` is rendered in that same bubble while a run is active, and tool results are nested under a collapsed trace. The transcript owns vertical scrolling, places Agent bubbles at the left and user bubbles at the right of the available message area, constrains child widths, sizes bubbles to their content up to a capped width, and wraps long JSON/path content so tool payloads cannot create horizontal overflow.
-
-The last eligible assistant turn exposes regeneration and the last user turn exposes edit/resend. `AgentStudio` uses `src/lib/agent/conversationActions.ts` to require that no later user message exists, then asks `CardAgentController.replaceConversation()` to abort/clear queues, restore the prefix before the last user message, and prompt a fresh user message. Applied proposals keep a pre-apply `rollbackCard`; the replacement path restores that snapshot before discarding the turn's proposals. The original entries remain in SQLite and a `agent_conversation_branch` entry records the new active prefix, so hydration follows the latest branch without deleting the old history. Pi's `agent_end` is not itself a success signal: the controller inspects the final assistant `stopReason` and propagates provider errors or aborts to the transcript.
-
-Global project/file actions that need to be reused outside the import/export panel live in `src/app/useProjectActions.ts`. Prefer this hook for open, new-card, save, export, copy, validation refresh, and context-menu actions instead of duplicating import/export logic in UI components.
+Lazy-loaded editor panels remain mounted only when opened. Field assistants are lightweight dispatch controls and do not own Agent runtime state.
 
 ## State Model
 
-`src/app/store.ts` is the central UI state store. It owns:
+Zustand owns the current `CharacterCardV3`, `workspaceId`, monotonically increasing `cardRevision`, path/origin, dirty state, validation, recent files, and AI settings. UI edits use store actions rather than mutating card data.
 
-- Current `CharacterCardV3`.
-- Current card identity: `currentPath` plus `cardOrigin` (`file`, `draft`, or `new`).
-- Validation report.
-- Dirty state.
-- Active tab.
-- Recent files.
-- Theme.
-- AI settings.
-
-The store persists local draft, draft identity metadata, recent list, and AI settings in `localStorage`.
-
-Important pattern: use store methods such as `updateCard`, `updateData`, `replaceCard`, `markSaved`, and `applyAgentCard` so validation, draft persistence, dirty status, and timestamps remain consistent.
+Agent proposals store the exact frontend permission, semantic changes, card revision, full-card hash, and entry fingerprints. Pending changes do not enter card state.
 
 ## Backend Shape
 
-`src-tauri/src/lib.rs` registers Tauri commands. Main backend modules:
+- `src-tauri/src/commands.rs`: card I/O and validation.
+- `src-tauri/src/ai.rs`: HTTP/SSE proxy, cancellation, URL policy, model list, and keyring commands.
+- `src-tauri/src/agent_history.rs`: Agent-only workspace/session/entry/proposal persistence and exact old-history deletion.
+- `src-tauri/src/lib.rs`: command registration.
 
-- `commands.rs`: JSON/PNG/CHARX import/export command orchestration.
-- `card_schema.rs`: Rust CCv3 data structures.
-- `migration.rs`: V1/V2/value-to-V3 migration and export timestamp handling.
-- `validation.rs`: Rust validation.
-- `png_card.rs`: PNG/APNG metadata read/write.
-- `charx.rs`: CHARX archive import/export.
-- `ai.rs`: OpenAI-compatible model fetch and chat calls.
-- `ai_history.rs`: local AI chat session persistence.
-
-Frontend wrappers for Tauri commands live in `src/lib/tauri.ts`.
+The history database is `agent_history.sqlite3`. Opening it first removes only `ai_chat_history.sqlite3`, `ai_chat_history.sqlite3-wal`, and `ai_chat_history.sqlite3-shm` from the application data directory. There is no migration, fallback, or old table schema.
 
 ## Design Convention
 
-Prefer existing panel/component patterns. Keep major workflows local-first and avoid adding remote dependencies unless the user explicitly asks.
+Keep domain code pure and UI orchestration explicit. Model output is untrusted data: permissions are supplied by the frontend, tool inputs are typed, semantic changes are compiled locally, and all writes require current-state validation plus user confirmation.

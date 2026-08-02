@@ -48,7 +48,7 @@ Use `src/app/store.ts` methods instead of mutating card state directly.
 - `updateData`: updates `card.data[key]` through `updateCard`.
 - `replaceCard`: normalizes imported/stored cards, validates, saves draft.
 - `markSaved`: stores exported/saved card, validates, clears dirty, updates recent list.
-- `applyAgentCard`: applies AI-generated card state and marks dirty.
+- `applyAgentCard`: applies a fully confirmed Agent proposal, increments revision, validates, saves the draft, and marks dirty.
 
 The store also persists draft identity metadata under `sillytavern-card-creator:draft-meta`: current file path, card origin (`file`, `draft`, or `new`), and dirty state. Keep this metadata in sync when adding open/save/new-card flows so the topbar and Project panel can show the active editing target accurately.
 
@@ -56,7 +56,7 @@ The store also persists draft identity metadata under `sillytavern-card-creator:
 
 `src/features/card-editor/GreetingsPanel.tsx` edits `data.first_mes`, `data.alternate_greetings`, and `data.group_only_greetings`.
 
-When an alternate greeting is promoted to the first message, treat the operation as a swap: the promoted alternate becomes `first_mes`, and the previous `first_mes` returns to the same slot in `alternate_greetings`. Use `promoteAlternateGreetingToFirst()` from `src/app/store.ts` and apply the change with a single `updateCard()` call so the alternate list does not transiently shrink or lose the AI field target index.
+When an alternate greeting is promoted to the first message, treat the operation as a swap: the promoted alternate becomes `first_mes`, and the previous `first_mes` returns to the same slot in `alternate_greetings`. Use `promoteAlternateGreetingToFirst()` from `src/app/store.ts` and apply the change with a single `updateCard()` call so the alternate list does not transiently shrink or invalidate an exact Agent field scope.
 
 ## Import/Export Flow
 
@@ -67,7 +67,7 @@ Backend orchestration is in `src-tauri/src/commands.rs`.
 Global save:
 
 - `useProjectActions().saveCurrentCard()` is the shared Save action for the topbar, Project panel, context menu, and `Ctrl/Cmd+S`.
-- `useProjectActions().saveCardSnapshot(card, options)` is the programmatic save path for applying an already-computed card snapshot, currently used by AI preview apply/re-inject so the saved file matches the just-applied card rather than a stale React render.
+- `useProjectActions().saveCardSnapshot(card, options)` is the programmatic save path used after a confirmed Agent proposal so the saved file matches the compiled card rather than a stale React render.
 - If the active `currentPath` points to an existing JSON, PNG/APNG, or CHARX card, Save writes back to that same path without opening a save dialog.
 - JSON Save uses `save_card_json`; PNG/APNG Save uses `export_card_png`; CHARX Save uses `export_charx`.
 - For PNG/APNG Save, the current main icon/cover asset is used as the base image when present. If no cover asset exists, the current image path is used as the fallback base before writing back to the same path.

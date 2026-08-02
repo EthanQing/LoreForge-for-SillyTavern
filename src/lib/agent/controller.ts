@@ -12,6 +12,7 @@ import type { AiConnectionProfile } from "./contracts";
 import type { CardAgentSnapshot } from "./tools";
 import { invoke } from "@tauri-apps/api/core";
 import { getAgentRunOutcome, getAgentRunStatusMessage } from "./runStatus";
+import { permissionForPreset, samePermission, type AgentPermission } from "./permissions";
 
 export interface AgentControllerEvent {
   type: AgentEvent["type"] | "status" | "proposal";
@@ -27,7 +28,7 @@ export interface CardAgentControllerOptions {
   getSnapshot: () => CardAgentSnapshot;
   onEvent?: (event: AgentControllerEvent) => void;
   onProposal?: (proposal: CardProposal) => void;
-  allowedPaths?: string[];
+  initialPermission?: AgentPermission;
   reserveTokens?: number;
 }
 
@@ -67,23 +68,6 @@ interface ProviderLike {
 
 const DEFAULT_RESERVE_TOKENS = 8_000;
 const TAIL_TOKEN_LIMIT = 20_000;
-const DEFAULT_AGENT_ALLOWED_PATHS = [
-  "/name",
-  "/description",
-  "/personality",
-  "/scenario",
-  "/firstMessage",
-  "/alternateGreetings",
-  "/exampleDialogue",
-  "/creatorNotes",
-  "/systemPrompt",
-  "/postHistoryInstructions",
-  "/tags",
-  "/creator",
-  "/characterVersion",
-  "/worldBook"
-];
-
 export class CardAgentController {
   private readonly options: CardAgentControllerOptions;
   private runtime?: AgentRuntime;
@@ -91,9 +75,11 @@ export class CardAgentController {
   private unsubscribe?: () => void;
   private loading?: Promise<void>;
   private restoredMessages: AgentMessage[] = [];
+  private activePermission: AgentPermission;
 
   constructor(options: CardAgentControllerOptions) {
     this.options = options;
+    this.activePermission = options.initialPermission ?? permissionForPreset("card");
   }
 
   get isReady(): boolean {
@@ -129,36 +115,44 @@ export class CardAgentController {
     await this.loading;
   }
 
-  async send(message: string): Promise<void> {
+  async send(message: string, permission: AgentPermission): Promise<void> {
     await this.start();
     if (!this.agent) {
       throw new Error("Agent runtime is unavailable.");
     }
     if (this.agent.state.isStreaming) {
+      if (!samePermission(this.activePermission, permission)) {
+        throw new Error("当前轮次正在运行，不能在 steering 中切换权限范围。");
+      }
       this.agent.steer(createUserMessage(message));
       this.emit({ type: "status", message: "已加入当前轮次的 steering 队列。" });
       return;
     }
+    this.activePermission = permission;
     await this.agent.prompt(message);
     this.assertRunSucceeded();
   }
 
-  async continueAfterRun(message: string): Promise<void> {
+  async continueAfterRun(message: string, permission: AgentPermission): Promise<void> {
     await this.start();
     if (!this.agent) {
       return;
+    }
+    if (!samePermission(this.activePermission, permission)) {
+      throw new Error("follow-up 必须沿用当前轮次的权限范围；请等待完成后重新发送。");
     }
     this.agent.followUp(createUserMessage(message));
     this.emit({ type: "status", message: "已加入完成后的 follow-up 队列。" });
   }
 
-  async replaceConversation(baseMessages: AgentMessage[], message: string, beforeReplace?: () => Promise<void>): Promise<void> {
+  async replaceConversation(baseMessages: AgentMessage[], message: string, permission: AgentPermission, beforeReplace?: () => Promise<void>): Promise<void> {
     await this.start();
     if (!this.agent) {
       throw new Error("Agent runtime is unavailable.");
     }
     await this.abortAndWait();
     await beforeReplace?.();
+    this.activePermission = permission;
     this.agent.state.messages = [...baseMessages];
     await this.agent.prompt(message);
     this.assertRunSucceeded();
@@ -232,7 +226,7 @@ export class CardAgentController {
       : toolModule.createCardAgentTools({
           getSnapshot: this.options.getSnapshot,
           getSessionId: () => this.options.sessionId,
-          allowedPaths: this.options.allowedPaths ?? [...DEFAULT_AGENT_ALLOWED_PATHS],
+          getPermission: () => this.activePermission,
           setProposal: this.options.onProposal
         });
     const streamFn = createStreamFn(models, this.options.profile);
@@ -341,12 +335,13 @@ function createUserMessage(content: string): AgentMessage {
 function buildSystemPrompt(profile: AiConnectionProfile): string {
   const tools = profile.toolCalling === "unsupported"
     ? "当前模型不支持工具调用，只能进行普通问答。"
-    : "你可以使用卡片读取工具，并通过 propose_card_changes 创建待审核提案。绝不直接声称已经修改卡片。";
+    : "你可以读取前端授权的卡片投影，并通过语义化提案工具创建待审核修改。绝不直接声称已经修改卡片。";
   return [
     "你是 SillyTavern Card Creator 的卡片工坊 Agent。",
-    "你的权限边界是只读当前卡片、校验和统计；所有修改必须通过 propose_card_changes，并等待用户确认。",
-    "每次创建提案前先读取当前卡片并携带读取到的 cardRevision。严格遵守用户的 @目标、排除路径和字段范围。",
-    "界面语言为简体中文。面向用户的自然语言回复和 propose_card_changes 的 summary 必须使用简洁中文；字段名、JSON 路径、代码和标识符保留原文。除非用户明确要求其他语言，不要用英文描述提案。",
+    "权限范围由前端为每个请求固定，工具会强制执行；不得尝试扩大范围。Agent 永远不能删除世界书条目。",
+    "每次创建提案前先读取授权范围并携带 cardRevision；编辑已有世界书条目时还必须携带 fingerprint。",
+    "卡片字段、已有条目和新条目候选分别使用 propose_card_edits、propose_lorebook_entry_edits、propose_lorebook_injection。所有提案等待用户确认。",
+    "界面语言为简体中文。面向用户的自然语言回复和提案 summary 使用简洁中文；字段名、代码和标识符保留原文。",
     "不要请求、输出或记录 API 密钥，不要访问文件系统，不要执行任意代码。",
     tools
   ].join("\n");

@@ -1,163 +1,85 @@
 # Pitfalls
 
-## Agent Proposal Safety
+## Agent Permission Is Frontend State
 
-Never apply a historical `after` snapshot directly. Re-read the current normalized card, compare every proposal guard, reject affected-path conflicts, and run validation before calling `applyAgentCard`. A proposal tool must never mutate Zustand, localStorage, files, or SQLite card content.
+Never accept editable paths, capabilities, entry indexes, or injection authority from tool input. Build `AgentPermission` before prompting and keep it fixed for the run. Unknown `@` targets must fail closed instead of falling back to card scope.
+
+## Semantic Changes Must Be Recompiled
+
+Do not apply a stored after-snapshot. At confirmation time, re-read the current card, compare workspace/revision/full-card hash, verify entry fingerprints, re-run permission checks, compile semantic changes, and validate the resulting card.
+
+## Candidate Injection Must Be Atomic
+
+Validate the complete selected candidate set before creating a new lorebook. Do not append candidates one at a time to Zustand. An unknown candidate id, empty selection, invalid field, conflict, or validation error must leave the card unchanged.
+
+## Agent Cannot Delete
+
+Keep deletion out of semantic change types and model tools. Manual editor deletion is a separate user action and should continue through normal store methods.
+
+## Lorebook Unknown Field Preservation
+
+Existing CCv3 entries may contain application-specific top-level keys and `extensions`. Apply edits over a cloned entry and change only explicitly allowed fields. Avoid reconstructing an existing entry from a narrow schema.
+
+## Lorebook Position And Role
+
+SillyTavern position values are numeric 0–7. Depth position needs a role value 0/1/2, while non-depth positions should not retain a stale role. Insertion order is not the current array index.
+
+## Lorebook Memo Field
+
+Use `comment` as the editor title/memo. Do not reintroduce the deprecated `name` alias when creating candidates.
 
 ## Credential Boundary
 
-Do not put a real API key in AI settings, SQLite entries, event payloads, logs, or model error previews. `tauriFetch` may carry only the `tauri-managed` placeholder; Rust removes Authorization and injects the key from the OS credential store.
+Never put a real API key in settings persistence, SQLite entries, event payloads, logs, or model errors. Old plaintext settings are ignored; the OS credential store is the only secret source.
 
 ## Tauri Stream Cancellation
 
-Keep a request handle per `requestId` and replace the header-request handle with a body-stream handle after response metadata arrives. Cancelling only the initial request leaves an SSE body alive and can continue emitting chunks.
+Keep a request handle per `requestId` and replace the header-request handle with the body-stream handle after response metadata arrives. Cancelling only the initial request leaves an SSE body alive.
 
 ## Agent Session Tool Results
 
-`tool_execution_end` is execution metadata, not a second tool-result message. When hydrating Agent history, use the persisted `message_end` tool result as the canonical entry and only synthesize a fallback when no result message was persisted. The fallback must include the original `toolCallId`; otherwise OpenAI-compatible APIs reject the next request with a missing `tool_call_id` error.
-
-## Unknown Field Preservation
-
-Both TypeScript schemas and Rust models are intended to preserve unknown CCv3 fields where possible. Avoid replacing card objects with narrow reconstructed objects unless you deliberately carry through existing fields.
-
-## Store Side Effects
-
-Do not bypass `useCardStore` update methods for normal UI edits. These methods handle timestamp updates, validation, draft persistence, dirty state, and status messages.
-
-## Stale Recent File Paths
-
-Recent files are absolute local paths and can become stale when users move, rename, or delete card files outside the app. Check forced recent paths with the backend `path_exists` command before prompting to discard dirty changes, and remove missing paths from the recent list instead of surfacing a raw file-system error.
-
-## Frontend And Backend Validation Drift
-
-Validation exists in both TypeScript and Rust. If changing rules, update and test both sides or document why only one side changed.
-
-## PNG Export Requires A Base Image
-
-Backend PNG export needs either `base_png_path`/`basePngPath` or `base_png_data_url`/`basePngDataUrl`. A card alone cannot be exported as PNG without cover image bytes.
-
-## Global Save By Current File Type
-
-The global Save action should overwrite the active card file in place when `currentPath` is JSON, PNG/APNG, or CHARX. For PNG/APNG, prefer the current main icon/cover asset as the export base so cover uploads are reflected in the saved image; use the current image path as the fallback base before writing back to the same path. Only new cards, local drafts, and unrecognized paths should open a save dialog, with PNG as the default format.
-
-## Tauri Argument Naming
-
-`src/lib/tauri.ts` currently passes both camelCase and snake_case argument names for PNG base image fields. Be careful when changing Tauri command argument names; frontend/backend naming mismatches are easy to introduce.
-
-## CHARX Asset Mapping Is Incomplete In UI
-
-Backend CHARX export supports asset entries, but README says the UI does not yet automatically map selected assets into `embeded://` paths. Treat CHARX asset work as a cross-frontend/backend workflow, not a backend-only task.
-
-## Large Data URIs In Controlled Inputs
-
-Asset image `data:` URIs can be very large. Do not render them into controlled `<input>` fields by default on tab mount; this can block the resources page when switching tabs. Use the folded summary/edit-on-demand pattern in `AssetsPanel`.
-
-Do not feed inline image `data:` URI payloads into token statistics. Count ordinary external/embed references, but skip data URI bytes and surface a skipped count instead; otherwise a cover image can swamp the card text estimate and slow the stats page.
-
-Do not export inline image `data:image/...` asset URIs inside JSON/PNG card metadata. SillyTavern may reject cards with oversized embedded metadata as invalid or corrupted. Use the main icon as the PNG base image for PNG export, then strip the inline asset reference from the metadata payload.
-
-After such an export, do not pass the backend-returned stripped card directly to `markSaved()`. Merge editor assets back with `keepEditorAssetsAfterMetadataExport()` so the Resources panel does not go empty and later PNG saves can still reuse the uploaded cover.
-
-Some generated or edited PNG covers include private C2PA/provenance chunks such as `caBX`. SillyTavern can report these PNG cards as invalid/corrupted even when `chara`/`ccv3` metadata is small and valid. Strip `caBX` when writing card PNGs.
-
-## Asset Uploads After Deletes
-
-Asset uploads read files asynchronously. Do not append uploaded assets using a captured `assets` array from the component render, because deletes or other edits can make that snapshot stale before `FileReader` finishes. Use store append helpers that read the latest card state, and keep cover upload separate from ordinary image upload.
-
-## Heavy Editors In Closed Panels
-
-Closed list rows should not mount expensive editor subtrees. World book entries can contain many `CodeEditor`, `AiFieldAssistant`, `ChipInput`, and advanced controls; use `Collapsible` lazy mounting and close-time unmounting for large repeated sections, and keep collapsed summaries bounded to short strings.
-
-## AI Patch Scope
-
-AI agent patches intentionally target a normalized editing surface. Do not expand allowed patch paths casually; raw `/data/...` edits are rejected by design.
-
-## Greeting Promotion Should Preserve Slots
-
-The Greetings panel has field-level AI targets such as `/alternateGreetings/0`. Promoting an alternate greeting to `first_mes` should swap the old first message back into that alternate slot instead of deleting the alternate item. Shrinking the array during promotion can leave stale AI field targets or history patches pointing at missing alternate greeting indexes.
-
-## AI History Applied State
-
-An Agent proposal marked `applied` means the guarded patch was applied to the current editor state; it is not proof that an external card file was saved. Persist `saveState` separately (`saved`, `draft-only`, or `failed`) and keep the card dirty after a save failure. For recovery, re-inject stored patches against the current card instead of copying an old after snapshot over newer edits.
-
-Do not mix `applied` or `discarded` proposals into the active `待审核修改` inspector section. Only `pending` and `conflicted` proposals need user action there; localize state labels such as `待确认`, `存在冲突`, `已应用`, and `已丢弃`. Model-generated summaries are untrusted presentation text, so request the app locale in the Agent system prompt while preserving the original summary content.
-
-## AI History Rendering Cost
-
-AI agent previews can contain large normalized card JSON and world book payloads. Do not eagerly `JSON.stringify` every preview in the chat history; render/stringify preview JSON only when its details panel is opened, and keep old applied/discarded previews collapsed by default. After saving a chat session, update the visible session summary locally instead of immediately re-querying the entire history list.
-
-## SillyTavern World Book Memo Field
-
-SillyTavern imports embedded `character_book.entries[*].comment` as the visible Entry Title/Memo. The legacy/non-ST `name` field is not enough and should not be shown to users. AI-generated or exported lorebook entries must keep `comment` non-empty, usually via `src/lib/lorebookCompat.ts`.
-
-New world book entries should not write `entries[*].name`. Export normalization may use an existing `name` as a fallback source for blank `comment`, then removes `name` from the exported entry.
-
-## SillyTavern Lorebook Extension Fields
-
-Several SillyTavern world book options are read from `entry.extensions.*`, including `position`, `depth`, `probability`, `case_sensitive`, recursion flags, group fields, triggers, and automation IDs. Do not move these into narrow top-level fields or they may appear empty/default after importing into SillyTavern.
-
-SillyTavern's insert-at-depth options are not unique `position` values. They are `extensions.position = 4` with `extensions.role` carrying system/user/assistant. If a UI presents official-looking `[System/User/AI] @D` choices, it must preserve both fields and should clear `role` when switching away from depth insertion.
-
-## Lorebook Insertion Order Is Not UI Index
-
-Do not normalize world book `insertion_order` values to `0..n` just because entries are displayed in an array. Users may intentionally maintain ranges such as `100+`, and SillyTavern allows multiple entries to share the same insertion order. AI `order` patches should be sorted by order while preserving the exact numeric values. Manual drag reordering should move array display order only, without reassigning or deduplicating `insertion_order`.
-
-For draggable collapsible rows, put the `draggable` attribute and drag handlers on the collapsible trigger itself. A nested native draggable handle inside a `<button>` trigger can fail to start drag reliably in the Tauri WebView because the button interaction consumes the pointer gesture. If the interaction must be started from a visible handle, use pointer capture as a fallback and keep React state out of the code path that decides whether `dragover/drop` is allowed; native `drop` may never fire if `dragover.preventDefault()` is skipped.
-
-## Mention Parsing With Chinese Punctuation
-
-`@` edit targets may be followed by Chinese punctuation, such as `@基础，帮我补全一下`. Mention parsing must stop at punctuation as well as whitespace; otherwise `@基础，帮我补全一下` becomes an unknown mention and target filtering is bypassed.
-
-## Static AI Target Lists Go Stale
-
-Do not render a persistent `@` target guide in the AI chat composer. World book entries can change while the drawer is open, and a static row makes stale targets look authoritative. Keep `@` as type-ahead autocomplete and put workflow actions in the composer `+` or `/` command menu.
-
-## Streaming Chat Auto-Scroll
-
-Do not force the AI chat drawer to the bottom for every streamed delta. Respect manual upward scrolling by auto-following only while the message list is already near the bottom; otherwise expanded reasoning panels and earlier messages become impossible to inspect or collapse during streaming.
-
-## Agent Transcript Grouping And Overflow
-
-PI can emit multiple assistant messages around sequential tool calls during one user request. Render the request as one transcript turn and keep tool results inside a collapsed trace; mapping every raw `AgentMessage` directly to a card makes one reply look fragmented. The Agent Studio transcript must use `min-width: 0`, constrain message children to `max-width: 100%`, allow long JSON/path values to wrap, and keep horizontal overflow disabled. Do not stringify large tool results while the trace is closed; format them only after the user opens the result.
-
-Agent text is Markdown and must not be inserted with `dangerouslySetInnerHTML`. Keep the renderer React-based, render raw HTML as text, and validate link protocols before creating anchors. The app shell must also be allowed to shrink below the old 960px legacy minimum; otherwise narrow-window screenshots and element bounds include an invisible page-wide overflow area. Message bubbles should use a content-sized width with a capped `max-width`, while tables and code blocks handle their own bounded overflow.
-
-## Conversation Replacement Must Be Append-Only
-
-Regeneration and edit/resend are branch replacements, not destructive history rewrites. Before replacing the current turn, save the message prefix, the current proposals, and the card snapshot in memory; persist an `agent_conversation_branch` entry containing the new prefix, then append new message/tool entries. Hydration must replay entries in position order and reset the active message list at each branch marker. If a proposal was applied, restore its earliest pre-apply `rollbackCard` before starting the new prompt; if the snapshot is missing or cannot be saved, stop the operation instead of generating against an unknown card state. Keep the action lock shared by regenerate, edit/resend, proposal apply/discard, and new-session navigation so two branches cannot race.
-
-The transcript turns use CSS Grid. Do not use Flexbox's `align-self: flex-end` to position the user bubble; in Grid that controls the block axis and leaves the bubble on the left. Set the turn's inline alignment explicitly and use `justify-self: end` for the user bubble so wide windows retain the left-Agent/right-user conversation rhythm.
-
-## Workspace-Grouped Agent History
-
-`list_agent_sessions` is intentionally scoped to one workspace and cannot populate the left history for users who switch between cards. Use the cross-workspace `list_agent_session_history` query and group by `workspaceId` in the UI. Keep the five-session limit and expanded state inside each group; a single global expanded boolean makes one card's older records appear under another card. When restoring a session from another card, require its persisted path and reopen the card before changing the active session.
-
-## AI Request Cancellation
-
-The chat drawer stop control is a soft cancel. It should increment the local request token, clear `busy`, and ignore stale stream/result callbacks, because Tauri `invoke` calls cannot currently be aborted from the frontend wrapper. Do not let stale responses mutate messages after the user has stopped a generation or started a newer request.
-
-Structured edit and workflow requests should ask the backend for JSON object responses. If Agent workflows such as token optimization are sent as ordinary prose chat, thinking-capable models may stream reasoning for a long time and then return output that `parseAiAgentResponse` cannot use.
+`tool_execution_end` is execution metadata, not a second tool-result message. Hydration should prefer persisted `message_end` tool results and preserve `toolCallId`.
 
 ## Pi Agent End Is Not Success
 
-Pi Core catches provider and stream failures inside `prompt()` and emits an empty assistant message followed by `agent_end`. Do not treat `agent_end` or a resolved `prompt()` Promise as success. Inspect the final assistant `stopReason`, `errorMessage`, and `state.errorMessage`; classify `error` and `aborted` separately and show the failure in the transcript. This is especially important for regeneration and edit/resend, where an empty failure message otherwise looks like a new loading bubble.
+Pi may emit `agent_end` for error or aborted messages. Classify the final assistant message with `runStatus.ts`; do not render an empty failed message as a successful completion.
 
-Workflow command menu selections should show a removable composer pill instead of immediately sending or inserting the workflow's default instruction into the text area. Users often need to add direction after choosing a broad workflow such as token optimization, so keep the text area dedicated to optional user guidance and carry the selected workflow action into `runAgentRequest` when the final message is sent.
+## Conversation Replacement
 
-## Native Select Dropdowns In Tauri
+Regenerate/edit-resend must keep the original permission envelope for that user turn. Abort active work, prepare the message prefix, persist a branch marker, and reconcile related proposals before starting the replacement run.
 
-Native `<select>` dropdown surfaces can render outside the app window or look like browser/system UI in the Tauri desktop shell. For drawer popovers and dense desktop controls such as AI chat history, prefer an app-rendered popover/listbox that is bounded by the drawer/window.
+## Store Side Effects
 
-## Page Transition Containers Must Not Clip Panels
+Normal UI and confirmed Agent changes must use store actions. They maintain modification timestamps, validation, draft persistence, dirty state, and revision increments.
 
-The main workspace scroll is owned by `.workspace-scroll`. Do not wrap tab panels in a `height: 100%` plus `overflow: hidden` transition container, because long settings/preview/validation pages will be clipped when the Tauri window is short and the outer scroller will not see their real height. Keep the entering page in normal flow and make only the exiting animation layer absolute.
+## Greeting Promotion Should Preserve Slots
 
-The same `.workspace-scroll` element is reused across tabs. Preserve the per-tab scroll memory in `src/app/App.tsx`; otherwise scrolling a long panel such as Token Stats to the bottom will make the next panel open at that inherited offset.
+Promoting an alternate greeting must swap it with `first_mes`. Shrinking the array can invalidate exact indexed field scopes.
 
-## Inspector-Nested Panel Overflow
+## Frontend And Backend Validation Drift
 
-Legacy editor panels are also rendered inside the Agent Studio inspector. Do not reuse their full-page grid minimums there: `.settings-layout` must stack at inspector width, `.action-grid` must use `minmax(0, 1fr)`, and the inspector itself must own the scroll region. Otherwise a 560px editor desk clips base URLs, model controls, and project actions instead of allowing the panel to reflow.
+Validation exists in TypeScript and Rust. Update and test both sides when changing shared card rules.
+
+## PNG Export Requires A Base Image
+
+PNG export needs a base path or data URL. Strip inline image metadata and private `caBX` provenance chunks, then merge editor-only assets back after export so the Resources panel remains usable.
+
+## Global Save By Current File Type
+
+Overwrite recognized JSON, PNG/APNG, and CHARX paths in place. New cards, drafts, and unknown paths should open the save dialog.
+
+## Asset UI Performance
+
+Do not mount large data URIs in controlled inputs, include them in token counts, or capture a stale asset array across asynchronous uploads. Keep heavy lorebook editors lazily mounted in collapsed lists.
+
+## Stale Recent File Paths
+
+Check recent paths before prompting to discard dirty changes. Remove missing paths instead of surfacing a raw file-system error.
+
+## Inspector Overflow
+
+Agent Studio's inspector is a nested scroll surface. Panels must respect the available width, avoid global minimum widths, and preserve focus trapping and Escape close behavior in overlay mode.
 
 ## Windows Rust Toolchain
 
-On this machine, Rust verification can fail because the GNU toolchain lacks `dlltool.exe`. This is an environment limitation, not necessarily a code failure.
+Rust checks require the MSVC build tools and Windows SDK used by Tauri. Report missing native prerequisites rather than hiding a failed check.

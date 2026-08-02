@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from "react";
-import type { AiFieldAction } from "./aiAgent";
+import type { AgentFieldAction } from "./agent/uiContext";
 
 export type ContextMenuTarget = AiFieldContextMenuTarget | LorebookPanelContextMenuTarget | LorebookEntryContextMenuTarget;
 
@@ -10,7 +10,7 @@ export interface AiFieldContextMenuTarget {
   value: string;
   ready: boolean;
   busy: boolean;
-  runAction: (action: AiFieldAction) => void | Promise<void>;
+  runAction: (action: AgentFieldAction) => void | Promise<void>;
 }
 
 export interface LorebookPanelContextMenuTarget {

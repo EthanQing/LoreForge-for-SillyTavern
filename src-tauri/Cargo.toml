@@ -1,6 +1,6 @@
 [package]
 name = "sillytavern-card-creator"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local-first CCv3 character card editor"
 authors = ["Ethan"]
 edition = "2021"

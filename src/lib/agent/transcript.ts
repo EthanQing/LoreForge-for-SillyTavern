@@ -48,7 +48,7 @@ export function buildAgentTranscript(messages: unknown[], streamingMessage?: unk
 
     if (message.role === "user") {
       flushTurn();
-      current = { userText: readAgentMessageContent(message.content), assistantText: "", assistantPresent: false, tools: [], streaming: false };
+      current = { userText: decodeAgentRequest(readAgentMessageContent(message.content)).instruction, assistantText: "", assistantPresent: false, tools: [], streaming: false };
       continue;
     }
 
@@ -137,3 +137,4 @@ function toAgentMessageRecord(message: unknown): AgentMessageRecord | undefined 
   if (!message || typeof message !== "object") return undefined;
   return message as AgentMessageRecord;
 }
+import { decodeAgentRequest } from "./permissions";

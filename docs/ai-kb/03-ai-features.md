@@ -1,45 +1,58 @@
 # AI Features
 
-## Agent Studio Runtime (v0.2)
+## Runtime And Shared Session
 
-The production path is src/lib/agent/controller.ts plus src/lib/agent/tools.ts. It dynamically loads Pi Agent Core 0.83.0 and Pi AI 0.83.0, uses a stable Agent, sequential tool execution, steering/follow-up queues, abort, context compaction, and a custom Tauri fetch implementation.
+The production runtime is `src/lib/agent/controller.ts` with Pi Agent Core and Pi AI. Agent Studio owns one Controller per active session. The main composer, `AiFieldAssistant`, and lorebook candidate entry point use `AgentStudioContext`, so they share messages, events, permission state, and proposals.
 
-`CardAgentController.streamingMessage` exposes PI's current partial assistant message. Agent Studio combines it with completed messages through `src/lib/agent/transcript.ts`, so a tool loop remains one visible Agent turn and updates in place as SSE deltas arrive. User and assistant text is rendered by `src/components/MarkdownMessage.tsx` with React nodes rather than raw HTML; headings, lists, tables, quotes, code blocks, links, and common inline emphasis are supported while unsafe link schemes remain plain text. Tool result JSON is formatted only when its result control is opened.
+Completed and streaming messages are grouped into visible turns by `transcript.ts`. The frontend-only permission envelope is removed before user text is rendered.
 
-The five built-in tools are inspect_card, inspect_lorebook_entry, inspect_validation, inspect_token_usage, and propose_card_changes. Inspection tools return normalized, image-free card data. The proposal tool checks cardRevision, hard allowed paths, patch types, guards, and frontend validation; it never writes Zustand, files, or card content.
+## Frontend Permission Boundary
 
-The right inspector's `待审核修改` section contains only `pending` and `conflicted` proposals. Applied and discarded proposals are not active review items and are not shown there. Proposal state labels are localized in the UI, and the Agent system prompt asks for Chinese user-facing summaries unless the user requests another language.
+`AgentPermission` supports card, section, exact field, whole lorebook, and one lorebook entry scopes. Capabilities distinguish read, edit, and inject. Permissions are created from the scope selector, an exact field action, the lorebook entry point, or a resolved `@` target.
 
-contracts.ts defines AiConnectionProfile, CardProposal, proposal states, deterministic hashes, diffs, and conflict-safe apply. Unrelated edits can merge. A changed affected path marks a proposal conflicted and never force-overwrites the current card.
+The model receives no permission parameter and cannot expand the current scope. Unknown or ambiguous mentions fail instead of falling back to a card-wide scope. A lorebook-entry scope records the entry fingerprint and exact editable fields.
 
-The default Agent boundary includes only normalized card roots. Field-level Agent actions pass a single target path as an additional hard boundary. The Agent receives no file, shell, or arbitrary network tools.
+## Semantic Tools
 
-## Provider and credential boundary
+Inspection tools:
 
-The UI supports DeepSeek and OpenAI-compatible Chat Completions. Models stream through pi-ai Models.streamSimple with a browser-safe fetch that calls Rust start_ai_http_stream. Rust removes placeholder Authorization and profile headers, reads the actual secret from the OS keyring, and emits base64 response chunks filtered by requestId.
+- `inspect_card`
+- `inspect_lorebook_entry`
+- `inspect_validation`
+- `inspect_token_usage`
 
-The Rust layer also provides cancel_ai_http_stream, configure_ai_profile, fetch_ai_models, store_ai_credential, ai_credential_status, and delete_ai_credential. HTTPS is required by default; HTTP is limited to loopback unless explicitly enabled. Redirects stay on the same origin and request/response sizes are capped.
+Proposal tools:
 
-Connection tests send a no-side-effect card_agent_probe tool declaration. A successful tool call records supported; a normal fallback response records unsupported; an unavailable probe is retried as ordinary chat and remains a connection error if that also fails.
+- `propose_card_edits`
+- `propose_lorebook_entry_edits`
+- `propose_lorebook_injection`
 
-AI settings keep apiKey only as a transient migration/input field. store.ts strips it before localStorage writes. Legacy localStorage keys are migrated to the system credential store once; failure remains visible in Settings and does not silently create a plaintext file fallback.
+There is no generic patch or delete tool. Tool handlers read the current snapshot, apply the active frontend permission, validate semantic input, compile a proposed card in memory, and create a `CardProposal`. They never mutate Zustand or files.
 
-## Sessions and proposals
+## Lorebook Mapping And Candidate Review
 
-Each card has workspaceId and monotonically increasing cardRevision. Agent sessions and proposals are persisted in Rust SQLite tables card_workspaces, workspace_paths, agent_sessions, agent_entries, and agent_proposals. Completed messages are appended on message_end, including assistant tool calls and tool results. During hydration, a completed tool result is restored from message_end only; tool execution events are used only to recover executions that ended before their result message was persisted, and every recovered result keeps its toolCallId.
+`changes.ts` maps semantic lorebook fields to CCv3/SillyTavern fields, including keywords, secondary keys, content, enabled/regex/selective flags, constant/vector trigger strategy, position 0–7, depth role, insertion order, probability, priority, case sensitivity, and outlet. Existing entries are copied before edits so unrecognized top-level and extension fields remain unchanged.
 
-The left history uses `list_agent_session_history` to load sessions across workspaces, then groups them by card workspace. `AgentSessionHistory` shows the five newest sessions in each group by default; older sessions are revealed by a toggle stored under that workspace ID, so expanding one card never expands another. A session from another card can be selected only when its persisted workspace path can be reopened.
+Injection candidates remain in proposal state. `ProposalCard` shows metadata, a content summary, estimated tokens, validation errors, and a checkbox. Apply requires at least one valid selection and recompiles the entire selected batch before one store update. A single invalid selection prevents every write.
 
-The old sessions/messages tables are retained for idempotent migration. Rows without a workspace are legacy_read_only archives. Copying a legacy archive into a card creates a new session; old pending previews cannot be applied directly.
+## Conflict And Apply Rules
 
-Conversation actions are serialized by `AgentStudio`: only the latest assistant turn without a later user message can regenerate, and only the latest user message can enter edit/resend mode. `replaceConversation()` aborts active work, clears steering/follow-up queues, restores the message prefix before the last user message, and prompts the retained or edited user text. Each replacement appends a `agent_conversation_branch` marker instead of deleting entries. Hydration resets the in-memory message list at each marker and then replays newer entries. Applied `CardProposal` records include `rollbackCard`; pending/conflicted proposals from the replaced turn are discarded, while applied proposals are rolled back and then discarded.
+A proposal is tied to workspace, card revision, stable full-card hash, and the permission used to create it. Existing-entry edits also contain a stable entry fingerprint. Confirming a proposal rechecks all of these values, recompiles semantic changes, and runs card validation. Conflicts cannot be forced through.
 
-Pi Core can encode provider failures as an empty assistant message with `stopReason: "error"` or `"aborted"` and still emit `agent_end`; `prompt()` may therefore resolve without a rejected Promise. `src/lib/agent/runStatus.ts` is the single success/error/abort classifier used by the controller. Failed and aborted messages keep their error metadata in the transcript and never render as a successful completion or a loading placeholder.
+Agent-generated changes always require confirmation. Manual lorebook editing and deletion remain normal store-driven editor actions.
 
-## Field-level actions
+## Provider And Credential Boundary
 
-AiFieldAssistant creates a short-lived CardAgentController with one target path. It asks the Agent to read the current revision and create a proposal, previews the normalized result, and calls the existing editor callback only after the user confirms. Direct JSON response parsing is not part of the production path.
+DeepSeek and OpenAI-compatible requests stream through the Tauri HTTP/SSE bridge. Rust reads the API key from the OS credential store and enforces the URL policy. Settings retain provider, endpoint, model, context/output limits, timeout, temperature, thinking level, tool capability, and insecure-HTTP choice.
 
-## Legacy source
+Plaintext API keys from old local settings are ignored. There is no plaintext or ordinary-chat probe fallback. Connection testing uses the current network path and one no-side-effect tool probe.
 
-src/features/ai-chat/AiChatDrawer.tsx and the old Guide/Edit prompt builders remain only for compatibility tests and migration reference. App.tsx does not mount the drawer, no Rust send_ai_chat or test_ai_connection command is registered, and all production actions use Agent Studio proposals.
+## Agent History
+
+`persistence.ts` uses the Agent-only Rust commands backed by `agent_history.sqlite3`. The database contains current workspace, session, entry, and proposal records only.
+
+v0.3.0 intentionally does not migrate prior Guide/Edit or Pi Agent history. Each database open deletes the three exact old `ai_chat_history.sqlite3` files if present; unrelated application data, card files, and drafts are untouched.
+
+## CardForge Design Reference
+
+The candidate-review interaction is informed by CardForge's centralized card state and select-then-inject workflow. This project independently implements a stricter frontend permission boundary, semantic compilation, revision/fingerprint conflict checks, and atomic user confirmation; GPL-3.0 source is not copied.

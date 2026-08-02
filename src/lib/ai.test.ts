@@ -11,4 +11,12 @@ describe("AI settings normalization", () => {
     expect(normalizeAiSettings({ timeoutMs: 1_800_000 }).timeoutMs).toBe(AI_MAX_TIMEOUT_MS);
     expect(normalizeAiSettings({ timeoutMs: 9_999_999 }).timeoutMs).toBe(AI_MAX_TIMEOUT_MS);
   });
+
+  it("keeps only the Pi Agent thinking level contract", () => {
+    const settings = normalizeAiSettings({ thinkingLevel: "xhigh", stream: false, showReasoning: false, thinkingEffort: "max" });
+    expect(settings.thinkingLevel).toBe("xhigh");
+    expect("stream" in settings).toBe(false);
+    expect("showReasoning" in settings).toBe(false);
+    expect("thinkingEffort" in settings).toBe(false);
+  });
 });

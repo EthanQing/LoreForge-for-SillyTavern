@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Check, ChevronRight, CircleStop, FileText, FolderOpen, MessageSquarePlus, PanelRight, Pencil, Plus, RefreshCw, Send, Settings2, ShieldCheck, Sparkles, SquarePen } from "lucide-react";
+import { ChevronRight, CircleStop, FolderOpen, MessageSquarePlus, PanelRight, Pencil, Plus, RefreshCw, Send, Settings2, ShieldCheck, Sparkles, SquarePen } from "lucide-react";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { useCardStore } from "../../app/store";
 import { useProjectActions } from "../../app/useProjectActions";
@@ -11,13 +11,30 @@ import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts"
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
 import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser } from "../../lib/agent/conversationActions";
 import { getProposalStateLabel, getProposalSummary, isReviewableProposal } from "../../lib/agent/proposalPresentation";
-import { hydrateAgentMessages, type PersistedAgentEntry } from "../../lib/agent/sessionMessages";
 import { buildAgentTranscript, formatAgentToolContent, readAgentMessageContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
 import type { CharacterCardV3 } from "../../lib/schema";
 import { useI18n } from "../../lib/i18n";
-import { invoke } from "@tauri-apps/api/core";
 import { AgentSessionHistory } from "./AgentSessionHistory";
 import type { AgentSessionHistoryRecord } from "../../lib/agent/sessionHistory";
+import { AgentStudioContext, buildFieldActionInstruction, resolveFieldActionPermission, type AgentFieldAction, type AgentFieldTarget } from "../../lib/agent/uiContext";
+import {
+  decodeAgentRequest,
+  describeAgentPermission,
+  encodeAgentRequest,
+  permissionForPreset,
+  resolveAgentRequest,
+  type AgentScopePreset
+} from "../../lib/agent/permissions";
+import {
+  hydrateAgentProposals,
+  hydrateAgentSession,
+  hydrateAgentSessionHistory,
+  persistAgentBranch,
+  persistAgentEvent,
+  persistAgentProposal,
+  persistWorkspace
+} from "../../lib/agent/persistence";
+import { ProposalCard } from "./ProposalCard";
 
 const BasicInfoPanel = lazy(() => import("../card-editor/BasicInfoPanel").then((module) => ({ default: module.BasicInfoPanel })));
 const PromptPanel = lazy(() => import("../card-editor/PromptPanel").then((module) => ({ default: module.PromptPanel })));
@@ -29,7 +46,6 @@ const ValidationPanel = lazy(() => import("../card-editor/ValidationPanel").then
 const TokenStatsPanel = lazy(() => import("../card-editor/TokenStatsPanel").then((module) => ({ default: module.TokenStatsPanel })));
 const SettingsPanel = lazy(() => import("../settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 const ImportExportPanel = lazy(() => import("../import-export/ImportExportPanel").then((module) => ({ default: module.ImportExportPanel })));
-const agentEntryPositions = new Map<string, number>();
 
 type StudioEditorTab = "basic" | "prompts" | "greetings" | "lorebook" | "assets" | "preview" | "tokenStats" | "validation" | "settings" | "home";
 type ConversationOperation = "idle" | "regenerating" | "resending";
@@ -57,6 +73,7 @@ export function AgentStudio(): ReactNode {
   const cardName = getCardDisplayName(card, t);
   const [sessionId, setSessionId] = useState(() => readSessionId(workspaceId));
   const [input, setInput] = useState("");
+  const [requestScope, setRequestScope] = useState<AgentScopePreset>("card");
   const [messages, setMessages] = useState<unknown[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<unknown>();
   const [events, setEvents] = useState<AgentControllerEvent[]>([]);
@@ -74,6 +91,7 @@ export function AgentStudio(): ReactNode {
   const lastFocusRef = useRef<HTMLElement | null>(null);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const actionLockRef = useRef(false);
   const conversationSnapshotsRef = useRef<ConversationSnapshot[]>([]);
 
@@ -87,6 +105,7 @@ export function AgentStudio(): ReactNode {
     setConversationOperation("idle");
     setEditingLastUser(false);
     setEditedUserText("");
+    setRequestScope("card");
     actionLockRef.current = false;
     conversationSnapshotsRef.current = [];
     controllerRef.current?.dispose();
@@ -132,7 +151,7 @@ export function AgentStudio(): ReactNode {
         maxOutputTokens: aiSettings.maxOutputTokens,
         timeoutMs: aiSettings.timeoutMs,
         temperature: aiSettings.temperature,
-        thinkingLevel: aiSettings.thinkingMode === "disabled" ? "off" : aiSettings.thinkingLevel,
+        thinkingLevel: aiSettings.thinkingLevel,
         toolCalling: aiSettings.toolCalling,
         allowInsecureHttp: aiSettings.allowInsecureHttp
       },
@@ -156,7 +175,7 @@ export function AgentStudio(): ReactNode {
     });
     controllerRef.current = next;
     return next;
-  }, [aiSettings, sessionId]);
+  }, [aiSettings, sessionId, workspaceId]);
 
   useEffect(() => () => controller.dispose(), [controller]);
 
@@ -194,33 +213,37 @@ export function AgentStudio(): ReactNode {
   const submit = useCallback(async () => {
     const message = input.trim();
     if (!message || editingLastUser || conversationOperation !== "idle") return;
-    setInput("");
-    setEvents((current) => [...current, { type: "status", message: "正在运行 Agent…" }]);
     try {
-      await controller.send(message);
+      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope);
+      if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
+      setInput("");
+      setEvents((current) => [...current, { type: "status", message: `正在运行 Agent · ${describeAgentPermission(request.permission)}` }]);
+      await controller.send(encodeAgentRequest(request.permission, request.instruction), request.permission);
       setMessages([...controller.messages]);
       setStreamingMessage(controller.streamingMessage);
       saveSessionId(workspaceId, sessionId);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [controller, conversationOperation, editingLastUser, input, sessionId, setStatus, workspaceId]);
+  }, [controller, conversationOperation, editingLastUser, input, requestScope, sessionId, setStatus, workspaceId]);
 
   const queueFollowUp = useCallback(async () => {
     const message = input.trim();
     if (!message || editingLastUser || conversationOperation !== "idle") return;
-    setInput("");
     try {
-      await controller.continueAfterRun(message);
+      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope);
+      if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
+      setInput("");
+      await controller.continueAfterRun(encodeAgentRequest(request.permission, request.instruction), request.permission);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [controller, conversationOperation, editingLastUser, input, setStatus]);
+  }, [controller, conversationOperation, editingLastUser, input, requestScope, setStatus]);
 
   const applyProposal = useCallback(async (proposal: CardProposal) => {
     if (actionLockRef.current || conversationOperation !== "idle") return;
     const current = useCardStore.getState();
-    const outcome = applyCardProposal(proposal, current.card);
+    const outcome = applyCardProposal(proposal, current.card, current.cardRevision, proposal.selectedCandidateIds);
     if (outcome.state !== "applied") {
       const blockedProposal = { ...proposal, state: outcome.state === "conflicted" ? "conflicted" as const : "pending" as const, updatedAt: Date.now() };
       setProposals((items) => items.map((item) => item.id === proposal.id ? blockedProposal : item));
@@ -236,6 +259,16 @@ export function AgentStudio(): ReactNode {
     setProposals((items) => items.map((item) => item.id === proposal.id ? savedProposal : item));
     void persistAgentProposal(savedProposal);
   }, [applyAgentCard, conversationOperation, saveCardSnapshot, setStatus]);
+
+  const toggleCandidate = useCallback((proposal: CardProposal, candidateId: string, selected: boolean) => {
+    if (proposal.state !== "pending" || conversationOperation !== "idle") return;
+    const nextIds = selected
+      ? [...new Set([...proposal.selectedCandidateIds, candidateId])]
+      : proposal.selectedCandidateIds.filter((id) => id !== candidateId);
+    const updated = { ...proposal, selectedCandidateIds: nextIds, updatedAt: Date.now() };
+    setProposals((items) => items.map((item) => item.id === proposal.id ? updated : item));
+    void persistAgentProposal(updated);
+  }, [conversationOperation]);
 
   const discardProposal = useCallback((proposal: CardProposal) => {
     if (actionLockRef.current || conversationOperation !== "idle") return;
@@ -257,7 +290,7 @@ export function AgentStudio(): ReactNode {
     if (actionLockRef.current || conversationOperation !== "idle" || controller.isStreaming) return;
     const target = getConversationActionTarget(messages as AgentMessage[], streamingMessage as AgentMessage | undefined);
     if (!target.lastUserMessage) return;
-    setEditedUserText(readMessageText(target.lastUserMessage));
+    setEditedUserText(decodeAgentRequest(readMessageText(target.lastUserMessage)).instruction);
     setEditingLastUser(true);
   }, [conversationOperation, controller, messages, streamingMessage]);
 
@@ -295,8 +328,15 @@ export function AgentStudio(): ReactNode {
     const target = getConversationActionTarget(currentMessages, streamingMessage as AgentMessage | undefined);
     if (!target.lastUserMessage || (mode === "regenerating" && !target.canRegenerate)) return;
 
-    const userText = replacementText ?? readMessageText(target.lastUserMessage);
+    const previousRequest = decodeAgentRequest(readMessageText(target.lastUserMessage));
+    const userText = replacementText ?? previousRequest.instruction;
     if (!userText.trim()) return;
+    if (!previousRequest.permission) {
+      setStatus("该消息没有有效的 Agent 权限范围，不能重新生成或重发。");
+      return;
+    }
+    const permission = previousRequest.permission;
+    const encodedRequest = encodeAgentRequest(permission, userText);
 
     const baseMessages = getMessagesBeforeLastUser(currentMessages);
     const toolCallIds = getLatestTurnToolCallIds(currentMessages);
@@ -322,7 +362,7 @@ export function AgentStudio(): ReactNode {
 
     let branchPrepared = false;
     try {
-      await controller.replaceConversation(baseMessages, userText, async () => {
+      await controller.replaceConversation(baseMessages, encodedRequest, permission, async () => {
         await rollbackRelatedProposals(relatedProposals, snapshot.card);
         const persisted = await persistAgentBranch(workspaceId, sessionId, mode, baseMessages, relatedProposals.map((proposal) => proposal.id));
         if (!persisted) {
@@ -425,6 +465,31 @@ export function AgentStudio(): ReactNode {
     setInspectorWidth((current) => clamp(current + amount, 420, 720));
   };
 
+  const agentReady = Boolean(aiSettings.enabled && aiSettings.baseUrl.trim() && aiSettings.model.trim());
+  const runFieldAction = useCallback(async (target: AgentFieldTarget, action: AgentFieldAction) => {
+    if (!agentReady) throw new Error("请先配置可用的 Agent 模型与系统凭据。");
+    if (conversationOperation !== "idle" || controller.isStreaming) throw new Error("Agent 正在处理另一项请求，请稍后重试。");
+    const currentCard = useCardStore.getState().card;
+    const permission = resolveFieldActionPermission(currentCard, target);
+    const instruction = buildFieldActionInstruction(target, action);
+    setFocusedEditor(null);
+    setRightOpen(false);
+    setEvents((current) => [...current, { type: "status", message: `字段请求已发送 · ${describeAgentPermission(permission)}` }]);
+    await controller.send(encodeAgentRequest(permission, instruction), permission);
+    setMessages([...controller.messages]);
+    setStreamingMessage(controller.streamingMessage);
+    saveSessionId(workspaceId, sessionId);
+    scrollTranscriptToBottom();
+  }, [agentReady, controller, conversationOperation, scrollTranscriptToBottom, sessionId, workspaceId]);
+
+  const prepareLorebookRequest = useCallback(() => {
+    setRequestScope("worldbook");
+    setFocusedEditor(null);
+    setRightOpen(false);
+    setInput("");
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }, []);
+
   const transcript = buildAgentTranscript(messages, streamingMessage);
   const actionTarget = getConversationActionTarget(messages as AgentMessage[], streamingMessage as AgentMessage | undefined);
   const latestUserTurnIndex = transcript.reduce((lastIndex, turn, index) => turn.userText ? index : lastIndex, -1);
@@ -432,8 +497,15 @@ export function AgentStudio(): ReactNode {
     ? transcript.reduce((lastIndex, turn, index) => turn.assistantPresent || turn.streaming ? index : lastIndex, -1)
     : -1;
   const actionBusy = conversationOperation !== "idle" || controller.isStreaming;
+  const studioActions = useMemo(() => ({
+    ready: agentReady,
+    busy: actionBusy,
+    runFieldAction,
+    prepareLorebookRequest
+  }), [actionBusy, agentReady, prepareLorebookRequest, runFieldAction]);
 
   return (
+    <AgentStudioContext.Provider value={studioActions}>
     <section
       className={rightOpen ? "agent-studio agent-studio-inspector-open" : "agent-studio"}
       style={{ "--inspector-width": rightOpen ? `${inspectorWidth}px` : "0px" } as CSSProperties}
@@ -448,7 +520,6 @@ export function AgentStudio(): ReactNode {
           onSelectSession={selectSession}
         />
         <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} disabled={actionBusy} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); setEvents([]); setProposals([]); setEditingLastUser(false); setEditedUserText(""); conversationSnapshotsRef.current = []; }}>新建会话</Button>
-        <div className="agent-studio-archive"><span className="agent-studio-section-label">只读档案</span><button type="button" className="agent-studio-archive-item" onClick={() => setStatus("旧 Guide/Edit 历史以未绑定只读档案展示。")}><FileText size={14} />旧版历史</button></div>
         <nav className="agent-studio-nav" aria-label="卡片编辑入口">
           <button type="button" onClick={() => openEditor("home")}><FolderOpen size={15} />资源与文件</button>
           <button type="button" onClick={() => openEditor("preview")}><PanelRight size={15} />预览</button>
@@ -475,9 +546,19 @@ export function AgentStudio(): ReactNode {
             onRegenerate={() => void replaceConversation("regenerating")}
           />)}
           {events.filter((event) => event.type === "status").slice(-3).map((event, index) => <div className={`agent-runtime-status${event.statusTone ? ` is-${event.statusTone}` : ""}`} role={event.statusTone === "error" ? "alert" : "status"} key={(event.message ?? "status") + "-" + index}>{event.message}</div>)}
-          {proposals.filter((proposal) => proposal.state === "pending" || proposal.state === "conflicted").map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} disabled={actionBusy} onApply={() => void applyProposal(proposal)} onDiscard={() => discardProposal(proposal)} />)}
+          {proposals.filter((proposal) => proposal.state === "pending" || proposal.state === "conflicted").map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} disabled={actionBusy} onApply={() => void applyProposal(proposal)} onDiscard={() => discardProposal(proposal)} onToggleCandidate={(candidateId, selected) => toggleCandidate(proposal, candidateId, selected)} />)}
         </div>
-        <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => handleComposerKeyDown(event, submit)} placeholder="描述你想检查、整理或提出的修改… 支持 @目标范围" rows={3} disabled={editingLastUser || conversationOperation !== "idle"} /><div className="agent-composer-footer"><span><SquarePen size={14} />Agent 只读 + 提案模式</span><div className="agent-composer-actions"><Button type="button" variant="ghost" icon={<MessageSquarePlus size={14} />} disabled={!input.trim() || !controller.isStreaming || editingLastUser || conversationOperation !== "idle"} onClick={() => void queueFollowUp()}>完成后继续</Button><Button type="submit" icon={<Send size={15} />} disabled={!input.trim() || editingLastUser || conversationOperation !== "idle"}>发送</Button></div></div></form>
+        <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+          <div className="agent-composer-scope-row">
+            <label htmlFor="agent-request-scope">权限范围</label>
+            <select id="agent-request-scope" value={requestScope} onChange={(event) => setRequestScope(event.currentTarget.value as AgentScopePreset)} disabled={controller.isStreaming}>
+              <option value="card">整张卡片</option><option value="basic">基础信息</option><option value="prompts">提示词</option><option value="greetings">开场白</option><option value="worldbook">世界书</option>
+            </select>
+            <span className="agent-scope-pill">{describeAgentPermission(permissionForPreset(requestScope))}</span>
+          </div>
+          <textarea ref={composerRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => handleComposerKeyDown(event, submit)} placeholder="描述你想检查、整理或提出的修改… 输入 @条目标题 可锁定单个条目" rows={3} disabled={editingLastUser || conversationOperation !== "idle"} />
+          <div className="agent-composer-footer"><span><SquarePen size={14} />前端固定权限 · 用户确认后写入</span><div className="agent-composer-actions"><Button type="button" variant="ghost" icon={<MessageSquarePlus size={14} />} disabled={!input.trim() || !controller.isStreaming || editingLastUser || conversationOperation !== "idle"} onClick={() => void queueFollowUp()}>完成后继续</Button><Button type="submit" icon={<Send size={15} />} disabled={!input.trim() || editingLastUser || conversationOperation !== "idle"}>发送</Button></div></div>
+        </form>
       </section>
 
       {rightOpen ? <button className="agent-inspector-backdrop" type="button" aria-label="关闭编辑台" onClick={closeInspector} /> : null}
@@ -498,6 +579,7 @@ export function AgentStudio(): ReactNode {
         />
       </aside>
     </section>
+    </AgentStudioContext.Provider>
   );
 }
 
@@ -535,10 +617,6 @@ function InspectorOverview({ card, report, proposals, onOpenEditor }: { card: Re
   const stats = buildCardTokenStats(card);
   const reviewableProposals = proposals.filter(isReviewableProposal);
   return <div className="agent-inspector-overview"><section className="agent-inspector-block"><span className="agent-inspector-label">CCv3 索引</span><div className="agent-index-grid">{[["基础", "basic"], ["提示词", "prompts"], ["开场白", "greetings"], ["世界书", "lorebook"], ["资源", "assets"]].map(([label, tab]) => <button type="button" key={tab} onClick={() => onOpenEditor(tab as StudioEditorTab)}><span>{label}</span><ChevronRight size={13} /></button>)}</div></section><section className="agent-inspector-block"><div className="agent-block-title"><span>待审核修改</span><b aria-label={`${reviewableProposals.length} 个待审核修改`}>{reviewableProposals.length}</b></div><p className="agent-muted">Agent 只能创建修改提案；确认后才会写入卡片。</p>{reviewableProposals.length === 0 ? <p className="agent-muted">暂无待审核修改。</p> : reviewableProposals.slice(-3).map((proposal) => <div className="agent-mini-proposal" key={proposal.id}><strong>{getProposalSummary(proposal.summary)}</strong><span>{proposal.diffs.length} 个字段 · {getProposalStateLabel(proposal.state)}</span></div>)}</section><section className="agent-inspector-block"><div className="agent-block-title"><span>状态</span><button type="button" onClick={() => onOpenEditor("validation")}><ChevronRight size={13} /></button></div><p className={report.valid ? "agent-good" : "agent-danger"}>{report.valid ? "当前卡片通过前端校验" : report.errors.length + " 个错误需要处理"}</p><p className="agent-muted">{report.warnings.length} 个警告 · {stats.totalTokens.toLocaleString()} estimated tokens</p></section></div>;
-}
-
-function ProposalCard({ proposal, disabled, onApply, onDiscard }: { proposal: CardProposal; disabled: boolean; onApply: () => void; onDiscard: () => void }) {
-  return <article className={proposal.state === "conflicted" ? "agent-proposal-card conflicted" : "agent-proposal-card"}><div className="agent-proposal-heading"><span>{proposal.state === "conflicted" ? "冲突提案" : "待审核提案"}</span><code>{proposal.id.slice(-8)}</code></div><strong>{getProposalSummary(proposal.summary)}</strong><div className="agent-proposal-diffs">{proposal.diffs.slice(0, 4).map((diff) => <div key={diff.path}><code>{diff.path}</code><span>{diff.after}</span></div>)}</div>{proposal.state === "conflicted" ? <p className="agent-danger">当前字段已被修改，请重新读取卡片后生成提案。</p> : null}<div className="agent-proposal-actions"><Button variant="ghost" disabled={disabled} onClick={onDiscard}>丢弃</Button>{proposal.state === "pending" ? <Button disabled={disabled} icon={<Check size={14} />} onClick={onApply}>确认应用</Button> : null}</div></article>;
 }
 
 interface AgentTranscriptTurnViewProps {
@@ -646,11 +724,12 @@ function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, submit
 
 function readSessionId(workspaceId: string): string {
   if (typeof localStorage === "undefined") return createSessionId();
-  return localStorage.getItem("sillytavern-card-creator:agent-session:" + workspaceId) || createSessionId();
+  localStorage.removeItem("sillytavern-card-creator:agent-session:" + workspaceId);
+  return localStorage.getItem("sillytavern-card-creator:agent-v3-session:" + workspaceId) || createSessionId();
 }
 
 function saveSessionId(workspaceId: string, sessionId: string): void {
-  if (typeof localStorage !== "undefined") localStorage.setItem("sillytavern-card-creator:agent-session:" + workspaceId, sessionId);
+  if (typeof localStorage !== "undefined") localStorage.setItem("sillytavern-card-creator:agent-v3-session:" + workspaceId, sessionId);
 }
 
 function createSessionId(): string {
@@ -668,138 +747,4 @@ function cloneValue<T>(value: T): T {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-async function persistAgentBranch(
-  workspaceId: string,
-  sessionId: string,
-  mode: Exclude<ConversationOperation, "idle">,
-  baseMessages: AgentMessage[],
-  discardedProposalIds: string[]
-): Promise<boolean> {
-  const now = Date.now();
-  try {
-    await invoke("append_agent_entry", {
-      entry: {
-        id: createSessionId(),
-        workspaceId,
-        sessionId,
-        role: "conversationBranch",
-        payload: {
-          type: "agent_conversation_branch",
-          mode,
-          baseMessages,
-          discardedProposalIds,
-          createdAt: now
-        },
-        createdAt: now,
-        position: nextAgentEntryPosition(sessionId)
-      }
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function persistAgentEvent(workspaceId: string, sessionId: string, event: AgentControllerEvent): Promise<void> {
-  if ((event.type !== "message_end" && event.type !== "tool_execution_start" && event.type !== "tool_execution_end") || !event.event) return;
-  const message = "message" in event.event ? event.event.message : undefined;
-  const now = Date.now();
-  const position = nextAgentEntryPosition(sessionId);
-  try {
-    await invoke("save_agent_session", {
-      session: {
-        id: sessionId,
-        workspaceId,
-        title: "卡片 Agent 会话",
-        createdAt: now,
-        updatedAt: now,
-        summary: message && "content" in message ? readAgentMessageContent(message.content).slice(0, 240) || null : null
-      }
-    });
-    await invoke("append_agent_entry", {
-      entry: {
-        id: createSessionId(),
-        workspaceId,
-        sessionId,
-        role: message?.role ?? (event.type === "tool_execution_end" ? "toolResult" : event.type === "tool_execution_start" ? "toolCall" : "assistant"),
-        payload: event.event,
-        createdAt: now,
-        position
-      }
-    });
-  } catch {
-    // The browser preview has no SQLite bridge; keep the in-memory transcript usable.
-  }
-}
-
-function nextAgentEntryPosition(sessionId: string): number {
-  const now = Date.now() * 1_000;
-  const previous = agentEntryPositions.get(sessionId) ?? 0;
-  const position = Math.max(now, previous + 1);
-  agentEntryPositions.set(sessionId, position);
-  return position;
-}
-
-async function persistAgentProposal(proposal: CardProposal): Promise<void> {
-  try {
-    await invoke("save_agent_proposal", {
-      proposal: {
-        id: proposal.id,
-        workspaceId: proposal.workspaceId,
-        sessionId: proposal.sessionId,
-        state: proposal.state,
-        payload: proposal,
-        createdAt: proposal.createdAt,
-        updatedAt: proposal.updatedAt
-      }
-    });
-  } catch {
-    // Keep proposal review available when the desktop bridge is unavailable.
-  }
-}
-
-async function persistWorkspace(workspaceId: string, currentPath: string | null, cardRevision: number, cardName: string): Promise<void> {
-  const now = Date.now();
-  try {
-    await invoke("save_card_workspace", {
-      workspace: {
-        id: workspaceId,
-        cardName,
-        currentPath,
-        cardRevision,
-        createdAt: now,
-        updatedAt: now
-      }
-    });
-  } catch {
-    // Workspace identity remains available from the draft metadata in browser preview.
-  }
-}
-
-async function hydrateAgentSession(sessionId: string): Promise<AgentMessage[]> {
-  try {
-    const entries = await invoke<PersistedAgentEntry[]>("list_agent_entries", { sessionId });
-    return hydrateAgentMessages(entries);
-  } catch {
-    return [];
-  }
-}
-
-async function hydrateAgentProposals(workspaceId: string): Promise<CardProposal[]> {
-  try {
-    const records = await invoke<Array<{ payload?: unknown }>>("list_agent_proposals", { workspaceId });
-    return records.map((record) => record.payload).filter((payload): payload is CardProposal => Boolean(payload && typeof payload === "object" && "id" in payload && "workspaceId" in payload));
-  } catch {
-    return [];
-  }
-}
-
-async function hydrateAgentSessionHistory(): Promise<AgentSessionHistoryRecord[]> {
-  try {
-    return await invoke<AgentSessionHistoryRecord[]>("list_agent_session_history");
-  } catch {
-    return [];
-  }
 }

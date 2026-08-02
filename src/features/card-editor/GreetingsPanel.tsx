@@ -71,8 +71,7 @@ function GreetingList({
             </div>
             {aiEnabled ? (
               <AiFieldAssistant
-                target={{ kind: "field", path: `${path}/${index}`, label: `${title} #${index + 1}`, value }}
-                onApply={(nextValue) => onChange(values.map((item, itemIndex) => (itemIndex === index ? nextValue : item)))}
+                target={{ path: `/alternateGreetings/${index}`, label: `${title} #${index + 1}`, value }}
               >
                 <CodeEditor
                   value={value}
@@ -109,7 +108,7 @@ export function GreetingsPanel() {
       </div>
       <div className="editor-block">
         <span className="field-label">{t("greetings.firstMessage")}</span>
-        <AiFieldAssistant target={{ kind: "field", path: "/firstMessage", label: t("greetings.firstMessage"), value: data.first_mes }} onApply={(value) => updateData("first_mes", value)}>
+        <AiFieldAssistant target={{ path: "/firstMessage", label: t("greetings.firstMessage"), value: data.first_mes }}>
           <CodeEditor value={data.first_mes} mode="prompt" minHeight="180px" onChange={(value) => updateData("first_mes", value)} />
         </AiFieldAssistant>
       </div>

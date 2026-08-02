@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Download, GripVertical, ListChecks, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, GripVertical, ListChecks, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { type ChangeEvent, type DragEvent, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { useProjectActions } from "../../app/useProjectActions";
 import { useCardStore } from "../../app/store";
@@ -20,6 +20,7 @@ import {
   type SillyTavernLorebookEntryExtensions
 } from "../../lib/lorebookCompat";
 import { createBlankLorebook, lorebookEnvelopeSchema, type LorebookEntry } from "../../lib/schema";
+import { useAgentStudioActions } from "../../lib/agent/uiContext";
 
 function numberValue(value: number | undefined | null): string {
   return value === undefined || value === null ? "" : String(value);
@@ -214,6 +215,7 @@ function remapOpenEntriesAfterRemove(openEntries: Record<number, boolean>, remov
 export function LorebookPanel() {
   const { t } = useI18n();
   const { copyArbitraryText } = useProjectActions();
+  const agentStudio = useAgentStudioActions();
   const card = useCardStore((state) => state.card);
   const updateData = useCardStore((state) => state.updateData);
   const updateLorebook = useCardStore((state) => state.updateLorebook);
@@ -443,6 +445,9 @@ export function LorebookPanel() {
         <h2>{t("lorebook.title")}</h2>
         <div className="inline-row compact">
           <input ref={inputRef} className="hidden-file" type="file" accept="application/json,.json" onChange={importLorebook} />
+          <Button icon={<Sparkles size={16} />} disabled={!agentStudio?.ready || agentStudio.busy} onClick={() => agentStudio?.prepareLorebookRequest()}>
+            生成候选条目
+          </Button>
           <Button icon={<Upload size={16} />} onClick={() => inputRef.current?.click()}>
             {t("common.import")}
           </Button>
@@ -778,8 +783,7 @@ export function LorebookPanel() {
               <div className="editor-block">
                 <span className="field-label">{t("lorebook.content")}</span>
                 <AiFieldAssistant
-                  target={{ kind: "field", path: `/worldBook/entries/${index}/content`, label: `${t("lorebook.entryNumber", { index: index + 1 })} ${t("lorebook.content")}`, value: entry.content }}
-                  onApply={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))}
+                  target={{ path: `/worldBook/entries/${index}/content`, label: `${t("lorebook.entryNumber", { index: index + 1 })} ${t("lorebook.content")}`, value: entry.content }}
                 >
                   <CodeEditor value={entry.content} mode="prompt" minHeight="150px" onChange={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))} />
                 </AiFieldAssistant>

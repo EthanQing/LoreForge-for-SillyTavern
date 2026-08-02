@@ -2,60 +2,52 @@
 
 ## Agent Studio Entry Points
 
-- `src/features/agent-studio/AgentStudio.tsx`: default three-column workspace and proposal confirmation UI.
-- `src/lib/agent/controller.ts`: Pi Agent lifecycle, queues, abort, dynamic imports, and compaction.
-- `src/lib/agent/tools.ts`: card-domain tools and hard scope boundary.
-- `src/lib/agent/contracts.ts`: proposal hashes, guards, diffs, and conflict-safe apply.
-- `src/lib/agent/tauriFetch.ts`: browser-safe fetch bridge to Rust request events.
-- `src-tauri/src/ai.rs`: HTTP/SSE proxy, cancellation, URL policy, keyring commands.
+- `src/features/agent-studio/AgentStudio.tsx`: shared Controller, session orchestration, transcript, scope selector, and inspector.
+- `src/features/agent-studio/ProposalCard.tsx`: proposal review and lorebook candidate selection.
+- `src/lib/agent/uiContext.tsx`: field and lorebook UI dispatch.
+- `src/lib/agent/controller.ts`: Pi lifecycle, queues, abort, permission pinning, and compaction.
+- `src/lib/agent/permissions.ts`: scopes, capabilities, mention resolution, and request envelopes.
+- `src/lib/agent/projection.ts`: authorized card projections and fingerprints.
+- `src/lib/agent/changes.ts`: semantic changes and SillyTavern lorebook mapping.
+- `src/lib/agent/tools.ts`: typed inspect/proposal tools.
+- `src/lib/agent/contracts.ts`: proposals, diffs, conflict checks, and apply.
+- `src/lib/agent/persistence.ts`: Agent history command wrappers.
+- `src/lib/agent/tauriFetch.ts`: Tauri HTTP/SSE fetch bridge.
 
 ## Key Project Files
 
-- `README.md`: project overview, commands, implemented features, current limits.
-- `package.json`: scripts, package manager, frontend dependencies.
-- `vite.config.ts`: Vite configuration.
-- `src/app/App.tsx`: main UI shell and navigation.
-- `src/app/store.ts`: central Zustand store and local persistence.
-- `src/app/useProjectActions.ts`: shared frontend project actions for opening cards, creating drafts, exports, clipboard helpers, validation refreshes, and context-menu commands.
-- `src/components/ContextMenu.tsx`: global custom right-click menu system and context resolver.
-- `src/lib/contextMenuTargets.ts`: internal registry for component-owned context-menu targets such as AI fields and lorebook entries.
-- `src/lib/schema.ts`: TypeScript CCv3 schema and blank object helpers.
+- `README.md`: overview, breaking upgrade behavior, and development commands.
+- `docs/usage-guide.md`: current user workflow.
+- `docs/ai-assistant-prompts.md`: production prompt and tool contract.
+- `package.json`: scripts, package manager, frontend version, and dependencies.
+- `src/app/store.ts`: canonical card, workspace, revision, settings, and draft state.
+- `src/app/useProjectActions.ts`: shared open/save/export actions.
+- `src/components/AiFieldAssistant.tsx`: exact-scope field action dispatcher.
+- `src/lib/schema.ts`: TypeScript CCv3 schema.
+- `src/lib/lorebookCompat.ts`: SillyTavern world-book field helpers.
 - `src/lib/validation.ts`: frontend validation.
-- `src/lib/migrations.ts`: frontend migration/export preparation.
-- `src/lib/lorebookCompat.ts`: SillyTavern embedded world book memo and `entry.extensions.*` compatibility helpers.
-- `src/lib/tokenEstimate.ts`: lightweight heuristic token estimator for UI labels and statistics.
-- `src/lib/tokenStats.ts`: card-wide estimated token statistics for text fields, prompt previews, lorebook entries, and counted asset references.
-- `src/lib/tauri.ts`: frontend Tauri command wrappers.
-- `src/lib/ai.ts`: AI settings, keyring migration, model fetch, compatibility probe, and legacy wrapper handling.
-- `src/lib/agent/controller.ts`: Pi Agent lifecycle and dynamic runtime loading.
-- `src/lib/agent/tools.ts`: normalized card inspection and proposal tools.
-- `src/lib/agent/contracts.ts`: CardProposal hashes, guards, diffs, and apply rules.
-- `src/lib/agent/tauriFetch.ts`: requestId-filtered Rust HTTP/SSE fetch bridge.
-- `src/lib/aiAgent.ts`: normalized AI editing surface and patch application.
-- `src/lib/updater.ts`: app update preferences, SemVer comparison, GitHub release checks for source/dev runs, and Tauri updater install flow for packaged builds.
-- `src/features/*`: feature panels.
-- `src/components/*`: reusable UI components.
+- `src/lib/tokenStats.ts`: token estimates.
+- `src/lib/ai.ts`: Agent settings, model fetch, credential commands, and capability probe.
 
 ## Backend Files
 
 - `src-tauri/src/lib.rs`: Tauri command registration.
-- `src-tauri/src/commands.rs`: import/export/validation commands.
-- `src-tauri/src/commands.rs::path_exists`: lightweight local path preflight used before opening forced recent files.
+- `src-tauri/src/commands.rs`: card I/O and validation.
 - `src-tauri/src/card_schema.rs`: Rust card schema.
-- `src-tauri/src/migration.rs`: Rust migration and export timestamp handling.
-- `src-tauri/src/validation.rs`: Rust validation.
-- `src-tauri/src/png_card.rs`: PNG/APNG metadata handling.
-- `src-tauri/src/charx.rs`: CHARX archive handling.
-- `src-tauri/src/ai.rs`: OpenAI-compatible HTTP/SSE proxy, cancellation, URL policy, and keyring access.
-- `src-tauri/src/ai_history.rs`: legacy history migration plus workspace/session/entry/proposal persistence.
-- `src-tauri/tauri.conf.json`: Tauri app configuration.
-- `src-tauri/capabilities/default.json`: Tauri permissions/capabilities.
-- `.github/workflows/release.yml`: GitHub tag release workflow that builds Windows Tauri bundles and uploads updater JSON.
+- `src-tauri/src/migration.rs`: card format migration and export timestamps.
+- `src-tauri/src/png_card.rs`: PNG/APNG metadata.
+- `src-tauri/src/charx.rs`: CHARX archives.
+- `src-tauri/src/ai.rs`: HTTP/SSE proxy, cancellation, URL policy, and keyring.
+- `src-tauri/src/agent_history.rs`: Agent database and exact old-history cleanup.
+- `src-tauri/tauri.conf.json`: application version and Tauri config.
 
-## Existing Docs
+## External Design References
 
-- `docs/ai-assistant-prompts.md`: AI assistant prompt material; read when changing AI prompt behavior.
-- DeepSeek API pricing/model limits: `https://api-docs.deepseek.com/quick_start/pricing` documents DeepSeek V4 maximum output as 384K.
+- CardForge worldbook editor: https://github.com/Anastasia2372/sillytavern-cardforge/blob/main/src/renderer/views/WorldBookEditor.vue
+- CardForge card store: https://github.com/Anastasia2372/sillytavern-cardforge/blob/main/src/renderer/stores/card.js
+- DeepSeek API documentation: https://api-docs.deepseek.com/
+
+CardForge is GPL-3.0. Use it only as a design reference; do not copy implementation source into this repository.
 
 ## Local Storage Keys
 
@@ -64,3 +56,4 @@
 - `sillytavern-card-creator:recent`
 - `sillytavern-card-creator:ai-settings`
 - `sillytavern-card-creator:update-preferences`
+- `sillytavern-card-creator:agent-v3-session:<workspaceId>`

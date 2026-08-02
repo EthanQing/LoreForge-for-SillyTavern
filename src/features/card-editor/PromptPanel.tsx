@@ -3,6 +3,7 @@ import { AiFieldAssistant } from "../../components/AiFieldAssistant";
 import { CodeEditor } from "../../components/CodeEditor";
 import { useI18n } from "../../lib/i18n";
 import { estimateTokens } from "../../lib/tokenEstimate";
+import type { CardFieldPath } from "../../lib/agent/permissions";
 
 function PromptField({
   label,
@@ -12,7 +13,7 @@ function PromptField({
   tokenLabel
 }: {
   label: string;
-  path: string;
+  path: CardFieldPath;
   value: string;
   onChange: (value: string) => void;
   tokenLabel: string;
@@ -23,7 +24,7 @@ function PromptField({
         {label}
         <small>{tokenLabel}</small>
       </span>
-      <AiFieldAssistant target={{ kind: "field", path, label, value }} onApply={onChange}>
+      <AiFieldAssistant target={{ path, label, value }}>
         <CodeEditor value={value} mode="prompt" onChange={onChange} />
       </AiFieldAssistant>
     </div>

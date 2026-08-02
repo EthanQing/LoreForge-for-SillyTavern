@@ -3,8 +3,8 @@ import { Bot, BrainCircuit, CheckCircle2, Download, LoaderCircle, PlugZap, Refre
 import { Button } from "../../components/Button";
 import { FieldShell, SelectField, TextField } from "../../components/Field";
 import { useCardStore } from "../../app/store";
-import { useI18n, type Locale, type TranslationKey } from "../../lib/i18n";
-import { AI_MAX_OUTPUT_TOKENS, AI_MAX_TIMEOUT_MS, fetchAiModels, testAiConnection, type AiThinkingEffort, type AiThinkingMode } from "../../lib/ai";
+import { useI18n, type Locale } from "../../lib/i18n";
+import { AI_MAX_OUTPUT_TOKENS, AI_MAX_TIMEOUT_MS, fetchAiModels, testAiConnection, type AiSettings } from "../../lib/ai";
 import { invoke } from "@tauri-apps/api/core";
 import {
   checkForUpdates,
@@ -15,15 +15,12 @@ import {
   type UpdateProgress
 } from "../../lib/updater";
 
-const thinkingOptions = [
-  { value: "high", labelKey: "common.high" },
-  { value: "max", labelKey: "common.max" }
-] satisfies Array<{ value: AiThinkingEffort; labelKey: TranslationKey }>;
-
-const thinkingModeOptions = [
-  { value: "enabled", labelKey: "common.enabled" },
-  { value: "disabled", labelKey: "common.disabled" }
-] satisfies Array<{ value: AiThinkingMode; labelKey: TranslationKey }>;
+const thinkingOptions: Array<{ value: AiSettings["thinkingLevel"]; label: string }> = [
+  { value: "off", label: "关闭" }, { value: "minimal", label: "Minimal" },
+  { value: "low", label: "Low" }, { value: "medium", label: "Medium" },
+  { value: "high", label: "High" }, { value: "xhigh", label: "Extra high" },
+  { value: "max", label: "Max" }
+];
 
 export function SettingsPanel() {
   const { locale, localeOptions, setLocale, t } = useI18n();
@@ -35,7 +32,6 @@ export function SettingsPanel() {
   const [testLoading, setTestLoading] = useState(false);
   const [panelMessage, setPanelMessage] = useState("");
   const [testContent, setTestContent] = useState("");
-  const [testReasoning, setTestReasoning] = useState("");
   const [credentialConfigured, setCredentialConfigured] = useState(false);
   const [updatePreferences, setUpdatePreferencesState] = useState<UpdatePreferences>(() => loadUpdatePreferences());
   const [updateLoading, setUpdateLoading] = useState(false);
@@ -47,7 +43,7 @@ export function SettingsPanel() {
   useEffect(() => {
     void invoke<{ configured: boolean }>("ai_credential_status", { credentialId: aiSettings.credentialId })
       .then((status) => setCredentialConfigured(status.configured))
-      .catch(() => setCredentialConfigured(Boolean(aiSettings.apiKey.trim())));
+      .catch(() => setCredentialConfigured(false));
   }, [aiSettings.apiKey, aiSettings.credentialId]);
 
   const updateManualModelInput = (manualModelInput: boolean) => {
@@ -110,6 +106,7 @@ export function SettingsPanel() {
     try {
       const models = await fetchAiModels(aiSettings);
       setAiModels(models);
+      if (aiSettings.apiKey.trim()) updateAiSettings({ apiKey: "" });
       setPanelMessage(models.length ? t("settings.modelsLoaded", { count: models.length }) : t("settings.noModelsReturned"));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -124,24 +121,10 @@ export function SettingsPanel() {
     setTestLoading(true);
     setPanelMessage(t("settings.testingModel"));
     setTestContent("");
-    setTestReasoning("");
     try {
-      const result = await testAiConnection(aiSettings, (event) => {
-        if (event.event !== "delta") {
-          return;
-        }
-        if (event.contentDelta) {
-          setTestContent((current) => current + event.contentDelta);
-        }
-        if (event.reasoningDelta) {
-          setTestReasoning((current) => current + event.reasoningDelta);
-        }
-      });
-      setTestContent((current) => current || result.content);
-      setTestReasoning((current) => current || result.reasoning);
-      if (result.toolCalling) {
-        updateAiSettings({ toolCalling: result.toolCalling });
-      }
+      const result = await testAiConnection(aiSettings);
+      setTestContent(result.content);
+      updateAiSettings({ toolCalling: result.toolCalling, apiKey: "" });
       setPanelMessage(t("settings.connected", { model: result.model }));
       setStatus(t("status.aiConnectionTested"));
     } catch (error) {
@@ -158,7 +141,7 @@ export function SettingsPanel() {
       <div className="panel-heading">
         <h2>{t("settings.title")}</h2>
         <span className={credentialBlocked ? "state-pill state-pill-hot" : credentialConfigured ? "state-pill" : "state-pill state-pill-hot"}>
-          {credentialBlocked ? "系统凭据迁移未完成，请重新保存" : credentialConfigured ? "系统凭据已配置" : t("settings.apiKeyMissing")}
+          {credentialBlocked ? "API Key 尚未保存到系统凭据库" : credentialConfigured ? "系统凭据已配置" : t("settings.apiKeyMissing")}
         </span>
       </div>
 
@@ -301,53 +284,24 @@ export function SettingsPanel() {
               />
               <span>{t("settings.enableAi")}</span>
             </label>
-            <label className="toggle-row">
-              <input
-                checked={aiSettings.stream}
-                type="checkbox"
-                onChange={(event) => updateAiSettings({ stream: event.currentTarget.checked })}
-              />
-              <span>{t("settings.streamOutput")}</span>
-            </label>
-            <label className="toggle-row">
-              <input
-                checked={aiSettings.showReasoning}
-                type="checkbox"
-                onChange={(event) => updateAiSettings({ showReasoning: event.currentTarget.checked })}
-              />
-              <span>{t("settings.showReasoningStream")}</span>
-            </label>
           </div>
           <div className="two-column">
             <SelectField
-              detail={t("settings.deepseekThinking")}
-              label={t("settings.thinkingMode")}
-              value={aiSettings.thinkingMode}
-              onChange={(event) => updateAiSettings({ thinkingMode: event.currentTarget.value as AiThinkingMode })}
-            >
-              {thinkingModeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {t(option.labelKey)}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField
-              detail={t("settings.highMax")}
-              disabled={aiSettings.thinkingMode === "disabled"}
-              label={t("settings.thinkingEffort")}
-              value={aiSettings.thinkingEffort}
-              onChange={(event) => updateAiSettings({ thinkingEffort: event.currentTarget.value as AiThinkingEffort })}
+              detail="直接传递给 Pi Agent；不同模型可能支持不同等级。"
+              label="思考等级"
+              value={aiSettings.thinkingLevel}
+              onChange={(event) => updateAiSettings({ thinkingLevel: event.currentTarget.value as AiSettings["thinkingLevel"] })}
             >
               {thinkingOptions.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {t(option.labelKey)}
+                  {option.label}
                 </option>
               ))}
             </SelectField>
           </div>
           <div className="two-column">
             <TextField
-              detail={aiSettings.providerProfile === "deepseek" && aiSettings.thinkingMode === "enabled" ? t("settings.ignoredByThinking") : undefined}
+              detail={aiSettings.providerProfile === "deepseek" && aiSettings.thinkingLevel !== "off" ? t("settings.ignoredByThinking") : undefined}
               label={t("settings.temperature")}
               max={2}
               min={0}
@@ -395,11 +349,6 @@ export function SettingsPanel() {
         <div className="status-line" role="status" aria-live="polite">
           {panelMessage || t("common.idle")}
         </div>
-        {testReasoning && aiSettings.showReasoning ? (
-          <FieldShell label={t("settings.reasoning")}>
-            <div className="stream-preview reasoning-preview">{testReasoning}</div>
-          </FieldShell>
-        ) : null}
         <FieldShell label={t("settings.response")}>
           <div className="stream-preview">
             {testContent || (

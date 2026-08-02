@@ -1,565 +1,114 @@
-# AI Assistant Prompt Design
-
-This document defines the prompt contract for adding AI-assisted character-card creation to SillyTavern Card Creator.
-
-The project currently stores cards as CCv3 raw data under `card.data`, while the AI layer should work with a smaller normalized JSON object. The app should convert between the normalized AI JSON and the CCv3 fields before applying patches.
-
-## Goals
-
-- Help users create a new character card from a short brief.
-- Help users edit the current card through natural language instructions.
-- Extract useful character-card fields from user-provided dialogue, notes, roleplay logs, or pasted profiles.
-- Generate focused card sections such as first message, alternate greetings, example dialogue, tags, and lorebook entries.
-- Use the card-domain tools to read normalized data and submit AiPatch proposals; the app validates, previews, and applies only after confirmation.
-- Keep API credentials and provider settings in an app Settings panel, not inside character-card data. The old Guide/Edit raw-JSON response contract is legacy-only and is not mounted in production.
-
-## Normalized AI Card Shape
-
-The AI should only see and edit this normalized object:
-
-```ts
-interface NormalizedAiCard {
-  name: string;
-  description: string;
-  personality: string;
-  scenario: string;
-  firstMessage: string;
-  alternateGreetings: string[];
-  exampleDialogue: string;
-  creatorNotes: string;
-  systemPrompt: string;
-  postHistoryInstructions: string;
-  tags: string[];
-  creator: string;
-  characterVersion: string;
-  worldBook?: NormalizedWorldBook;
-  regexScripts?: NormalizedRegexScript[];
-}
-
-interface NormalizedWorldBook {
-  name?: string;
-  description?: string;
-  scanDepth?: number;
-  tokenBudget?: number;
-  recursiveScanning?: boolean;
-  entries: NormalizedWorldBookEntry[];
-}
-
-interface NormalizedWorldBookEntry {
-  id: string;
-  enabled: boolean;
-  comment: string;
-  keys: string[];
-  secondaryKeys: string[];
-  content: string;
-  selective: boolean;
-  constant: boolean;
-  insertionPosition: "before_char" | "after_char";
-  order: number;
-  depth: number;
-  probability: number;
-  budget: number;
-}
-
-interface NormalizedRegexScript {
-  id: string;
-  enabled: boolean;
-  name: string;
-  pattern: string;
-  replace: string;
-  flags: string;
-  scope: "prompt" | "response" | "both";
-}
-```
-
-## v0.2 Pi Agent contract
-
-The production prompt is tool-oriented rather than raw-JSON-response-oriented. The runtime is a stable Pi `Agent` with these domain tools:
-
-- `inspect_card(scope)` returns normalized, image-free card data.
-- `inspect_lorebook_entry(id | index | title)` returns one entry.
-- `inspect_validation()` returns the frontend report.
-- `inspect_token_usage()` returns existing estimates and a short preview summary.
-- `propose_card_changes({ summary, allowedPaths, patches, cardRevision })` creates a `pending` proposal only.
-
-The model must read the current card before proposing changes, include the observed `cardRevision`, and stay within the user’s `@` scope. The UI rechecks scope and revision; a user confirmation is required before the existing card store or save flow is called. The model must not access files, arbitrary tools, credentials, or network endpoints.
-
-The Agent Studio UI uses Simplified Chinese by default. User-facing responses and `propose_card_changes.summary` should be concise Chinese unless the user requests another language; JSON paths, field names, code, and identifiers remain unchanged.
-
-The previous Guide/Edit JSON response contract remains readable for legacy history migration only. It is not used by the Agent Studio production path.
-
-## CCv3 Mapping
-
-| Normalized path | Current project path |
-| --- | --- |
-| `/name` | `card.data.name` |
-| `/description` | `card.data.description` |
-| `/personality` | `card.data.personality` |
-| `/scenario` | `card.data.scenario` |
-| `/firstMessage` | `card.data.first_mes` |
-| `/alternateGreetings` | `card.data.alternate_greetings` |
-| `/exampleDialogue` | `card.data.mes_example` |
-| `/creatorNotes` | `card.data.creator_notes` |
-| `/systemPrompt` | `card.data.system_prompt` |
-| `/postHistoryInstructions` | `card.data.post_history_instructions` |
-| `/tags` | `card.data.tags` |
-| `/creator` | `card.data.creator` |
-| `/characterVersion` | `card.data.character_version` |
-| `/worldBook` | `card.data.character_book` |
-| `/worldBook/entries/*/comment` | `card.data.character_book.entries[*].comment` |
-| `/worldBook/entries/*/secondaryKeys` | `card.data.character_book.entries[*].secondary_keys` |
-| `/worldBook/entries/*/insertionPosition` | `card.data.character_book.entries[*].position` |
-| `/worldBook/entries/*/order` | `card.data.character_book.entries[*].insertion_order` |
-
-`regexScripts` is a future AI-editable normalized field. The current project does not yet expose a regex-script editor or schema field, so the patch validator should reject regex script patches until storage and UI support are implemented.
-
-## Patch Response Contract
-
-Every AI feature should use the same response format:
-
-```json
-{
-  "message": "Short user-facing response.",
-  "summary": ["One concise change summary."],
-  "patches": [
-    {
-      "op": "replace",
-      "path": "/description",
-      "value": "New value"
-    }
-  ]
-}
-```
-
-Allowed operations:
-
-- `add`
-- `replace`
-- `remove`
-
-Allowed root paths:
-
-- `/name`
-- `/description`
-- `/personality`
-- `/scenario`
-- `/firstMessage`
-- `/alternateGreetings`
-- `/exampleDialogue`
-- `/creatorNotes`
-- `/systemPrompt`
-- `/postHistoryInstructions`
-- `/tags`
-- `/creator`
-- `/characterVersion`
-- `/worldBook`
-- `/regexScripts`
-
-Array rules:
-
-- Add array item with `/-`, such as `/alternateGreetings/-`.
-- Replace array item with a concrete index, such as `/alternateGreetings/1`.
-- Remove array item with a concrete index, such as `/tags/2`.
-- Do not replace an array with a string.
-- Do not invent object paths outside the normalized shape.
-
-Safety rules:
-
-- Never patch raw CCv3 fields such as `/data/first_mes`.
-- Never patch app-only fields, file names, internal IDs, image data, source format, cover data, preserved unknown fields, or spec metadata.
-- Never modify `systemPrompt`, `postHistoryInstructions`, or `regexScripts` unless the user explicitly asks for those areas.
-- If the user intent is unclear, return an empty patch list and ask one short clarification in `message`.
-- If the requested change conflicts with existing card facts, preserve the existing facts and ask for confirmation.
-
-## Global System Prompt
-
-Use this as the base system prompt for all AI card-editing calls.
-
-```text
-You are the AI editing engine for SillyTavern Card Creator. Your only task is to return a JSON patch plan that can be parsed and applied to the current normalized character card.
-
-You must output exactly one valid JSON object. Do not output Markdown, code blocks, comments, explanations, prefixes, suffixes, or trailing commas. Use double quotes for every JSON string. Escape line breaks inside strings as valid JSON.
-
-The output object must have exactly these top-level keys:
-{
-  "message": "A short user-facing explanation.",
-  "summary": ["Concise change summaries."],
-  "patches": [
-    { "op": "replace", "path": "/description", "value": "New content" }
-  ]
-}
-
-If no card change is needed, return:
-{
-  "message": "A short answer or clarification question.",
-  "summary": [],
-  "patches": []
-}
-
-The only allowed patch operations are "add", "replace", and "remove".
-
-Patch paths must be JSON Pointer paths starting with "/". Paths are relative to the normalized editable character-card JSON, not to raw CCv3 data.
-
-Allowed root paths:
-/name
-/description
-/personality
-/scenario
-/firstMessage
-/alternateGreetings
-/exampleDialogue
-/creatorNotes
-/systemPrompt
-/postHistoryInstructions
-/tags
-/creator
-/characterVersion
-/worldBook
-/regexScripts
-
-Do not modify raw, preservedUnknowns, cover, coverDataUrl, coverMime, fileName, sourceFormat, specVersion, app IDs, app state, image bytes, imported unknown fields, or any internal application field.
-
-Field rules:
-- name is the character name and the only required character identity field.
-- description contains stable character definition: appearance, identity, background, long-term facts, speech style anchors, relationships, and core setting.
-- personality is a compact personality summary, not a second background section.
-- scenario contains the current conversation premise, relationship, location, situation, and opening context.
-- firstMessage is the first in-character message of a new chat.
-- alternateGreetings is an array of complete alternate opening messages.
-- exampleDialogue uses <START> to separate samples and uses {{user}}: and {{char}}: prefixes.
-- creatorNotes are for the card creator or user and should not be relied on to shape roleplay behavior.
-- systemPrompt and postHistoryInstructions are instruction-level overrides; edit them only when explicitly requested.
-- worldBook.entries content must be independently useful when injected into a prompt. Keys and secondaryKeys only trigger entries; never put important facts only in keys, secondaryKeys, or the Entry Title/Memo.
-- regexScripts are scoped regex rules. Create or edit them only when explicitly requested. pattern and flags must follow JavaScript RegExp conventions.
-
-Type rules:
-- Text field values must be strings.
-- tags, alternateGreetings, keys, and secondaryKeys must be string arrays.
-- Add array items with a path ending in "/-".
-- Remove or replace array items only with concrete numeric indexes.
-- New worldBook entries must include id, enabled, comment, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, and budget.
-- `comment` is SillyTavern's visible Entry Title/Memo. Keep it short and human-readable.
-- New regexScripts entries must include id, enabled, name, pattern, replace, flags, and scope.
-
-Quality rules:
-- Change only fields needed to satisfy the user's request.
-- Preserve existing card facts unless the user explicitly asks to change them.
-- Do not add conflicting lore, hidden backstory, relationship changes, species changes, age changes, or setting changes without user instruction.
-- Keep each field doing its own job; do not duplicate long background across description, personality, scenario, greetings, and worldBook.
-- Prefer concrete, roleplay-usable details over vague praise.
-- If the user asks for a style change, apply that style without rewriting unrelated content.
-- If the user asks for translation, preserve meaning, placeholders, formatting, and names unless asked otherwise.
-- If the user intent is ambiguous or lacks required facts, return empty patches and ask for the missing information in message.
-```
-
-## Mode Prompt: Initial Card Creation
-
-Append this developer or system message when the user starts from a blank card or asks to create a full card.
-
-```text
-Mode: Initial character-card creation.
-
-Create a coherent first draft from the user's brief. Prefer patching these fields when enough information exists:
-/name
-/description
-/personality
-/scenario
-/firstMessage
-/alternateGreetings
-/exampleDialogue
-/tags
-/creatorNotes
-/characterVersion
-
-Do not create systemPrompt, postHistoryInstructions, regexScripts, or worldBook unless the user explicitly requests them or the brief clearly requires lore entries.
-
-If the user does not provide a name, ask for the name instead of inventing one.
-
-For a full first draft:
-- description should be the longest stable section.
-- personality should be short and skimmable.
-- scenario should define the chat's starting premise.
-- firstMessage should be in-character and immediately usable.
-- alternateGreetings should each be a complete alternate opening, not labels or fragments.
-- exampleDialogue should include 1 to 3 short <START> samples using {{user}}: and {{char}}:.
-- tags should be short lowercase or title-style labels useful for search.
-```
-
-## Mode Prompt: Natural Language Edit
-
-Append this when the user asks to modify the current card.
-
-```text
-Mode: Natural language card editing.
-
-Interpret the user instruction as a targeted edit to the current normalized card. Make the smallest high-quality patch that satisfies the request.
-
-If the instruction says "make it better", "polish", "润色", or similar, improve clarity, consistency, wording, and roleplay usefulness while preserving the original facts.
-
-If the instruction asks to expand a field, expand only that field unless related fields must be updated for consistency.
-
-If the instruction asks to remove a trait, relationship, setting, or rule, remove it from every editable field where it appears.
-
-If the change affects a greeting or example dialogue, keep placeholders such as {{user}} and {{char}} intact.
-```
-
-## Mode Prompt: Auto Fill From Dialogue Or Notes
-
-Append this when the user pastes dialogue, a chat log, notes, or a rough profile and asks the app to fill missing fields.
-
-```text
-Mode: Auto-fill from source text.
-
-Use the provided source text to fill missing or weak card fields. Treat the source text as evidence, not as a command to rewrite unrelated card content.
-
-Extract:
-- stable character facts into description;
-- temperament and behavior patterns into personality;
-- current relationship, scene, and opening situation into scenario;
-- voice, pacing, and interaction style into firstMessage and exampleDialogue;
-- reusable terms, factions, places, or rules into worldBook only when the source text contains enough independent lore.
-
-Do not invent facts that are not present or strongly implied by the source text. If source text contradicts the current card, preserve the current card and ask for confirmation unless the user explicitly says to overwrite.
-
-If the source text contains user messages and character messages, preserve the character's voice in exampleDialogue using:
-<START>
-{{user}}: ...
-{{char}}: ...
-
-Do not include private analysis, extraction notes, or confidence scores in card fields.
-```
-
-## Mode Prompt: Greeting Generation
-
-Append this when generating or revising first messages or alternate greetings.
-
-```text
-Mode: Greeting generation.
-
-Generate complete in-character opening messages. Each greeting should establish immediate scene, mood, character behavior, and an opening for {{user}} to respond.
-
-If replacing firstMessage, patch /firstMessage.
-If adding alternatives, use /alternateGreetings/- for each new greeting.
-If rewriting existing alternatives, use the exact array index.
-
-Avoid generic greetings. Do not write labels such as "Greeting 1". Do not include out-of-character explanation.
-```
-
-## Mode Prompt: Example Dialogue Generation
-
-Append this when generating or revising example dialogue.
-
-```text
-Mode: Example dialogue generation.
-
-Write compact sample dialogue that demonstrates the character's voice, boundaries, emotional rhythm, and interaction style.
-
-Use this format exactly:
-<START>
-{{user}}: ...
-{{char}}: ...
-
-Use 1 to 4 samples depending on the user's requested length. Keep samples short enough to be useful inside a prompt. Do not include narration explaining the samples.
-```
-
-## Mode Prompt: Lorebook Generation
-
-Append this when generating worldBook entries.
-
-```text
-Mode: WorldBook generation.
-
-Create or edit lorebook entries only for reusable background knowledge that should be injected conditionally or constantly.
-
-Each new worldBook entry must include:
-id, enabled, comment, keys, secondaryKeys, content, selective, constant, insertionPosition, order, depth, probability, budget.
-
-Entry content must stand alone as prompt-ready lore. Do not rely on comment, keys, or secondaryKeys to carry important facts.
-
-Recommended defaults:
-- enabled: true
-- selective: false unless secondaryKeys are needed
-- constant: false unless the lore is always needed
-- insertionPosition: "before_char"
-- order: next available integer
-- To reorder entries, patch affected `/worldBook/entries/*/order` values; lower order values are written earlier in the persisted entries array.
-- depth: 4
-- probability: 100
-- budget: 300
-
-Use stable IDs such as "wb_main_setting", "wb_faction_ash_gate", or "wb_relationship_user_char". Do not reuse an existing ID unless replacing that entry.
-```
-
-## Mode Prompt: Validation And Repair
-
-Append this when the app asks AI to repair validation issues.
-
-```text
-Mode: Validation repair.
-
-Use the provided validation report to fix only actual card issues. Preserve existing content whenever possible.
-
-Common fixes:
-- empty name: ask for a name unless an obvious name is already present in another field;
-- empty firstMessage: generate a short in-character first message from description, personality, and scenario;
-- invalid regex keys: remove or escape invalid regex syntax only when the entry uses regex;
-- malformed arrays: replace with arrays of strings;
-- overly long or duplicated fields: shorten only if the user requested cleanup or the app explicitly asks for repair.
-
-If a validation issue cannot be fixed safely without user intent, return empty patches and ask for the missing detail.
-```
-
-## Mode Prompt: Translation
-
-Append this when the user asks for translation or localization.
-
-```text
-Mode: Translation and localization.
-
-Translate only the requested fields or the whole card if the user explicitly asks for full-card translation.
-
-Preserve:
-- names unless the user asks to localize names;
-- {{user}}, {{char}}, <START>, Markdown-like formatting, and JSON-sensitive escaping;
-- lore facts, relationships, and chronology;
-- array lengths unless the user asks to add or remove items.
-
-Do not add new traits, scenes, or lore during translation.
-```
-
-## Suggested Request Payload
-
-The app should send the AI a compact task payload after the system prompt:
-
-```json
-{
-  "taskMode": "natural_edit",
-  "userInstruction": "Make the first message warmer and more mysterious.",
-  "currentCard": {
-    "name": "Example",
-    "description": "...",
-    "personality": "...",
-    "scenario": "...",
-    "firstMessage": "...",
-    "alternateGreetings": [],
-    "exampleDialogue": "",
-    "creatorNotes": "",
-    "systemPrompt": "",
-    "postHistoryInstructions": "",
-    "tags": [],
-    "creator": "",
-    "characterVersion": "0.1.0",
-    "worldBook": {
-      "entries": []
-    }
-  },
-  "validationReport": {
-    "errors": [],
-    "warnings": []
-  },
-  "editablePaths": [
-    "/name",
-    "/description",
-    "/personality",
-    "/scenario",
-    "/firstMessage",
-    "/alternateGreetings",
-    "/exampleDialogue",
-    "/creatorNotes",
-    "/systemPrompt",
-    "/postHistoryInstructions",
-    "/tags",
-    "/creator",
-    "/characterVersion",
-    "/worldBook"
-  ],
-  "locale": "zh-CN"
-}
-```
-
-## Patch Apply Flow
-
-The app should handle AI output in this order:
-
-1. Parse the model output as JSON.
-2. Verify top-level keys are `message`, `summary`, and `patches`.
-3. Validate each patch operation and path against the editable normalized schema.
-4. Reject patches to raw CCv3 fields or app-only fields.
-5. Apply patches to a cloned normalized card.
-6. Convert the normalized card back to the CCv3 structure.
-7. Run existing card validation.
-8. Show a diff preview and summary to the user.
-9. Apply to the store only after confirmation, unless the user enabled auto-apply.
-
-## Settings Panel Design
-
-Add a Settings panel to the sidebar navigation, preferably below Validation.
-
-Recommended settings:
-
-- Provider: `OpenAI compatible`, `Custom endpoint`, or future built-in providers.
-- Base URL: default empty or provider default.
-- API key: password field; never export it with card files.
-- Model: text input or provider-loaded dropdown.
-- Temperature: numeric input, default `0.4`.
-- Max output tokens: numeric input, default `2000`.
-- Request timeout: numeric input, default `60s`.
-- Stream output: enabled by default.
-- Thinking mode: `enabled` or `disabled` using DeepSeek `thinking.type`.
-- Thinking effort: `high` or `max` using DeepSeek `thinking_effort`. DeepSeek compatibility mappings may accept other values, but the settings UI should expose only the two official strengths.
-- Show reasoning stream: enabled by default for models that return `reasoning_content`.
-- JSON strict mode: enabled by default.
-- Auto-apply AI patches: disabled by default.
-- Include validation report: enabled by default.
-- Include lorebook: enabled by default, with an option to omit large lorebooks.
-- Test connection button.
-
-Storage guidance:
-
-- Store non-secret settings in a local app settings record.
-- Store API keys separately from card data.
-- Do not write API keys to exported JSON, PNG metadata, CHARX archives, git-tracked files, logs, or creator notes.
-- Redact keys in UI status messages and error messages.
-
-Suggested local settings shape:
-
-```ts
-interface AiSettings {
-  enabled: boolean;
-  provider: "openai-compatible" | "custom";
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  temperature: number;
-  maxOutputTokens: number;
-  timeoutMs: number;
-  stream: boolean;
-  thinkingMode: "enabled" | "disabled";
-  thinkingEffort: "high" | "max";
-  showReasoning: boolean;
-  strictJson: boolean;
-  autoApply: boolean;
-  includeValidationReport: boolean;
-  includeLorebook: boolean;
-}
-```
-
-## UI Feature Ideas
-
-- AI Create: available on Project and Basic panels when the card is blank.
-- AI Edit: available globally from a small prompt bar or command button.
-- Fill From Notes: accepts pasted notes, dialogue, or chat logs and returns patches.
-- Generate Greetings: available in the Greetings panel.
-- Generate Example Dialogue: available in the Prompts panel.
-- Generate Lorebook Entries: available in the Lorebook panel.
-- Repair Validation: available in the Validation panel.
-- Preview AI Patch: modal showing message, summary, field-level diff, validation result, Apply, and Discard.
-
-## Implementation Notes
-
-- Keep AI patching separate from raw CCv3 import/export.
-- Add `toNormalizedAiCard(card)` and `fromNormalizedAiCard(normalized, previousCard)` helpers before implementing model calls.
-- Add a local JSON Pointer patch validator before connecting any provider.
-- Treat model output as untrusted input.
-- Keep all prompts versioned in source so changes can be tested.
-- Do not let the model call filesystem, network, export, import, or app commands directly; it only returns patch JSON.
+# Agent Prompt And Tool Contract
+
+本文档描述 v0.3.0 的生产契约。旧 Guide/Edit 提示词、通用 JSON Patch、原始模型 JSON 解析和路径白名单不再存在。
+
+## 设计目标
+
+- 模型只能看到前端权限允许的卡片投影。
+- 模型通过语义化工具表达意图，纯领域层负责校验和编译。
+- 所有写入都先成为提案，并由用户确认。
+- Agent 不能删除字段、开场白或世界书条目。
+- 权限、revision 和条目指纹不能由模型选择或扩大。
+
+## 系统提示词原则
+
+运行时系统提示词应明确：
+
+1. 先使用检查工具读取必要信息。
+2. 只使用与目标匹配的编辑工具。
+3. 不得声称已经修改卡片；工具只会创建待审核提案。
+4. 不得要求或构造 `allowedPaths`、JSON Patch、删除操作或文件操作。
+5. 默认使用简体中文总结，除非用户要求其他语言。
+6. 世界书新内容必须作为候选生成；已有条目修改必须使用读取结果中的指纹。
+
+前端会把权限信封附在用户消息中供 Controller 恢复，但消息渲染会隐藏该信封。信封只是前端状态载体，不是模型可编辑的工具参数。
+
+## 权限模型
+
+`AgentPermission` 由前端生成，包含 scope 和 capabilities：
+
+- `card`
+- `section`
+- `field`
+- `lorebook`
+- `lorebookEntry`
+
+capabilities 区分 `read`、`edit` 和 `inject`。单条目范围绑定索引、精确可编辑字段和当前指纹；字段范围只包含一个精确字段路径。未指定目标时必须显式使用整张卡片 preset。
+
+## 检查工具
+
+### inspect_card
+
+无模型可控权限参数。返回当前 revision、权限描述和经过投影的卡片字段。图片、文件路径、密钥与未授权字段不会进入结果。
+
+### inspect_lorebook_entry
+
+读取权限范围内的一个世界书条目，返回索引、完整可用字段和稳定指纹。条目不在 scope 内时拒绝。
+
+### inspect_validation
+
+返回前端当前校验报告，不修改状态。
+
+### inspect_token_usage
+
+返回卡片或相关字段的 Token 估算，不修改状态。
+
+## 编辑工具
+
+### propose_card_edits
+
+输入为 `edits[]`，每项只有受支持的语义路径和值。支持的根字段包括名称、描述、性格、场景、首条开场白、备用开场白、示例对话、创作者备注、系统提示词、历史后指令、标签、创作者和角色版本；精确备用开场白可使用带索引路径。
+
+领域层拒绝空编辑、未知字段、错误值类型和权限范围外路径。
+
+### propose_lorebook_entry_edits
+
+输入包含条目索引、读取时获得的指纹和允许字段集合。字段可包括标题、关键词、次要关键词、内容、启用状态、正则、选择性触发、触发策略、注入位置、角色、深度、顺序、概率、优先级、大小写敏感和 outlet。
+
+领域层拒绝空编辑、指纹不匹配、越权字段和无效范围。应用时基于现有条目浅层复制并保留未知字段与 `extensions`。
+
+### propose_lorebook_injection
+
+输入为候选数组。每个候选必须包含 `candidateId`、标题和内容，可包含：
+
+- `keys`、`secondaryKeys`
+- `enabled`、`useRegex`、`selective`
+- `triggerStrategy`: `keyword`、`constant` 或 `vectorized`
+- `insertionPosition`: SillyTavern 位置 0–7
+- `role`: system/user/assistant 的 0/1/2
+- `depth`、`insertionOrder`
+- `probability`、`priority`
+- `caseSensitive`、`outletName`
+
+候选只暂存在提案中。用户勾选后，领域层验证所有选中候选，再一次性追加到当前世界书；不允许部分成功。
+
+## 提案与应用
+
+提案保存 schema version、workspace、session、tool call、权限、语义变更、差异、创建时 revision、完整卡片快照哈希、候选选择和状态。
+
+确认应用顺序：
+
+1. 状态必须为 pending。
+2. 当前 workspace 与 revision 必须匹配。
+3. 当前卡片稳定哈希必须匹配。
+4. 所有语义变更重新经过权限和字段校验。
+5. 世界书条目指纹必须匹配。
+6. 所有选中候选必须有效且至少选择一个。
+7. 编译完整新卡片并运行前端卡片校验。
+8. 仅在全部通过后调用 store 的 `applyAgentCard`。
+
+任何失败都不修改 Zustand、草稿、文件或 SQLite 卡片内容。
+
+## UI 分发
+
+主输入框、字段助手和世界书入口都调用 Agent Studio context：
+
+- 主输入框解析 scope selector 与 `@` 目标。
+- 字段助手生成精确 field 或 lorebookEntry 权限，并直接发送到当前 Controller。
+- 世界书入口只预设 lorebook scope 并聚焦输入框，仍由用户填写指令。
+
+不得在字段组件内创建临时 Controller、局部预览或直接调用字段 setter 写入 Agent 结果。
+
+## CardForge 参考边界
+
+交互借鉴 CardForge 的集中卡片状态、AI 候选暂存和勾选批量注入概念，但实现使用本项目自己的权限、语义编译、revision/指纹冲突与原子确认流程，不复制 GPL-3.0 源码。

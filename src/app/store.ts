@@ -4,7 +4,7 @@ import { createBlankCard, createBlankLorebook, createBlankLorebookEntry, unixNow
 import { prepareCardForExport } from "../lib/migrations";
 import { validateCard } from "../lib/validation";
 import type { AiModel, AiSettings } from "../lib/ai";
-import { defaultAiSettings, migrateLegacyAiCredential, normalizeAiSettings } from "../lib/ai";
+import { defaultAiSettings, normalizeAiSettings } from "../lib/ai";
 import { translate } from "../lib/i18n";
 
 const DRAFT_KEY = "sillytavern-card-creator:draft";
@@ -130,14 +130,7 @@ function loadAiSettings(): AiSettings {
   try {
     const raw = localStorage.getItem(AI_SETTINGS_KEY);
     const settings = raw ? normalizeAiSettings(JSON.parse(raw)) : { ...defaultAiSettings };
-    if (settings.apiKey.trim()) {
-      void migrateLegacyAiCredential(settings).then((migrated) => {
-        if (migrated) {
-          saveAiSettings({ ...settings, apiKey: "" });
-        }
-      });
-    }
-    return settings;
+    return { ...settings, apiKey: "" };
   } catch {
     return defaultAiSettings;
   }

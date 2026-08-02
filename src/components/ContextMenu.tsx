@@ -29,7 +29,7 @@ import {
 import { useProjectActions } from "../app/useProjectActions";
 import { getContextMenuTarget, type ContextMenuTarget } from "../lib/contextMenuTargets";
 import { useI18n, type TranslationKey } from "../lib/i18n";
-import type { AiFieldAction } from "../lib/aiAgent";
+import type { AgentFieldAction } from "../lib/agent/uiContext";
 
 type MenuItem =
   | {
@@ -208,7 +208,7 @@ function separator(id: string): MenuItem {
   return { type: "separator", id };
 }
 
-function aiActionLabelKey(action: AiFieldAction): TranslationKey {
+function aiActionLabelKey(action: AgentFieldAction): TranslationKey {
   switch (action) {
     case "polish_expand":
       return "aiField.polishExpand";
@@ -226,8 +226,6 @@ function aiActionLabelKey(action: AiFieldAction): TranslationKey {
       return "aiField.conflictCheck";
     case "extract_keywords":
       return "aiField.extractKeywords";
-    case "repair":
-      return "aiField.repair";
     case "variants":
       return "aiField.variants";
   }
@@ -553,12 +551,12 @@ export function ContextMenu() {
 
     if (menu.kind === "ai-field" && menu.contextTarget?.kind === "ai-field") {
       const target = menu.contextTarget;
-      const recommendedAction: AiFieldAction | undefined = !target.value.trim()
+      const recommendedAction: AgentFieldAction | undefined = !target.value.trim()
         ? "complete"
         : target.value.length > 1400
           ? "shorten"
           : undefined;
-      const aiActionCandidates: AiFieldAction[] = [
+      const aiActionCandidates: AgentFieldAction[] = [
         ...(recommendedAction ? [recommendedAction] : []),
         "polish_expand",
         "rewrite",
@@ -585,7 +583,7 @@ export function ContextMenu() {
         {
           type: "item",
           id: "ai-settings",
-          label: target.ready ? t("common.settings") : t("aiChat.openSettingsFirst"),
+          label: target.ready ? t("common.settings") : t("settings.apiKeyMissing"),
           icon: <Settings size={15} />,
           action: actions.openSettings,
         },

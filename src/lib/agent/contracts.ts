@@ -1,14 +1,8 @@
 import type { CharacterCardV3, ValidationReport } from "../schema";
-import {
-  applyAiPatches,
-  buildAiAgentDiff,
-  fromNormalizedAiCard,
-  type AiAgentDiff,
-  type AiPatch,
-  type NormalizedAiCard,
-  toNormalizedAiCard
-} from "../aiAgent";
 import { validateCard } from "../validation";
+import { applyAgentChanges, assertAgentChangesAllowed, buildAgentDiff, type AgentChange, type AgentDiff } from "./changes";
+import { normalizeAgentPermission, samePermission, type AgentPermission } from "./permissions";
+import { stableHash } from "./projection";
 
 export interface AiConnectionProfile {
   id: string;
@@ -27,23 +21,19 @@ export interface AiConnectionProfile {
 
 export type ProposalState = "pending" | "applied" | "discarded" | "conflicted";
 
-export interface CardProposalGuard {
-  path: string;
-  valueHash: string;
-}
-
 export interface CardProposal {
+  schemaVersion: 1;
   id: string;
   workspaceId: string;
   sessionId: string;
   toolCallId: string;
   summary: string;
-  patches: AiPatch[];
-  allowedPaths: string[];
+  permission: AgentPermission;
+  changes: AgentChange[];
+  selectedCandidateIds: string[];
   baseCardHash: string;
   baseCardRevision: number;
-  guards: CardProposalGuard[];
-  diffs: AiAgentDiff[];
+  diffs: AgentDiff[];
   validationReport: ValidationReport;
   state: ProposalState;
   saveState: "not-needed" | "saved" | "draft-only" | "failed";
@@ -57,8 +47,8 @@ export interface ProposalCreationInput {
   sessionId: string;
   toolCallId: string;
   summary: string;
-  patches: AiPatch[];
-  allowedPaths: string[];
+  permission: AgentPermission;
+  changes: AgentChange[];
   card: CharacterCardV3;
   cardRevision: number;
   id?: string;
@@ -71,29 +61,25 @@ export type ProposalApplyResult =
   | { state: "blocked"; reasons: string[]; validationReport: ValidationReport };
 
 export function createCardProposal(input: ProposalCreationInput): CardProposal {
-  const before = toNormalizedAiCard(input.card);
-  assertAllowedPatches(input.patches, input.allowedPaths);
-  const after = applyAiPatches(before, input.patches);
-  const nextCard = fromNormalizedAiCard(after, input.card);
-  const validationReport = validateCard(nextCard);
+  if (input.changes.length === 0) throw new Error("提案至少需要一个语义变更。");
+  assertAgentChangesAllowed(input.card, input.changes, input.permission);
+  const candidateIds = input.changes.flatMap((change) => change.kind === "lorebookInjection" ? change.candidates.map((candidate) => candidate.candidateId) : []);
+  const after = applyAgentChanges(input.card, input.changes, input.permission, candidateIds.length ? candidateIds : undefined);
+  const validationReport = validateCard(after);
   const now = input.now ?? Date.now();
-  const guards = affectedPaths(input.patches).map((path) => ({
-    path,
-    valueHash: stableHash(readPath(before, path))
-  }));
-
   return {
+    schemaVersion: 1,
     id: input.id ?? createId("proposal"),
     workspaceId: input.workspaceId,
     sessionId: input.sessionId,
     toolCallId: input.toolCallId,
     summary: input.summary,
-    patches: input.patches.map((patch) => ({ ...patch })),
-    allowedPaths: [...input.allowedPaths],
-    baseCardHash: stableHash(before),
+    permission: clone(input.permission),
+    changes: clone(input.changes),
+    selectedCandidateIds: [],
+    baseCardHash: stableHash(input.card),
     baseCardRevision: input.cardRevision,
-    guards,
-    diffs: buildAiAgentDiff(before, after),
+    diffs: buildAgentDiff(input.card, after),
     validationReport,
     state: "pending",
     saveState: "not-needed",
@@ -102,31 +88,24 @@ export function createCardProposal(input: ProposalCreationInput): CardProposal {
   };
 }
 
-export function applyCardProposal(proposal: CardProposal, card: CharacterCardV3): ProposalApplyResult {
-  const before = toNormalizedAiCard(card);
-  const changedPaths = proposal.guards
-    .filter((guard) => stableHash(readPath(before, guard.path)) !== guard.valueHash)
-    .map((guard) => guard.path);
-
-  if (changedPaths.length > 0) {
-    return {
-      state: "conflicted",
-      reasons: changedPaths.map((path) => `受影响字段已发生变化：${path}`),
-      validationReport: validateCard(card)
-    };
+export function applyCardProposal(
+  proposal: CardProposal,
+  card: CharacterCardV3,
+  cardRevision: number,
+  selectedCandidateIds = proposal.selectedCandidateIds
+): ProposalApplyResult {
+  if (proposal.schemaVersion !== 1) {
+    return conflicted(card, ["提案契约版本已失效，请重新生成。"]);
   }
-
+  if (cardRevision !== proposal.baseCardRevision || stableHash(card) !== proposal.baseCardHash) {
+    return conflicted(card, [`卡片已从 revision ${proposal.baseCardRevision} 更新到 ${cardRevision}，请重新读取后生成提案。`]);
+  }
   try {
-    assertAllowedPatches(proposal.patches, proposal.allowedPaths);
-    const after = applyAiPatches(before, proposal.patches);
-    const nextCard = fromNormalizedAiCard(after, card);
+    const hasInjection = proposal.changes.some((change) => change.kind === "lorebookInjection");
+    const nextCard = applyAgentChanges(card, proposal.changes, proposal.permission, hasInjection ? selectedCandidateIds : undefined);
     const validationReport = validateCard(nextCard);
     if (validationReport.errors.length > 0) {
-      return {
-        state: "blocked",
-        reasons: validationReport.errors.map((error) => error.message),
-        validationReport
-      };
+      return { state: "blocked", reasons: validationReport.errors.map((error) => error.message), validationReport };
     }
     return { state: "applied", card: nextCard, validationReport };
   } catch (error) {
@@ -138,65 +117,43 @@ export function applyCardProposal(proposal: CardProposal, card: CharacterCardV3)
   }
 }
 
-export function assertAllowedPatches(patches: AiPatch[], allowedPaths: string[]): void {
-  for (const patch of patches) {
-    if (!allowedPaths.some((allowedPath) => patch.path === allowedPath || patch.path.startsWith(`${allowedPath}/`))) {
-      throw new Error(`Patch path is outside the approved scope: ${patch.path}`);
-    }
-  }
+export function isCardProposal(value: unknown): value is CardProposal {
+  if (!value || typeof value !== "object") return false;
+  const proposal = value as Record<string, unknown>;
+  const permission = normalizeAgentPermission(proposal.permission);
+  return proposal.schemaVersion === 1
+    && ["pending", "applied", "discarded", "conflicted"].includes(String(proposal.state))
+    && typeof proposal.id === "string"
+    && typeof proposal.workspaceId === "string"
+    && typeof proposal.sessionId === "string"
+    && typeof proposal.toolCallId === "string"
+    && typeof proposal.summary === "string"
+    && typeof proposal.baseCardHash === "string"
+    && Number.isInteger(proposal.baseCardRevision)
+    && Array.isArray(proposal.selectedCandidateIds)
+    && proposal.selectedCandidateIds.every((id) => typeof id === "string")
+    && Array.isArray(proposal.changes)
+    && proposal.changes.every(isAgentChange)
+    && Array.isArray(proposal.diffs)
+    && Boolean(permission && samePermission(permission, proposal.permission as AgentPermission));
 }
 
-export function affectedPaths(patches: AiPatch[]): string[] {
-  return [...new Set(patches.map((patch) => patch.path))];
+function isAgentChange(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const change = value as Record<string, unknown>;
+  if (change.kind === "cardEdit") return Array.isArray(change.edits);
+  if (change.kind === "lorebookEntryEdit") return Boolean(change.edit && typeof change.edit === "object");
+  return change.kind === "lorebookInjection" && Array.isArray(change.candidates);
 }
 
-export function stableHash(value: unknown): string {
-  const source = stableStringify(value);
-  let hash = 2166136261;
-  for (let index = 0; index < source.length; index += 1) {
-    hash ^= source.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
-export function readPath(value: NormalizedAiCard, path: string): unknown {
-  if (!path.startsWith("/")) {
-    return undefined;
-  }
-  return path
-    .slice(1)
-    .split("/")
-    .map((segment) => segment.replace(/~1/g, "/").replace(/~0/g, "~"))
-    .reduce<unknown>((current, segment) => {
-      if (Array.isArray(current)) {
-        const index = Number(segment);
-        return Number.isInteger(index) ? current[index] : undefined;
-      }
-      if (current && typeof current === "object") {
-        return (current as Record<string, unknown>)[segment];
-      }
-      return undefined;
-    }, value);
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
-  }
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
-    .join(",")}}`;
+function conflicted(card: CharacterCardV3, reasons: string[]): ProposalApplyResult {
+  return { state: "conflicted", reasons, validationReport: validateCard(card) };
 }
 
 function createId(prefix: string): string {
-  if (globalThis.crypto?.randomUUID) {
-    return `${prefix}-${globalThis.crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+}
+
+function clone<T>(value: T): T {
+  return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)) as T;
 }
