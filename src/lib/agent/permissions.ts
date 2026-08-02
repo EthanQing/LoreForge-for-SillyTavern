@@ -172,6 +172,15 @@ export function decodeAgentRequest(value: string): { instruction: string; permis
   }
 }
 
+export function resolveReplacementAgentRequest(value: string, preset: AgentScopePreset, replacementInstruction?: string): { instruction: string; permission: AgentPermission } {
+  const previousRequest = decodeAgentRequest(value);
+  if (!previousRequest.permission) throw new Error("该消息没有有效的 Agent 权限范围，不能重新生成或重发。");
+  return {
+    instruction: replacementInstruction ?? previousRequest.instruction,
+    permission: permissionForPreset(preset)
+  };
+}
+
 export function samePermission(left: AgentPermission, right: AgentPermission): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }

@@ -12,6 +12,8 @@ Completed and streaming messages are grouped into visible turns by `transcript.t
 
 The model receives no permission parameter and cannot expand the current scope. Unknown or ambiguous mentions fail instead of falling back to a card-wide scope. A lorebook-entry scope records the entry fingerprint and exact editable fields.
 
+Regenerate and edit-resend decode the previous instruction but create a new permission envelope from the scope selector's current value. This is an explicit user authorization boundary. Steering and follow-up messages during an active run remain pinned to that run's permission.
+
 ## Semantic Tools
 
 Inspection tools:

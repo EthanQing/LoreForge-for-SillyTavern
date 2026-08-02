@@ -106,6 +106,8 @@ capabilities 区分 `read`、`edit` 和 `inject`。单条目范围绑定索引�
 - 主输入框解析 scope selector 与 `@` 目标。
 - 字段助手生成精确 field 或 lorebookEntry 权限，并直接发送到当前 Controller。
 - 世界书入口只预设 lorebook scope 并聚焦输入框，仍由用户填写指令。
+- “重新生成”和编辑后“重新发送”沿用上一条指令内容，但使用输入区当前 scope 创建新的权限信封；只有用户能通过这个控件重新授权。
+- 运行中的 steering/follow-up 始终保留本轮权限，不能借此扩大 scope。
 
 不得在字段组件内创建临时 Controller、局部预览或直接调用字段 setter 写入 Agent 结果。
 

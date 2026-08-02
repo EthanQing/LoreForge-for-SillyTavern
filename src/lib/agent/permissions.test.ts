@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createBlankCard } from "../schema";
-import { canEditCardField, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, permissionForField, resolveAgentRequest } from "./permissions";
+import { canEditCardField, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
 
 describe("agent request permissions", () => {
   it("turns @ targets into enforced scopes", () => {
@@ -32,5 +32,21 @@ describe("agent request permissions", () => {
   it("does not trust capabilities from a persisted envelope", () => {
     const encoded = `<agent_scope data="${encodeURIComponent(JSON.stringify({ scope: { kind: "field", path: "/description", label: "描述" }, capabilities: ["read", "edit", "inject"] }))}">\n润色\n</agent_scope>`;
     expect(decodeAgentRequest(encoded).permission).toEqual(permissionForField("/description", "描述"));
+  });
+
+  it("uses the current user-selected scope for replacement runs", () => {
+    const previous = encodeAgentRequest(permissionForPreset("worldbook"), "修改开场白");
+    expect(resolveReplacementAgentRequest(previous, "card")).toEqual({
+      instruction: "修改开场白",
+      permission: permissionForPreset("card")
+    });
+  });
+
+  it("uses edited text and the current scope when resending", () => {
+    const previous = encodeAgentRequest(permissionForPreset("worldbook"), "旧指令");
+    expect(resolveReplacementAgentRequest(previous, "greetings", "新指令")).toEqual({
+      instruction: "新指令",
+      permission: permissionForPreset("greetings")
+    });
   });
 });

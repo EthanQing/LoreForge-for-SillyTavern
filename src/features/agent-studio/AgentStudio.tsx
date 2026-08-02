@@ -23,6 +23,7 @@ import {
   encodeAgentRequest,
   permissionForPreset,
   resolveAgentRequest,
+  resolveReplacementAgentRequest,
   type AgentScopePreset
 } from "../../lib/agent/permissions";
 import {
@@ -328,14 +329,15 @@ export function AgentStudio(): ReactNode {
     const target = getConversationActionTarget(currentMessages, streamingMessage as AgentMessage | undefined);
     if (!target.lastUserMessage || (mode === "regenerating" && !target.canRegenerate)) return;
 
-    const previousRequest = decodeAgentRequest(readMessageText(target.lastUserMessage));
-    const userText = replacementText ?? previousRequest.instruction;
-    if (!userText.trim()) return;
-    if (!previousRequest.permission) {
-      setStatus("该消息没有有效的 Agent 权限范围，不能重新生成或重发。");
+    let replacementRequest;
+    try {
+      replacementRequest = resolveReplacementAgentRequest(readMessageText(target.lastUserMessage), requestScope, replacementText);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
       return;
     }
-    const permission = previousRequest.permission;
+    const { instruction: userText, permission } = replacementRequest;
+    if (!userText.trim()) return;
     const encodedRequest = encodeAgentRequest(permission, userText);
 
     const baseMessages = getMessagesBeforeLastUser(currentMessages);
@@ -355,7 +357,8 @@ export function AgentStudio(): ReactNode {
     setEditingLastUser(false);
     setEditedUserText("");
     setInput("");
-    setEvents([{ type: "status", message: mode === "regenerating" ? "正在重新生成最后一条 Agent 消息…" : "正在重新发送最后一条用户消息…" }]);
+    const permissionLabel = describeAgentPermission(permission);
+    setEvents([{ type: "status", message: `${mode === "regenerating" ? "正在重新生成最后一条 Agent 消息" : "正在重新发送最后一条用户消息"} · ${permissionLabel}` }]);
     setMessages(baseMessages);
     setStreamingMessage(undefined);
     scrollTranscriptToBottom();
@@ -389,7 +392,7 @@ export function AgentStudio(): ReactNode {
       actionLockRef.current = false;
       setConversationOperation("idle");
     }
-  }, [applyAgentCard, conversationOperation, controller, messages, proposals, rollbackRelatedProposals, sessionId, setStatus, streamingMessage, workspaceId, scrollTranscriptToBottom]);
+  }, [applyAgentCard, conversationOperation, controller, messages, proposals, requestScope, rollbackRelatedProposals, sessionId, setStatus, streamingMessage, workspaceId, scrollTranscriptToBottom]);
 
   const selectSession = useCallback(async (record: AgentSessionHistoryRecord) => {
     if (actionLockRef.current || conversationOperation !== "idle") return;

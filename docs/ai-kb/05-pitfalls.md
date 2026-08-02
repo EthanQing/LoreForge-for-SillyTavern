@@ -46,7 +46,7 @@ Pi may emit `agent_end` for error or aborted messages. Classify the final assist
 
 ## Conversation Replacement
 
-Regenerate/edit-resend must keep the original permission envelope for that user turn. Abort active work, prepare the message prefix, persist a branch marker, and reconcile related proposals before starting the replacement run.
+Regenerate/edit-resend must decode the previous instruction but issue a new permission envelope from the scope selector's current value. The selector is the user's explicit authorization; reusing the old envelope makes the visible scope disagree with the actual run. Steering and follow-up remain pinned to the active run's permission. Abort active work, prepare the message prefix, persist a branch marker, and reconcile related proposals before starting the replacement run.
 
 ## Store Side Effects
 
