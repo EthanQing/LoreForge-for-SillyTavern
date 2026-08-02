@@ -198,7 +198,7 @@ export function useProjectActions() {
       if (!base.basePngDataUrl && !base.basePngPath && !pickedBasePath) {
         return;
       }
-      const parsed = await exportCardPng(path, cardToSave, { compatibility_v2: true }, pickedBasePath ? { basePngPath: pickedBasePath } : base);
+      const parsed = await exportCardPng(path, cardToSave, pickedBasePath ? { basePngPath: pickedBasePath } : base);
       markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, cardToSave), path);
     },
     [card, markSaved]

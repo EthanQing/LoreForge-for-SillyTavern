@@ -45,6 +45,9 @@
 
 - CardForge worldbook editor: https://github.com/Anastasia2372/sillytavern-cardforge/blob/main/src/renderer/views/WorldBookEditor.vue
 - CardForge card store: https://github.com/Anastasia2372/sillytavern-cardforge/blob/main/src/renderer/stores/card.js
+- CardForge browser PNG embedding: https://github.com/Anastasia2372/sillytavern-cardforge/blob/main/web/src/utils/png-utils.js
+- Character Card V3 PNG embedding specification: https://github.com/kwaroran/character-card-spec-v3/blob/main/SPEC_V3.md#pngapng
+- SillyTavern PNG character metadata parser: https://github.com/SillyTavern/SillyTavern/blob/release/src/character-card-parser.js
 - DeepSeek API documentation: https://api-docs.deepseek.com/
 
 CardForge is GPL-3.0. Use it only as a design reference; do not copy implementation source into this repository.

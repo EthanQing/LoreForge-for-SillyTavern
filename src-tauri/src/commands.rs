@@ -6,16 +6,9 @@ use crate::png_card::{read_card_value, write_card_chunks};
 use crate::validation::{ensure_valid_for_export, validate_card_report};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PngExportOptions {
-    #[serde(default)]
-    pub compatibility_v2: bool,
-}
 
 #[tauri::command]
 pub fn open_card_file(path: String) -> Result<ParsedCard, String> {
@@ -38,14 +31,12 @@ pub fn export_card_png(
     base_png_path: Option<String>,
     base_png_data_url: Option<String>,
     card: CharacterCardV3,
-    options: PngExportOptions,
 ) -> Result<ParsedCard, String> {
     export_card_png_inner(
         PathBuf::from(path),
         base_png_path.map(PathBuf::from),
         base_png_data_url,
         card,
-        options,
     )
     .map_err(command_error)
 }
@@ -103,11 +94,10 @@ fn export_card_png_inner(
     base_png_path: Option<PathBuf>,
     base_png_data_url: Option<String>,
     card: CharacterCardV3,
-    options: PngExportOptions,
 ) -> CardResult<ParsedCard> {
     let card = prepare_export_card(card)?;
     let base = read_export_base_png(base_png_path, base_png_data_url)?;
-    let png = write_card_chunks(&base, &card, options.compatibility_v2)?;
+    let png = write_card_chunks(&base, &card)?;
     fs::write(&path, png)?;
     Ok(parsed(card, Vec::new(), "png-ccv3".to_string(), None))
 }

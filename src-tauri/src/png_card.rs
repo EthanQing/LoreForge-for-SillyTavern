@@ -24,7 +24,7 @@ pub fn text_chunks(bytes: &[u8]) -> CardResult<BTreeMap<String, String>> {
         if chunk_type == b"tEXt" {
             let data = &bytes[data_start..data_end];
             if let Some(separator) = data.iter().position(|byte| *byte == 0) {
-                let key = String::from_utf8_lossy(&data[..separator]).to_string();
+                let key = String::from_utf8_lossy(&data[..separator]).to_ascii_lowercase();
                 let value = String::from_utf8_lossy(&data[separator + 1..]).to_string();
                 chunks.insert(key, value);
             }
@@ -37,20 +37,16 @@ pub fn text_chunks(bytes: &[u8]) -> CardResult<BTreeMap<String, String>> {
     Ok(chunks)
 }
 
-pub fn write_card_chunks(
-    base_png: &[u8],
-    card: &CharacterCardV3,
-    include_v2: bool,
-) -> CardResult<Vec<u8>> {
-    let ccv3 = STANDARD.encode(serde_json::to_string(card)?);
-    let mut entries = vec![("ccv3", ccv3)];
-    if include_v2 {
-        entries.push((
-            "chara",
-            STANDARD.encode(serde_json::to_string(&downgrade_to_v2(card))?),
-        ));
-    }
-    write_text_chunks(base_png, &entries)
+pub fn write_card_chunks(base_png: &[u8], card: &CharacterCardV3) -> CardResult<Vec<u8>> {
+    let ccv3 = serde_json::to_value(card)?;
+    let chara = downgrade_to_v2(card);
+    let entries = [
+        ("chara", STANDARD.encode(serde_json::to_string(&chara)?)),
+        ("ccv3", STANDARD.encode(serde_json::to_string(&ccv3)?)),
+    ];
+    let output = write_text_chunks(base_png, &entries)?;
+    verify_card_chunks(&output, &chara, &ccv3)?;
+    Ok(output)
 }
 
 pub fn read_card_value(bytes: &[u8]) -> CardResult<Option<(Value, String)>> {
@@ -126,6 +122,27 @@ fn decode_json_chunk(encoded: &str) -> CardResult<Value> {
     Ok(serde_json::from_slice(&decoded)?)
 }
 
+fn verify_card_chunks(
+    bytes: &[u8],
+    expected_chara: &Value,
+    expected_ccv3: &Value,
+) -> CardResult<()> {
+    let chunks = text_chunks(bytes)?;
+    for (key, expected) in [("chara", expected_chara), ("ccv3", expected_ccv3)] {
+        let encoded = chunks.get(key).ok_or_else(|| {
+            CardError::Invalid(format!(
+                "Exported PNG is missing the {key} character data chunk."
+            ))
+        })?;
+        if decode_json_chunk(encoded)? != *expected {
+            return Err(CardError::Invalid(format!(
+                "Exported PNG {key} character data did not pass verification."
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn downgrade_to_v2(card: &CharacterCardV3) -> Value {
     let mut value = serde_json::to_value(card).unwrap_or(Value::Null);
     if let Value::Object(root) = &mut value {
@@ -155,9 +172,14 @@ fn is_removed_export_chunk(chunk_type: &[u8], data: &[u8]) -> bool {
     if chunk_type == b"caBX" {
         return true;
     }
-    chunk_type == b"tEXt"
-        && (data.strip_prefix(b"ccv3\0").is_some()
-            || data.strip_prefix(b"chara\0").is_some())
+    if chunk_type != b"tEXt" {
+        return false;
+    }
+    let Some(separator) = data.iter().position(|byte| *byte == 0) else {
+        return false;
+    };
+    data[..separator].eq_ignore_ascii_case(b"ccv3")
+        || data[..separator].eq_ignore_ascii_case(b"chara")
 }
 
 fn encode_text_chunk(key: &str, value: &str) -> Vec<u8> {
@@ -186,17 +208,66 @@ mod tests {
     use super::*;
     use crate::card_schema::CharacterCardV3;
 
-    fn minimal_png() -> Vec<u8> {
-        let mut png = Vec::from(PNG_SIGNATURE.as_slice());
-        png.extend_from_slice(&encode_chunk(*b"IEND", &[]));
-        png
+    fn one_pixel_png() -> Vec<u8> {
+        STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+            .unwrap()
+    }
+
+    fn text_keywords(bytes: &[u8]) -> Vec<String> {
+        let mut keywords = Vec::new();
+        let mut offset = PNG_SIGNATURE.len();
+        while offset + 12 <= bytes.len() {
+            let length = u32::from_be_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            let chunk_type = &bytes[offset + 4..offset + 8];
+            let data_start = offset + 8;
+            let data_end = data_start + length;
+            if chunk_type == b"tEXt" {
+                let data = &bytes[data_start..data_end];
+                if let Some(separator) = data.iter().position(|byte| *byte == 0) {
+                    keywords.push(String::from_utf8_lossy(&data[..separator]).to_string());
+                }
+            }
+            offset = data_end + 4;
+            if chunk_type == b"IEND" {
+                break;
+            }
+        }
+        keywords
+    }
+
+    fn chunks_have_valid_crc(bytes: &[u8]) -> bool {
+        let mut offset = PNG_SIGNATURE.len();
+        while offset + 12 <= bytes.len() {
+            let length = u32::from_be_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            let chunk_type = &bytes[offset + 4..offset + 8];
+            let data_end = offset + 8 + length;
+            let expected = u32::from_be_bytes(bytes[data_end..data_end + 4].try_into().unwrap());
+            let mut hasher = Hasher::new();
+            hasher.update(chunk_type);
+            hasher.update(&bytes[offset + 8..data_end]);
+            if hasher.finalize() != expected {
+                return false;
+            }
+            offset = data_end + 4;
+            if chunk_type == b"IEND" {
+                return offset == bytes.len();
+            }
+        }
+        false
     }
 
     #[test]
-    fn writes_and_reads_ccv3_chunk() {
+    fn writes_tavern_compatible_chara_before_ccv3() {
         let card = CharacterCardV3::blank(1);
-        let output = write_card_chunks(&minimal_png(), &card, false).unwrap();
+        let output = write_card_chunks(&one_pixel_png(), &card).unwrap();
         let chunks = text_chunks(&output).unwrap();
+        assert_eq!(text_keywords(&output), ["chara", "ccv3"]);
+        assert!(chunks_have_valid_crc(&output));
+        assert_eq!(
+            decode_json_chunk(&chunks["chara"]).unwrap()["spec"],
+            "chara_card_v2"
+        );
         assert!(chunks.contains_key("ccv3"));
         let (value, source) = read_card_value(&output).unwrap().unwrap();
         assert_eq!(source, "png-ccv3");
@@ -204,16 +275,19 @@ mod tests {
     }
 
     #[test]
-    fn strips_c2pa_box_chunks_on_export() {
+    fn replaces_existing_character_chunks_case_insensitively() {
         let mut png = Vec::from(PNG_SIGNATURE.as_slice());
         png.extend_from_slice(&encode_chunk(*b"IHDR", &[0; 13]));
         png.extend_from_slice(&encode_chunk(*b"caBX", b"provenance"));
+        png.extend_from_slice(&encode_text_chunk("ChArA", "stale"));
+        png.extend_from_slice(&encode_text_chunk("CCV3", "stale"));
         png.extend_from_slice(&encode_chunk(*b"IEND", &[]));
 
         let card = CharacterCardV3::blank(1);
-        let output = write_card_chunks(&png, &card, false).unwrap();
+        let output = write_card_chunks(&png, &card).unwrap();
 
         assert!(!output.windows(4).any(|window| window == b"caBX"));
-        assert!(text_chunks(&output).unwrap().contains_key("ccv3"));
+        assert_eq!(text_keywords(&output), ["chara", "ccv3"]);
+        assert_eq!(text_chunks(&output).unwrap().len(), 2);
     }
 }

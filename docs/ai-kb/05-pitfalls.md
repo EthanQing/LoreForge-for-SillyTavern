@@ -62,7 +62,7 @@ Validation exists in TypeScript and Rust. Update and test both sides when changi
 
 ## PNG Export Requires A Base Image
 
-PNG export needs a base path or data URL. Strip inline image metadata and private `caBX` provenance chunks, then merge editor-only assets back after export so the Resources panel remains usable.
+PNG export needs a base path or data URL. Strip inline image metadata and private `caBX` provenance chunks, then merge editor-only assets back after export so the Resources panel remains usable. Always replace old `chara`/`ccv3` chunks case-insensitively and write `chara` before `ccv3`; some Tavern-compatible readers inspect only the first character text chunk even though current SillyTavern searches by keyword.
 
 ## Global Save By Current File Type
 

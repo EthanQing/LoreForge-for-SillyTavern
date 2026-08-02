@@ -3,10 +3,6 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type { CharacterCardV3, ParsedCard, ValidationReport } from "./schema";
 import { translate } from "./i18n";
 
-export interface PngExportOptions {
-  compatibility_v2: boolean;
-}
-
 export interface PngExportBase {
   basePngPath?: string | null;
   basePngDataUrl?: string | null;
@@ -85,7 +81,6 @@ export async function saveCardJson(path: string, card: CharacterCardV3): Promise
 export async function exportCardPng(
   path: string,
   card: CharacterCardV3,
-  options: PngExportOptions,
   base: PngExportBase = {}
 ): Promise<ParsedCard> {
   return await invoke<ParsedCard>("export_card_png", {
@@ -94,8 +89,7 @@ export async function exportCardPng(
     base_png_path: base.basePngPath ?? null,
     basePngDataUrl: base.basePngDataUrl ?? null,
     base_png_data_url: base.basePngDataUrl ?? null,
-    card,
-    options
+    card
   });
 }
 
