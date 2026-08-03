@@ -97,7 +97,8 @@ export function applyCardProposal(
   if (proposal.schemaVersion !== 1) {
     return conflicted(card, ["提案契约版本已失效，请重新生成。"]);
   }
-  if (cardRevision !== proposal.baseCardRevision || stableHash(card) !== proposal.baseCardHash) {
+  const cardChanged = cardRevision !== proposal.baseCardRevision || stableHash(card) !== proposal.baseCardHash;
+  if (cardChanged && !canRebaseLorebookEntryProposal(proposal, card)) {
     return conflicted(card, [`卡片已从 revision ${proposal.baseCardRevision} 更新到 ${cardRevision}，请重新读取后生成提案。`]);
   }
   try {
@@ -148,6 +149,15 @@ function isAgentChange(value: unknown): boolean {
 
 function conflicted(card: CharacterCardV3, reasons: string[]): ProposalApplyResult {
   return { state: "conflicted", reasons, validationReport: validateCard(card) };
+}
+
+function canRebaseLorebookEntryProposal(proposal: CardProposal, card: CharacterCardV3): boolean {
+  if (proposal.changes.length === 0) return false;
+  return proposal.changes.every((change) => {
+    if (change.kind !== "lorebookEntryEdit") return false;
+    const entry = card.data.character_book?.entries[change.edit.index];
+    return Boolean(entry && stableHash(entry) === change.edit.fingerprint);
+  });
 }
 
 function createId(prefix: string): string {
