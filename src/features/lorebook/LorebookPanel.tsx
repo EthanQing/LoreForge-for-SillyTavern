@@ -426,7 +426,7 @@ export function LorebookPanel() {
   if (!book) {
     entryRefs.current.length = 0;
     return (
-      <section className="panel" data-context-menu="lorebook-panel" data-context-target-id={panelContextTargetId}>
+      <section className="panel lorebook-panel" data-context-menu="lorebook-panel" data-context-target-id={panelContextTargetId}>
         <div className="panel-heading">
           <h2>{t("lorebook.title")}</h2>
         </div>
@@ -440,7 +440,7 @@ export function LorebookPanel() {
   entryRefs.current.length = book.entries.length;
 
   return (
-    <section className="panel" data-context-menu="lorebook-panel" data-context-target-id={panelContextTargetId}>
+    <section className="panel lorebook-panel" data-context-menu="lorebook-panel" data-context-target-id={panelContextTargetId}>
       <div className="panel-heading">
         <h2>{t("lorebook.title")}</h2>
         <div className="inline-row compact">

@@ -30,6 +30,8 @@ React UI
 
 长会话在发送给模型前由 `src/lib/agent/context.ts` 压缩。带工具调用的 assistant 消息与其连续工具结果必须作为整体保留或整体省略，避免向 OpenAI-compatible 接口发送孤立的 `tool` 消息。
 
+Agent 编辑台支持桌面拖拽调整宽度和窄屏抽屉。编辑台内需要随可用栏宽变化的页面使用 `agent-inspector` CSS container query，不能只依赖窗口级 media query。
+
 ## Rust 后端边界
 
 - `commands.rs`：JSON、PNG/APNG、CHARX 的打开、保存、导入、导出与校验命令。

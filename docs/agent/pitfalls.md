@@ -5,3 +5,7 @@
 OpenAI-compatible 消息中的 `tool` 必须紧跟声明对应 `tool_calls` 的 assistant 消息。Agent 上下文达到预算后，不能逐条截取尾部消息，否则可能保留工具结果却省略它的调用消息，导致接口返回 `Messages with role 'tool' must be a response to a preceding message with 'tool_calls'`。
 
 `src/lib/agent/context.ts` 将带工具调用的 assistant 消息及其连续工具结果作为一个压缩组。调整上下文预算、历史恢复或消息转换时，应继续保持这个原子边界，并覆盖单次 assistant 并行调用多个工具的情况。
+
+## 编辑台响应式断点看容器宽度
+
+Agent 编辑台在桌面端可以独立调整宽度，窗口较宽不代表编辑页面也有足够空间。编辑台内部的表单列数、工具栏和摘要布局应使用命名为 `agent-inspector` 的 CSS container query；仅使用 viewport media query 会在窄编辑台中保留桌面布局并造成内容裁切。

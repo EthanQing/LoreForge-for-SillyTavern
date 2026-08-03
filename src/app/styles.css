@@ -3659,6 +3659,7 @@ select.input {
   flex-direction: column;
   overflow: hidden;
   border-radius: 0;
+  container: agent-inspector / inline-size;
 }
 
 .card-workshop-shell .agent-studio-inspector > .panel {
@@ -3711,6 +3712,71 @@ select.input {
 
 .card-workshop-shell .agent-inspector-backdrop {
   display: none;
+}
+
+@container agent-inspector (max-width: 620px) {
+  .card-workshop-shell .lorebook-panel .panel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .card-workshop-shell .lorebook-panel .panel-heading .inline-row {
+    flex-wrap: wrap;
+  }
+
+  .card-workshop-shell .lorebook-panel .two-column {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card-workshop-shell .lorebook-panel .list-editor-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+  }
+
+  .card-workshop-shell .lorebook-panel .list-editor-toolbar strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-workshop-shell .lorebook-panel .list-editor-toolbar .spacer {
+    display: none;
+  }
+
+  .card-workshop-shell .lorebook-panel .check-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .card-workshop-shell .lorebook-panel .collapsible-trigger.lore-entry-summary {
+    grid-template-columns: 12px 28px minmax(0, 1fr);
+    grid-template-areas:
+      "toggle drag identity"
+      ". . meta"
+      ". . preview";
+  }
+
+  .card-workshop-shell .lorebook-panel .lore-entry-summary-meta {
+    justify-self: start;
+  }
+}
+
+@container agent-inspector (max-width: 380px) {
+  .card-workshop-shell .lorebook-panel .list-editor-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .card-workshop-shell .lorebook-panel .list-editor-toolbar strong {
+    grid-column: 1 / -1;
+  }
+
+  .card-workshop-shell .lorebook-panel .list-editor-toolbar .button {
+    justify-self: end;
+  }
+
+  .card-workshop-shell .lorebook-panel .check-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 1099px) {
