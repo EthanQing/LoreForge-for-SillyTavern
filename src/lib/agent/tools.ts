@@ -134,6 +134,7 @@ function permissionAllowsValidationIssue(permission: AgentPermission, issue: Val
     if (!issue.path.startsWith(prefix)) return false;
     return !scope.fields || scope.fields.some((field) => issue.path.startsWith(`${prefix}${rawLorebookField(field)}`));
   }
+  if (scope.kind === "lorebookEntries") return scope.entries.some((entry) => permissionAllowsLorebookValidationIssue(entry, issue));
   if (scope.kind === "section") {
     const prefix = scope.section === "basic"
       ? ["data.name", "data.creator_notes", "data.tags", "data.creator", "data.character_version"]
@@ -158,8 +159,8 @@ function projectTokenUsage(card: CharacterCardV3, permission: AgentPermission) {
     }] : [];
   });
   const scope = permission.scope;
-  const lorebookEntries = scope.kind === "lorebookEntry"
-    ? stats.lorebookEntries.filter((entry) => entry.index === scope.index)
+  const lorebookEntries = scope.kind === "lorebookEntry" || scope.kind === "lorebookEntries"
+    ? stats.lorebookEntries.filter((entry) => lorebookScopeEntries(scope).some((scopeEntry) => entry.index === scopeEntry.index))
     : scope.kind === "card" || scope.kind === "lorebook" ? stats.lorebookEntries : [];
   return {
     totalTokens: items.reduce((sum, item) => sum + item.tokens, 0),
@@ -179,6 +180,7 @@ function permissionAllowsTokenItem(permission: AgentPermission, item: TokenStatI
     if (!item.path.startsWith(prefix)) return false;
     return !scope.fields || scope.fields.some((field) => item.path.startsWith(`${prefix}${rawLorebookField(field)}`));
   }
+  if (scope.kind === "lorebookEntries") return scope.entries.some((entry) => permissionAllowsLorebookTokenItem(entry, item));
   if (scope.kind === "section") return item.sectionId === scope.section;
   return tokenPathForField(scope.path).some((path) => item.path === path || item.path.startsWith(`${path}/`));
 }
@@ -210,6 +212,22 @@ function rawLorebookField(field: string): string {
     caseSensitive: "case_sensitive"
   };
   return mappings[field] ?? field;
+}
+
+function permissionAllowsLorebookValidationIssue(scope: { index: number; fields?: string[] }, issue: ValidationIssue): boolean {
+  const prefix = `data.character_book.entries.${scope.index}.`;
+  if (!issue.path.startsWith(prefix)) return false;
+  return !scope.fields || scope.fields.some((field) => issue.path.startsWith(`${prefix}${rawLorebookField(field)}`));
+}
+
+function permissionAllowsLorebookTokenItem(scope: { index: number; fields?: string[] }, item: TokenStatItem): boolean {
+  const prefix = `/character_book/entries/${scope.index}/`;
+  if (!item.path.startsWith(prefix)) return false;
+  return !scope.fields || scope.fields.some((field) => item.path.startsWith(`${prefix}${rawLorebookField(field)}`));
+}
+
+function lorebookScopeEntries(scope: AgentPermission["scope"]): Array<{ index: number; fields?: string[] }> {
+  return scope.kind === "lorebookEntry" ? [scope] : scope.kind === "lorebookEntries" ? scope.entries : [];
 }
 
 function createProposeCardEditsTool(context: CardAgentToolContext): AgentTool {

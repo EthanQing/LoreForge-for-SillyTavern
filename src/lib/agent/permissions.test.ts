@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createBlankCard } from "../schema";
-import { canEditCardField, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
+import { canEditCardField, canEditLorebookEntry, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
+import { stableHash } from "./projection";
 
 describe("agent request permissions", () => {
   it("turns @ targets into enforced scopes", () => {
@@ -47,6 +48,23 @@ describe("agent request permissions", () => {
     const request = resolveAgentRequest('@"城市"#2 修改', card, "card");
 
     expect(request.permission.scope).toMatchObject({ kind: "lorebookEntry", index: 1 });
+  });
+
+  it("combines multiple selected lorebook mentions into an exact permission", () => {
+    const card = createBlankCard();
+    card.data.character_book = {
+      extensions: {},
+      entries: ["东京", "大阪", "京都"].map((comment, index) => ({ id: index, comment, keys: [], secondary_keys: [], content: "", extensions: {}, enabled: true, insertion_order: index, use_regex: false }))
+    };
+
+    const request = resolveAgentRequest('@"东京" @"大阪" 同时修改', card, "card");
+    const entries = card.data.character_book.entries;
+
+    expect(request.instruction).toBe("同时修改");
+    expect(request.permission.scope).toMatchObject({ kind: "lorebookEntries", entries: [{ index: 0 }, { index: 1 }] });
+    expect(canEditLorebookEntry(request.permission, 0, entries[0] ? stableHash(entries[0]) : "")).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 1, entries[1] ? stableHash(entries[1]) : "")).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 2, entries[2] ? stableHash(entries[2]) : "")).toBe(false);
   });
 
   it("roundtrips persisted request scope envelopes", () => {

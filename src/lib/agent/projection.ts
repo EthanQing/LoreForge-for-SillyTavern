@@ -86,6 +86,7 @@ export function projectCardForPermission(card: CharacterCardV3, cardRevision: nu
   if (scope.kind === "card") return projection;
   if (scope.kind === "lorebook") return { cardRevision, lorebook: projection.lorebook };
   if (scope.kind === "lorebookEntry") return { cardRevision, entry: projection.lorebook.entries[scope.index] };
+  if (scope.kind === "lorebookEntries") return { cardRevision, entries: scope.entries.map((entry) => projection.lorebook.entries[entry.index]) };
   if (scope.kind === "field") return { cardRevision, path: scope.path, value: readProjectedField(projection, scope.path) };
   const fields = scope.section === "basic"
     ? ["name", "creatorNotes", "tags", "creator", "characterVersion"]
