@@ -9,6 +9,7 @@
 - 查找源码、配置、生成目录或入口：读 [repository-map.md](repository-map.md)。
 - 修改代码风格、状态更新或共享校验：读 [coding-conventions.md](coding-conventions.md)。
 - 执行或补充测试、构建检查：读 [testing.md](testing.md)。
+- 排查已知实现陷阱与兼容性问题：读 [pitfalls.md](pitfalls.md)。
 - 修改密钥、网络、权限、文件写入或发布：读 [security.md](security.md)。
 - 记录新的长期取舍：读 [decisions/README.md](decisions/README.md)。
 

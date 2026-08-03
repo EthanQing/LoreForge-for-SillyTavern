@@ -11,6 +11,7 @@ import type { CardProposal } from "./contracts";
 import type { AiConnectionProfile } from "./contracts";
 import type { CardAgentSnapshot } from "./tools";
 import { invoke } from "@tauri-apps/api/core";
+import { compactAgentMessages } from "./context";
 import { getAgentRunOutcome, getAgentRunStatusMessage } from "./runStatus";
 import { permissionForPreset, samePermission, type AgentPermission } from "./permissions";
 
@@ -66,8 +67,6 @@ interface ProviderLike {
   id: string;
 }
 
-const DEFAULT_RESERVE_TOKENS = 8_000;
-const TAIL_TOKEN_LIMIT = 20_000;
 export class CardAgentController {
   private readonly options: CardAgentControllerOptions;
   private runtime?: AgentRuntime;
@@ -244,7 +243,7 @@ export class CardAgentController {
       toolExecution: "sequential",
       steeringMode: "one-at-a-time",
       followUpMode: "all",
-      transformContext: async (messages: AgentMessage[]) => compactMessages(messages, this.options.profile.contextWindow, this.options.reserveTokens ?? DEFAULT_RESERVE_TOKENS),
+      transformContext: async (messages: AgentMessage[]) => compactAgentMessages(messages, this.options.profile.contextWindow, this.options.reserveTokens),
       beforeToolCall: async ({ toolCall }: BeforeToolCallContext) => {
         if (this.options.profile.toolCalling === "unsupported") {
           return { block: true, reason: "当前模型未通过工具调用探针，已禁用卡片工具。" };
@@ -345,34 +344,4 @@ function buildSystemPrompt(profile: AiConnectionProfile): string {
     "不要请求、输出或记录 API 密钥，不要访问文件系统，不要执行任意代码。",
     tools
   ].join("\n");
-}
-
-function compactMessages(messages: AgentMessage[], contextWindow: number, reserveTokens: number): AgentMessage[] {
-  const budget = Math.max(4_000, Math.min(TAIL_TOKEN_LIMIT, contextWindow - reserveTokens));
-  if (estimateMessagesTokens(messages) <= budget) {
-    return messages;
-  }
-  const first = messages[0];
-  const tail: AgentMessage[] = [];
-  let used = first ? estimateMessagesTokens([first]) : 0;
-  for (let index = messages.length - 1; index >= (first ? 1 : 0); index -= 1) {
-    const candidate = messages[index];
-    const cost = estimateMessagesTokens([candidate]);
-    if (used + cost > budget) {
-      break;
-    }
-    tail.unshift(candidate);
-    used += cost;
-  }
-  const omitted = messages.length - tail.length - (first ? 1 : 0);
-  const summary: AgentMessage = {
-    role: "user",
-    content: `[上下文已压缩：省略 ${Math.max(0, omitted)} 条较旧消息；保留当前卡片边界与最近对话。]`,
-    timestamp: Date.now()
-  };
-  return first ? [first, summary, ...tail] : [summary, ...tail];
-}
-
-function estimateMessagesTokens(messages: AgentMessage[]): number {
-  return messages.reduce((total, message) => total + Math.ceil(JSON.stringify(message).length / 4), 0);
 }
