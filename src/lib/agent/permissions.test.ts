@@ -54,17 +54,18 @@ describe("agent request permissions", () => {
     const card = createBlankCard();
     card.data.character_book = {
       extensions: {},
-      entries: ["东京", "大阪", "京都"].map((comment, index) => ({ id: index, comment, keys: [], secondary_keys: [], content: "", extensions: {}, enabled: true, insertion_order: index, use_regex: false }))
+      entries: ["东京", "大阪", "京都", "名古屋"].map((comment, index) => ({ id: index, comment, keys: [], secondary_keys: [], content: "", extensions: {}, enabled: true, insertion_order: index, use_regex: false }))
     };
 
-    const request = resolveAgentRequest('@"东京" @"大阪" 同时修改', card, "card");
+    const request = resolveAgentRequest('@"东京" @"大阪" @"京都" 同时修改', card, "card");
     const entries = card.data.character_book.entries;
 
     expect(request.instruction).toBe("同时修改");
-    expect(request.permission.scope).toMatchObject({ kind: "lorebookEntries", entries: [{ index: 0 }, { index: 1 }] });
+    expect(request.permission.scope).toMatchObject({ kind: "lorebookEntries", entries: [{ index: 0 }, { index: 1 }, { index: 2 }] });
     expect(canEditLorebookEntry(request.permission, 0, entries[0] ? stableHash(entries[0]) : "")).toBe(true);
     expect(canEditLorebookEntry(request.permission, 1, entries[1] ? stableHash(entries[1]) : "")).toBe(true);
-    expect(canEditLorebookEntry(request.permission, 2, entries[2] ? stableHash(entries[2]) : "")).toBe(false);
+    expect(canEditLorebookEntry(request.permission, 2, entries[2] ? stableHash(entries[2]) : "")).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 3, entries[3] ? stableHash(entries[3]) : "")).toBe(false);
   });
 
   it("roundtrips persisted request scope envelopes", () => {

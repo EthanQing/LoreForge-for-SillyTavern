@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { encodeAgentRequest, permissionForPreset } from "./permissions";
 import { buildAgentTranscript, formatAgentToolContent } from "./transcript";
 
 describe("buildAgentTranscript", () => {
+  it("keeps every mention in the visible user request", () => {
+    const request = '@"东京" @"大阪" @"京都" 合并这些条目';
+    const turns = buildAgentTranscript([{ role: "user", content: encodeAgentRequest(permissionForPreset("worldbook"), request) }]);
+
+    expect(turns[0]?.userText).toBe(request);
+  });
+
   it("combines assistant messages and tool results into one turn", () => {
     const turns = buildAgentTranscript([
       { role: "user", content: "检查这张卡" },

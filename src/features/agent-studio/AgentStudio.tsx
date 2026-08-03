@@ -307,7 +307,7 @@ export function AgentStudio(): ReactNode {
       setInput("");
       setMentionRange(undefined);
       setEvents((current) => [...current, { type: "status", message: `正在运行 Agent · ${describeAgentPermission(request.permission)}` }]);
-      await controller.send(encodeAgentRequest(request.permission, request.instruction), request.permission);
+      await controller.send(encodeAgentRequest(request.permission, message), request.permission);
       setMessages([...controller.messages]);
       setStreamingMessage(controller.streamingMessage);
       saveSessionId(workspaceId, sessionId);
@@ -324,7 +324,7 @@ export function AgentStudio(): ReactNode {
       if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
       setInput("");
       setMentionRange(undefined);
-      await controller.continueAfterRun(encodeAgentRequest(request.permission, request.instruction), request.permission);
+      await controller.continueAfterRun(encodeAgentRequest(request.permission, message), request.permission);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
