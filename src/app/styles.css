@@ -2621,9 +2621,103 @@ select.input {
 }
 
 .agent-composer {
+  position: relative;
   margin: 0 32px 24px;
   border: 1px solid var(--workshop-line);
   background: var(--iron);
+}
+
+.agent-mention-popover {
+  position: absolute;
+  z-index: var(--z-overlay);
+  right: -1px;
+  bottom: calc(100% + 8px);
+  left: -1px;
+  display: grid;
+  max-height: min(320px, 45vh);
+  overflow: hidden;
+  border: 1px solid var(--workshop-line);
+  background: var(--iron);
+}
+
+.agent-mention-heading,
+.agent-mention-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--muted-color);
+  font-size: 11px;
+}
+
+.agent-mention-heading {
+  border-bottom: 1px solid var(--workshop-line);
+}
+
+.agent-mention-heading strong {
+  color: var(--paper);
+  font-size: 12px;
+}
+
+.agent-mention-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.agent-mention-option {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--workshop-line);
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+  text-align: left;
+}
+
+.agent-mention-option strong,
+.agent-mention-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-mention-option strong {
+  font-size: 13px;
+}
+
+.agent-mention-option span {
+  color: var(--muted-color);
+  font-size: 11px;
+}
+
+.agent-mention-option:hover,
+.agent-mention-option.is-active {
+  border-left-color: var(--copper);
+  background: var(--workbench);
+}
+
+.agent-mention-option.is-active strong {
+  color: var(--copper);
+}
+
+.agent-mention-empty {
+  padding: 18px 12px;
+  color: var(--muted-color);
+  font-size: 12px;
+  text-align: center;
+}
+
+.agent-mention-hint {
+  justify-content: flex-start;
+  border-top: 1px solid var(--workshop-line);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .agent-composer textarea {
@@ -3256,6 +3350,7 @@ select.input {
 }
 
 .card-workshop-shell .agent-studio-main {
+  grid-column: 2;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -3655,6 +3750,7 @@ select.input {
 
 .card-workshop-shell .agent-studio-inspector {
   display: flex;
+  grid-column: 3;
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
@@ -3782,6 +3878,10 @@ select.input {
 @media (max-width: 1099px) {
   .card-workshop-shell .agent-studio {
     --inspector-width: 0px !important;
+  }
+
+  .card-workshop-shell .agent-studio:not(.agent-studio-inspector-open) .agent-studio-inspector {
+    display: none;
   }
 
   .card-workshop-shell .agent-studio-inspector {

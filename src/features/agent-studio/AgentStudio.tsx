@@ -39,6 +39,8 @@ import {
 } from "../../lib/agent/persistence";
 import { generateAgentSessionTitle, getAgentSessionTitleSource, PENDING_AGENT_SESSION_TITLE } from "../../lib/agent/sessionTitle";
 import { ProposalCard } from "./ProposalCard";
+import { AgentMentionMenu, AGENT_MENTION_LISTBOX_ID, getAgentMentionOptionId } from "./AgentMentionMenu";
+import { findLorebookMentionRange, getLorebookMentionOptions, insertLorebookMention, type LorebookMentionOption, type LorebookMentionRange } from "./agentMention";
 
 const BasicInfoPanel = lazy(() => import("../card-editor/BasicInfoPanel").then((module) => ({ default: module.BasicInfoPanel })));
 const PromptPanel = lazy(() => import("../card-editor/PromptPanel").then((module) => ({ default: module.PromptPanel })));
@@ -77,6 +79,8 @@ export function AgentStudio(): ReactNode {
   const cardName = getCardDisplayName(card, t);
   const [sessionId, setSessionId] = useState(() => readSessionId(workspaceId));
   const [input, setInput] = useState("");
+  const [mentionRange, setMentionRange] = useState<LorebookMentionRange>();
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [requestScope, setRequestScope] = useState<AgentScopePreset>("card");
   const [messages, setMessages] = useState<unknown[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<unknown>();
@@ -112,6 +116,7 @@ export function AgentStudio(): ReactNode {
     setEditingLastUser(false);
     setEditedUserText("");
     setRequestScope("card");
+    setMentionRange(undefined);
     actionLockRef.current = false;
     conversationSnapshotsRef.current = [];
     controllerRef.current?.dispose();
@@ -212,6 +217,60 @@ export function AgentStudio(): ReactNode {
     controller.restoreMessages(messages as AgentMessage[]);
   }, [controller]);
 
+  const mentionOptions = useMemo(
+    () => mentionRange ? getLorebookMentionOptions(card, mentionRange.query) : [],
+    [card, mentionRange]
+  );
+  const activeMentionIndex = Math.min(mentionActiveIndex, Math.max(0, mentionOptions.length - 1));
+  const activeMention = mentionOptions[activeMentionIndex];
+
+  const syncMention = (value: string, cursor: number | null) => {
+    const nextRange = cursor === null ? undefined : findLorebookMentionRange(value, cursor);
+    const unchanged = nextRange?.start === mentionRange?.start
+      && nextRange?.end === mentionRange?.end
+      && nextRange?.query === mentionRange?.query;
+    setMentionRange(nextRange);
+    if (!unchanged) {
+      setMentionActiveIndex(0);
+    }
+  };
+
+  const selectMention = (option: LorebookMentionOption) => {
+    if (!mentionRange) return;
+    const next = insertLorebookMention(input, mentionRange, option);
+    setInput(next.value);
+    setMentionRange(undefined);
+    setMentionActiveIndex(0);
+    setRequestScope("worldbook");
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(next.cursor, next.cursor);
+    });
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionRange && mentionOptions.length > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      setMentionActiveIndex((current) => (current + direction + mentionOptions.length) % mentionOptions.length);
+      return;
+    }
+    if (mentionRange && activeMention && event.key === "Tab") {
+      event.preventDefault();
+      selectMention(activeMention);
+      return;
+    }
+    if (mentionRange && event.key === "Escape") {
+      event.preventDefault();
+      setMentionRange(undefined);
+      return;
+    }
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void submit();
+    }
+  };
+
   useEffect(() => {
     if (!rightOpen) return;
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -246,6 +305,7 @@ export function AgentStudio(): ReactNode {
       const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope);
       if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
       setInput("");
+      setMentionRange(undefined);
       setEvents((current) => [...current, { type: "status", message: `正在运行 Agent · ${describeAgentPermission(request.permission)}` }]);
       await controller.send(encodeAgentRequest(request.permission, request.instruction), request.permission);
       setMessages([...controller.messages]);
@@ -263,6 +323,7 @@ export function AgentStudio(): ReactNode {
       const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope);
       if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
       setInput("");
+      setMentionRange(undefined);
       await controller.continueAfterRun(encodeAgentRequest(request.permission, request.instruction), request.permission);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -518,6 +579,7 @@ export function AgentStudio(): ReactNode {
     setFocusedEditor(null);
     setRightOpen(false);
     setInput("");
+    setMentionRange(undefined);
     requestAnimationFrame(() => composerRef.current?.focus());
   }, []);
 
@@ -588,7 +650,36 @@ export function AgentStudio(): ReactNode {
             </select>
             <span className="agent-scope-pill">{describeAgentPermission(permissionForPreset(requestScope))}</span>
           </div>
-          <textarea ref={composerRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => handleComposerKeyDown(event, submit)} placeholder="描述你想检查、整理或提出的修改… 输入 @条目标题 可锁定单个条目" rows={3} disabled={editingLastUser || conversationOperation !== "idle"} />
+          {mentionRange ? (
+            <AgentMentionMenu
+              options={mentionOptions}
+              activeIndex={activeMentionIndex}
+              onActiveIndexChange={setMentionActiveIndex}
+              onSelect={selectMention}
+            />
+          ) : null}
+          <textarea
+            ref={composerRef}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls={mentionRange ? AGENT_MENTION_LISTBOX_ID : undefined}
+            aria-expanded={Boolean(mentionRange)}
+            aria-activedescendant={mentionRange && activeMention ? getAgentMentionOptionId(activeMention.entryIndex) : undefined}
+            aria-haspopup="listbox"
+            aria-label="Agent 请求"
+            aria-multiline="true"
+            value={input}
+            placeholder="描述你想检查、整理或提出的修改… 输入 @ 后选择世界书条目"
+            rows={3}
+            disabled={editingLastUser || conversationOperation !== "idle"}
+            onBlur={() => setMentionRange(undefined)}
+            onChange={(event) => {
+              setInput(event.currentTarget.value);
+              syncMention(event.currentTarget.value, event.currentTarget.selectionStart);
+            }}
+            onKeyDown={handleComposerKeyDown}
+            onSelect={(event) => syncMention(event.currentTarget.value, event.currentTarget.selectionStart)}
+          />
           <div className="agent-composer-footer"><span><SquarePen size={14} />前端固定权限 · 用户确认后写入</span><div className="agent-composer-actions"><Button type="button" variant="ghost" icon={<MessageSquarePlus size={14} />} disabled={!input.trim() || !controller.isStreaming || editingLastUser || conversationOperation !== "idle"} onClick={() => void queueFollowUp()}>完成后继续</Button><Button type="submit" icon={<Send size={15} />} disabled={!input.trim() || editingLastUser || conversationOperation !== "idle"}>发送</Button></div></div>
         </form>
       </section>
@@ -745,13 +836,6 @@ function AgentToolResultView({ tool }: { tool: AgentTranscriptTool }) {
     {open && tool.content ? <pre>{formatAgentToolContent(tool.content)}</pre> : <span className="agent-muted">{tool.isError ? "工具执行失败。" : "工具已返回结果。"}</span>}
     <button className="agent-tool-result-toggle" type="button" onClick={() => setOpen((current) => !current)} aria-expanded={open}>{open ? "收起结果" : "查看结果"}</button>
   </div>;
-}
-
-function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, submit: () => void) {
-  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-    event.preventDefault();
-    submit();
-  }
 }
 
 function readSessionId(workspaceId: string): string {

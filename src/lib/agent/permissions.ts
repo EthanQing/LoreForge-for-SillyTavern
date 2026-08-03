@@ -63,6 +63,7 @@ const MENTION_ALIASES: Record<string, AgentScopePreset> = {
 };
 
 const SCOPE_ENVELOPE = /^<agent_scope data="([^"]+)">\n([\s\S]*)\n<\/agent_scope>$/u;
+const MENTION_PATTERN = /@(?:"((?:\\.|[^"\\])*)"|([^\s@，。！？、；：,.!?;:#]+))(?:#(\d+))?/u;
 
 export function permissionForPreset(preset: AgentScopePreset): AgentPermission {
   if (preset === "card") return { scope: { kind: "card" }, capabilities: ["read", "edit", "inject"] };
@@ -93,17 +94,29 @@ export function permissionForLorebookEntry(card: CharacterCardV3, index: number,
 }
 
 export function resolveAgentRequest(message: string, card: CharacterCardV3, fallback: AgentScopePreset): { instruction: string; permission: AgentPermission } {
-  const match = message.match(/@([^\s@，。！？、；：,.!?;:]+)/u);
+  const match = message.match(MENTION_PATTERN);
   if (!match) return { instruction: message.trim(), permission: permissionForPreset(fallback) };
-  const mention = match[1].trim();
-  const normalized = mention.toLowerCase().replace(/[\s_-]+/g, "");
+  const mention = unescapeMention(match[1] ?? match[2] ?? "").trim();
+  const normalized = normalizeMention(mention);
+  const selectedIndex = match[3] === undefined ? undefined : Number(match[3]) - 1;
+  const entries = card.data.character_book?.entries ?? [];
+
+  if (selectedIndex !== undefined) {
+    const entry = entries[selectedIndex];
+    const entryTitle = entry ? normalizeMention(deriveLorebookEntryComment(entry, selectedIndex)) : "";
+    const entryId = String(entry?.id ?? "").toLowerCase();
+    if (!entry || (entryTitle !== normalized && entryId !== mention.toLowerCase())) {
+      throw new Error(`无法识别 @${mention}#${selectedIndex + 1}，世界书条目可能已变化，请重新选择。`);
+    }
+    return { instruction: message.replace(match[0], "").trim(), permission: permissionForLorebookEntry(card, selectedIndex) };
+  }
+
   const preset = MENTION_ALIASES[normalized];
   if (preset) {
     return { instruction: message.replace(match[0], "").trim(), permission: permissionForPreset(preset) };
   }
-  const entries = card.data.character_book?.entries ?? [];
   const indexes = entries.flatMap((entry, entryIndex) => {
-    const title = deriveLorebookEntryComment(entry, entryIndex).toLowerCase().replace(/[\s_-]+/g, "");
+    const title = normalizeMention(deriveLorebookEntryComment(entry, entryIndex));
     return title === normalized || String(entry.id ?? "").toLowerCase() === mention.toLowerCase() ? [entryIndex] : [];
   });
   if (indexes.length === 1) {
@@ -111,6 +124,14 @@ export function resolveAgentRequest(message: string, card: CharacterCardV3, fall
   }
   if (indexes.length > 1) throw new Error(`@${mention} 对应多个世界书条目，请使用唯一标题或条目 ID。`);
   throw new Error(`无法识别 @${mention}。请选择可见范围，或使用世界书条目的完整标题。`);
+}
+
+function unescapeMention(value: string): string {
+  return value.replace(/\\(["\\])/gu, "$1");
+}
+
+function normalizeMention(value: string): string {
+  return value.toLowerCase().replace(/[\s_-]+/gu, "");
 }
 
 export function canReadLorebook(permission: AgentPermission): boolean {

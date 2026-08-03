@@ -24,6 +24,31 @@ describe("agent request permissions", () => {
     expect(() => resolveAgentRequest("@城市 修改", card, "card")).toThrow("多个世界书条目");
   });
 
+  it("resolves quoted lorebook titles containing spaces", () => {
+    const card = createBlankCard();
+    card.data.character_book = {
+      extensions: {},
+      entries: [{ id: 7, comment: "东京 大学", keys: [], secondary_keys: [], content: "", extensions: {}, enabled: true, insertion_order: 0, use_regex: false }]
+    };
+
+    const request = resolveAgentRequest('@"东京 大学" 修改内容', card, "card");
+
+    expect(request.instruction).toBe("修改内容");
+    expect(request.permission.scope).toMatchObject({ kind: "lorebookEntry", index: 0, label: "东京 大学" });
+  });
+
+  it("uses the autocomplete index to disambiguate duplicate titles", () => {
+    const card = createBlankCard();
+    card.data.character_book = {
+      extensions: {},
+      entries: [0, 1].map((id) => ({ id, comment: "城市", keys: [], secondary_keys: [], content: "", extensions: {}, enabled: true, insertion_order: id, use_regex: false }))
+    };
+
+    const request = resolveAgentRequest('@"城市"#2 修改', card, "card");
+
+    expect(request.permission.scope).toMatchObject({ kind: "lorebookEntry", index: 1 });
+  });
+
   it("roundtrips persisted request scope envelopes", () => {
     const permission = permissionForField("/description", "描述");
     expect(decodeAgentRequest(encodeAgentRequest(permission, "润色"))).toEqual({ permission, instruction: "润色" });
