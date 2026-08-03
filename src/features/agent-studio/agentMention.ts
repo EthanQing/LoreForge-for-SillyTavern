@@ -27,7 +27,7 @@ export function findLorebookMentionRange(value: string, cursor: number): Loreboo
   return { start, end: cursor, query: prefix.slice(start + 1).trim() };
 }
 
-export function getLorebookMentionOptions(card: CharacterCardV3, query: string, limit = 8): LorebookMentionOption[] {
+export function getLorebookMentionOptions(card: CharacterCardV3, query: string): LorebookMentionOption[] {
   const entries = card.data.character_book?.entries ?? [];
   const normalizedQuery = normalizeSearchText(query);
   const titleCounts = new Map<string, number>();
@@ -55,7 +55,6 @@ export function getLorebookMentionOptions(card: CharacterCardV3, query: string, 
     })
     .filter((option) => !normalizedQuery || option.score < 2)
     .sort((left, right) => left.score - right.score || left.entryIndex - right.entryIndex)
-    .slice(0, limit)
     .map(({ score: _score, ...option }) => option);
 }
 

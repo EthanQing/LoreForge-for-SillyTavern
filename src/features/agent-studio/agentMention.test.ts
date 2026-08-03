@@ -34,6 +34,15 @@ describe("agent lorebook mentions", () => {
     expect(getLorebookMentionOptions(card, "11").map((option) => option.title)).toEqual(["校园规则"]);
   });
 
+  it("keeps every matching lorebook entry", () => {
+    const card = cardWithEntries(Array.from({ length: 16 }, (_, index) => `条目 ${index + 1}`));
+
+    const options = getLorebookMentionOptions(card, "");
+
+    expect(options).toHaveLength(16);
+    expect(options.at(-1)?.title).toBe("条目 16");
+  });
+
   it("inserts quoted titles and disambiguates duplicates", () => {
     const card = cardWithEntries(["东京 大学", "东京 大学"]);
     const options = getLorebookMentionOptions(card, "东京");

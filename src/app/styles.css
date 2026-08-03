@@ -2634,6 +2634,7 @@ select.input {
   bottom: calc(100% + 8px);
   left: -1px;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: min(320px, 45vh);
   overflow: hidden;
   border: 1px solid var(--workshop-line);
@@ -2663,6 +2664,7 @@ select.input {
 .agent-mention-list {
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .agent-mention-option {
