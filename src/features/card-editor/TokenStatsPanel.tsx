@@ -40,8 +40,9 @@ export function TokenStatsPanel() {
 
   return (
     <section className="panel token-stats-panel" data-context-menu="workspace">
-      <div className="panel-heading">
+      <div className="panel-heading token-stats-heading">
         <h2>{t("tokenStats.title")}</h2>
+        <span className="state-pill">{t("tokenStats.estimated")}</span>
       </div>
 
       <div className="token-summary-grid">
@@ -58,7 +59,6 @@ export function TokenStatsPanel() {
       <section className="token-section">
         <div className="subpanel-heading">
           <h3>{t("tokenStats.sections")}</h3>
-          <span className="state-pill">{t("tokenStats.estimated")}</span>
         </div>
         <div className="token-section-list">
           {stats.sections.map((section) => (
@@ -70,7 +70,7 @@ export function TokenStatsPanel() {
               <div className="token-meter" aria-hidden="true">
                 <span style={{ width: `${Math.max(3, (section.tokens / maxSectionTokens) * 100)}%` }} />
               </div>
-              <b>{t("common.tokens", { count: section.tokens })}</b>
+              <b>{t("common.tokens", { count: formatTokenCount(section.tokens) })}</b>
             </div>
           ))}
         </div>
@@ -82,17 +82,17 @@ export function TokenStatsPanel() {
             <h3>{t("tokenStats.largestFields")}</h3>
           </div>
           {stats.largestFields.length > 0 ? (
-            <div className="token-table">
+            <ol className="token-table">
               {stats.largestFields.map((item) => (
-                <div className="token-table-row" key={item.id}>
+                <li className="token-table-row" key={item.id}>
                   <div>
                     <strong>{formatItemLabel(item, t)}</strong>
                     <code>{item.path}</code>
                   </div>
-                  <span>{t("common.tokens", { count: item.tokens })}</span>
-                </div>
+                  <span>{t("common.tokens", { count: formatTokenCount(item.tokens) })}</span>
+                </li>
               ))}
-            </div>
+            </ol>
           ) : (
             <p className="muted token-empty">{t("tokenStats.noText")}</p>
           )}
@@ -115,27 +115,33 @@ export function TokenStatsPanel() {
         </div>
         {stats.lorebookEntries.length > 0 ? (
           <div className="token-entry-table">
-            <div className="token-entry-header">
-              <span>{t("lorebook.entry")}</span>
-              <span>{t("tokenStats.contentTokens")}</span>
-              <span>{t("tokenStats.keyTokens")}</span>
-              <span>{t("tokenStats.memoTokens")}</span>
-              <span>{t("tokenStats.totalTokens")}</span>
-            </div>
-            {stats.lorebookEntries.map((entry) => (
-              <div className="token-entry-row" key={entry.id}>
-                <div>
-                  <strong>{entry.title}</strong>
-                  <span>
-                    #{entry.index + 1} · {t(entry.enabled ? "common.enabled" : "common.disabled")} · {t("lorebook.insertionOrder")} {entry.insertionOrder}
-                  </span>
-                </div>
-                <span>{entry.contentTokens}</span>
-                <span>{entry.keyTokens}</span>
-                <span>{entry.memoTokens}</span>
-                <b>{entry.totalTokens}</b>
-              </div>
-            ))}
+            <table className="token-data-table" aria-label={t("tokenStats.lorebookEntries")}>
+              <thead>
+                <tr>
+                  <th scope="col">{t("lorebook.entry")}</th>
+                  <th scope="col">{t("tokenStats.contentTokens")}</th>
+                  <th scope="col">{t("tokenStats.keyTokens")}</th>
+                  <th scope="col">{t("tokenStats.memoTokens")}</th>
+                  <th scope="col">{t("tokenStats.totalTokens")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.lorebookEntries.map((entry) => (
+                  <tr key={entry.id}>
+                    <th scope="row">
+                      <strong>{entry.title}</strong>
+                      <span>
+                        #{entry.index + 1} · {t(entry.enabled ? "common.enabled" : "common.disabled")} · {t("lorebook.insertionOrder")} {entry.insertionOrder}
+                      </span>
+                    </th>
+                    <td data-label={t("tokenStats.contentTokens")}>{formatTokenCount(entry.contentTokens)}</td>
+                    <td data-label={t("tokenStats.keyTokens")}>{formatTokenCount(entry.keyTokens)}</td>
+                    <td data-label={t("tokenStats.memoTokens")}>{formatTokenCount(entry.memoTokens)}</td>
+                    <td data-label={t("tokenStats.totalTokens")}><strong>{formatTokenCount(entry.totalTokens)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <p className="muted token-empty">{t("tokenStats.noLorebook")}</p>
@@ -147,22 +153,26 @@ export function TokenStatsPanel() {
           <h3>{t("tokenStats.greetingPreviews")}</h3>
         </div>
         <div className="token-entry-table token-greeting-table">
-          <div className="token-entry-header">
-            <span>{t("preview.greeting")}</span>
-            <span>{t("tokenStats.greetingTokens")}</span>
-            <span>{t("tokenStats.promptTokens")}</span>
-            <span>{t("tokenStats.charactersShort")}</span>
-          </div>
-          {stats.greetingPreviews.map((preview) => (
-            <div className="token-entry-row" key={preview.id}>
-              <div>
-                <strong>{formatDynamicLabel(preview.label, t)}</strong>
-              </div>
-              <span>{preview.greetingTokens}</span>
-              <b>{preview.promptTokens}</b>
-              <span>{preview.characters}</span>
-            </div>
-          ))}
+          <table className="token-data-table" aria-label={t("tokenStats.greetingPreviews")}>
+            <thead>
+              <tr>
+                <th scope="col">{t("preview.greeting")}</th>
+                <th scope="col">{t("tokenStats.greetingTokens")}</th>
+                <th scope="col">{t("tokenStats.promptTokens")}</th>
+                <th scope="col">{t("tokenStats.charactersShort")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.greetingPreviews.map((preview) => (
+                <tr key={preview.id}>
+                  <th scope="row"><strong>{formatDynamicLabel(preview.label, t)}</strong></th>
+                  <td data-label={t("tokenStats.greetingTokens")}>{formatTokenCount(preview.greetingTokens)}</td>
+                  <td data-label={t("tokenStats.promptTokens")}><strong>{formatTokenCount(preview.promptTokens)}</strong></td>
+                  <td data-label={t("tokenStats.charactersShort")}>{formatTokenCount(preview.characters)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     </section>
@@ -177,6 +187,10 @@ function SummaryMetric({ label, value, detail }: { label: string; value: number;
       <small>{detail}</small>
     </div>
   );
+}
+
+function formatTokenCount(value: number): string {
+  return value.toLocaleString();
 }
 
 function formatItemLabel(item: TokenStatItem, t: (key: TranslationKey, values?: Record<string, string | number | boolean | undefined | null>) => string): string {
