@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ChevronRight, CircleStop, FolderOpen, MessageSquarePlus, Moon, PanelRight, Pencil, Plus, RefreshCw, Save, Send, Settings2, ShieldCheck, Sparkles, SquarePen, Sun } from "lucide-react";
+import { ChevronRight, CircleStop, FolderOpen, MessageSquarePlus, Moon, PanelRight, Pencil, Plus, RefreshCw, Send, Settings2, ShieldCheck, Sparkles, SquarePen, Sun } from "lucide-react";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { useCardStore } from "../../app/store";
 import { useProjectActions } from "../../app/useProjectActions";
@@ -72,13 +72,12 @@ export function AgentStudio(): ReactNode {
   const workspaceId = useCardStore((state) => state.workspaceId);
   const cardRevision = useCardStore((state) => state.cardRevision);
   const currentPath = useCardStore((state) => state.currentPath);
-  const dirty = useCardStore((state) => state.dirty);
   const theme = useCardStore((state) => state.theme);
   const setTheme = useCardStore((state) => state.setTheme);
   const aiSettings = useCardStore((state) => state.aiSettings);
   const setStatus = useCardStore((state) => state.setStatus);
   const applyAgentCard = useCardStore((state) => state.applyAgentCard);
-  const { openCard, saveCardSnapshot, saveCurrentCard } = useProjectActions();
+  const { openCard, saveCardSnapshot } = useProjectActions();
   const cardName = getCardDisplayName(card, t);
   const nextTheme = theme === "dark" ? "light" : "dark";
   const themeLabel = t("a11y.switchTheme", { theme: theme === "dark" ? t("theme.light") : t("theme.dark") });
@@ -684,11 +683,6 @@ export function AgentStudio(): ReactNode {
       <aside className="agent-studio-sidebar">
         <div className="agent-studio-brand"><div className="agent-studio-mark"><Sparkles size={18} /></div><div><strong>Card Workshop</strong><span>AGENT STUDIO</span></div></div>
         <div className="agent-studio-card-summary"><span>当前卡片</span><strong>{cardName}</strong><small>{workspaceId.slice(0, 18)} · rev {cardRevision}</small></div>
-        <div className="agent-studio-card-actions">
-          <Button className={dirty ? "agent-studio-save-button is-dirty" : "agent-studio-save-button"} icon={<Save size={15} />} aria-label={dirty ? t("common.save") : t("common.saved")} title={dirty ? t("common.save") : t("common.saved")} onClick={() => void saveCurrentCard()}>
-            {dirty ? t("common.save") : t("common.saved")}
-          </Button>
-        </div>
         <AgentSessionHistory
           records={sessionHistory}
           current={{ workspaceId, sessionId, cardName, currentPath }}

@@ -2809,23 +2809,6 @@ select.input {
   justify-content: flex-start;
 }
 
-.agent-studio-card-actions {
-  display: grid;
-}
-
-.agent-studio-save-button {
-  width: 100%;
-  justify-content: flex-start;
-  border-color: var(--workshop-line);
-  background: var(--workbench);
-  color: var(--muted-color);
-}
-
-.agent-studio-save-button.is-dirty {
-  border-color: rgba(201, 130, 69, 0.55);
-  color: var(--copper);
-}
-
 .agent-studio-sidebar-footer {
   display: grid;
   gap: 4px;
@@ -3541,7 +3524,6 @@ select.input {
   .agent-studio-session span,
   .agent-studio-session svg:last-child,
   .agent-studio-new-session span,
-  .agent-studio-save-button span,
   .agent-nav-copy,
   .agent-studio-theme-button span,
   .agent-studio-nav button:not(:has(svg)) {
@@ -3553,7 +3535,6 @@ select.input {
   }
   .agent-studio-session,
   .agent-studio-nav button,
-  .agent-studio-save-button,
   .agent-studio-theme-button {
     justify-content: center;
   }
