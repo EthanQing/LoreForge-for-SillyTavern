@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { createBlankCard } from "../schema";
-import { canEditCardField, canEditCardPath, canEditLorebookEntry, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
+import { canEditCardField, canEditCardPath, canEditLorebookEntry, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, getEffectiveAgentMentionSurface, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
 import { projectCardForPermission, stableHash } from "./projection";
 
 describe("agent request permissions", () => {
+  it("intersects the page surface with the selected scope", () => {
+    expect(getEffectiveAgentMentionSurface("card", "worldbook")).toBe("worldbook");
+    expect(getEffectiveAgentMentionSurface("card", "greetings")).toBe("greetings");
+    expect(getEffectiveAgentMentionSurface("worldbook", "card")).toBe("worldbook");
+    expect(getEffectiveAgentMentionSurface("none", "worldbook")).toBe("none");
+  });
+
   it("turns @ targets into enforced scopes", () => {
     const request = resolveAgentRequest("@提示词 润色描述", createBlankCard(), "card");
     expect(request.instruction).toBe("润色描述");

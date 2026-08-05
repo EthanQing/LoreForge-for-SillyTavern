@@ -37,6 +37,11 @@ export function getAllowedAgentScopePresets(surface: AgentMentionSurface): Agent
   return surface === "card" || surface === "none" ? ["card", "basic", "prompts", "greetings", "worldbook"] : [surface];
 }
 
+export function getEffectiveAgentMentionSurface(pageSurface: AgentMentionSurface, selectedScope: AgentScopePreset): AgentMentionSurface {
+  if (pageSurface === "none") return "none";
+  return pageSurface === "card" ? selectedScope : pageSurface;
+}
+
 export type CardFieldPath =
   | "/name"
   | "/description"

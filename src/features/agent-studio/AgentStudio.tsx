@@ -23,6 +23,7 @@ import {
   describeAgentPermission,
   encodeAgentRequest,
   getAllowedAgentScopePresets,
+  getEffectiveAgentMentionSurface,
   permissionForPreset,
   resolveAgentRequest,
   resolveReplacementAgentRequest,
@@ -228,9 +229,10 @@ export function AgentStudio(): ReactNode {
     controller.restoreMessages(messages as AgentMessage[]);
   }, [controller]);
 
+  const effectiveMentionSurface = getEffectiveAgentMentionSurface(mentionSurface, requestScope);
   const mentionOptions = useMemo(
-    () => mentionRange ? getAgentMentionOptions(card, mentionSurface, mentionRange.query) : [],
-    [card, mentionRange, mentionSurface]
+    () => mentionRange ? getAgentMentionOptions(card, effectiveMentionSurface, mentionRange.query) : [],
+    [card, effectiveMentionSurface, mentionRange]
   );
   const activeMentionIndex = Math.min(mentionActiveIndex, Math.max(0, mentionOptions.length - 1));
   const activeMention = mentionOptions[activeMentionIndex];
@@ -315,7 +317,7 @@ export function AgentStudio(): ReactNode {
     const message = input.trim();
     if (!message || editingLastUser || conversationOperation !== "idle") return;
     try {
-      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope, mentionSurface);
+      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope, effectiveMentionSurface);
       if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
       setInput("");
       setMentionRange(undefined);
@@ -327,13 +329,13 @@ export function AgentStudio(): ReactNode {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [controller, conversationOperation, editingLastUser, input, mentionSurface, requestScope, sessionId, setStatus, workspaceId]);
+  }, [controller, conversationOperation, editingLastUser, effectiveMentionSurface, input, requestScope, sessionId, setStatus, workspaceId]);
 
   const queueFollowUp = useCallback(async () => {
     const message = input.trim();
     if (!message || editingLastUser || conversationOperation !== "idle") return;
     try {
-      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope, mentionSurface);
+      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope, effectiveMentionSurface);
       if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
       setInput("");
       setMentionRange(undefined);
@@ -341,7 +343,7 @@ export function AgentStudio(): ReactNode {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [controller, conversationOperation, editingLastUser, input, mentionSurface, requestScope, setStatus]);
+  }, [controller, conversationOperation, editingLastUser, effectiveMentionSurface, input, requestScope, setStatus]);
 
   const applyProposal = useCallback(async (proposal: CardProposal) => {
     if (actionLockRef.current || conversationOperation !== "idle") return;
