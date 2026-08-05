@@ -267,6 +267,7 @@ export function AgentStudio(): ReactNode {
     }
     if (mentionRange && event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       setMentionRange(undefined);
       return;
     }
