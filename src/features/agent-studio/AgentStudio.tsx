@@ -747,31 +747,68 @@ function InspectorOverview({ card, report, onOpenEditor }: { card: ReturnType<ty
   return (
     <div className="agent-inspector-overview">
       <section className="agent-inspector-block">
-        <span className="agent-inspector-label">CCv3 索引</span>
+        <div className="agent-inspector-section-heading">
+          <div className="agent-inspector-section-title">
+            <span className="agent-inspector-section-icon" aria-hidden="true"><Pencil size={14} /></span>
+            <div>
+              <strong>编辑卡片</strong>
+              <span>CCv3 字段</span>
+            </div>
+          </div>
+          <span className="agent-inspector-section-index">01</span>
+        </div>
         <p className="agent-inspector-hint">这里编辑当前卡片的数据字段；项目文件用于打开、保存和导出卡片。</p>
         <div className="agent-index-grid">
           {fieldEditors.map(([label, tab]) => (
-            <button type="button" key={tab} onClick={() => onOpenEditor(tab)}>
-              <span>{label}</span>
-              <ChevronRight size={13} />
+            <button className={tab === "assets" ? "agent-index-entry agent-index-entry-wide" : "agent-index-entry"} type="button" key={tab} onClick={() => onOpenEditor(tab)}>
+              <span className="agent-index-entry-copy"><strong>{label}</strong></span>
+              <ChevronRight size={14} aria-hidden="true" />
             </button>
           ))}
         </div>
       </section>
       <section className="agent-inspector-block">
-        <span className="agent-inspector-label">查看</span>
+        <div className="agent-inspector-section-heading">
+          <div className="agent-inspector-section-title">
+            <span className="agent-inspector-section-icon" aria-hidden="true"><PanelRight size={14} /></span>
+            <div>
+              <strong>预览效果</strong>
+              <span>只读查看</span>
+            </div>
+          </div>
+          <span className="agent-inspector-section-index">02</span>
+        </div>
         <p className="agent-inspector-hint">查看当前卡片的头像、开场白和实际 Prompt 效果。</p>
-        <div className="agent-index-grid">
-          <button type="button" onClick={() => onOpenEditor("preview")}>
-            <span>预览</span>
-            <ChevronRight size={13} />
+        <div className="agent-index-grid agent-index-grid-single">
+          <button className="agent-index-entry" type="button" onClick={() => onOpenEditor("preview")}>
+            <span className="agent-index-entry-copy"><strong>预览</strong><small>头像、开场白与实际 Prompt</small></span>
+            <ChevronRight size={14} aria-hidden="true" />
           </button>
         </div>
       </section>
       <section className="agent-inspector-block">
-        <div className="agent-block-title"><span>状态</span><button type="button" onClick={() => onOpenEditor("validation")}><ChevronRight size={13} /></button></div>
-        <p className={report.valid ? "agent-good" : "agent-danger"}>{report.valid ? "当前卡片通过前端校验" : report.errors.length + " 个错误需要处理"}</p>
-        <p className="agent-muted">{report.warnings.length} 个警告 · {stats.totalTokens.toLocaleString()} estimated tokens</p>
+        <div className="agent-inspector-section-heading">
+          <div className="agent-inspector-section-title">
+            <span className="agent-inspector-section-icon" aria-hidden="true"><ShieldCheck size={14} /></span>
+            <div>
+              <strong>卡片状态</strong>
+              <span>校验与用量</span>
+            </div>
+          </div>
+          <span className="agent-inspector-section-index">03</span>
+        </div>
+        <div className="agent-status-grid">
+          <button className={report.valid ? "agent-status-card is-success" : "agent-status-card is-danger"} type="button" onClick={() => onOpenEditor("validation")}>
+            <span className="agent-status-card-heading"><span>校验</span><ChevronRight size={14} aria-hidden="true" /></span>
+            <strong className={report.valid ? "agent-good" : "agent-danger"}>{report.valid ? "校验通过" : report.errors.length + " 个阻塞错误"}</strong>
+            <small>{report.warnings.length ? report.warnings.length + " 个警告" : "没有待处理警告"}</small>
+          </button>
+          <button className="agent-status-card" type="button" onClick={() => onOpenEditor("tokenStats")}>
+            <span className="agent-status-card-heading"><span>Token 统计</span><ChevronRight size={14} aria-hidden="true" /></span>
+            <strong>{stats.totalTokens.toLocaleString()}</strong>
+            <small>estimated tokens</small>
+          </button>
+        </div>
       </section>
     </div>
   );
