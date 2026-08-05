@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ChevronRight, CircleStop, FolderOpen, MessageSquarePlus, PanelRight, Pencil, Plus, RefreshCw, Send, Settings2, ShieldCheck, Sparkles, SquarePen } from "lucide-react";
+import { ChevronRight, CircleStop, FolderOpen, MessageSquarePlus, Moon, PanelRight, Pencil, Plus, RefreshCw, Save, Send, Settings2, ShieldCheck, Sparkles, SquarePen, Sun } from "lucide-react";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { useCardStore } from "../../app/store";
 import { useProjectActions } from "../../app/useProjectActions";
@@ -72,11 +72,16 @@ export function AgentStudio(): ReactNode {
   const workspaceId = useCardStore((state) => state.workspaceId);
   const cardRevision = useCardStore((state) => state.cardRevision);
   const currentPath = useCardStore((state) => state.currentPath);
+  const dirty = useCardStore((state) => state.dirty);
+  const theme = useCardStore((state) => state.theme);
+  const setTheme = useCardStore((state) => state.setTheme);
   const aiSettings = useCardStore((state) => state.aiSettings);
   const setStatus = useCardStore((state) => state.setStatus);
   const applyAgentCard = useCardStore((state) => state.applyAgentCard);
-  const { openCard, saveCardSnapshot } = useProjectActions();
+  const { openCard, saveCardSnapshot, saveCurrentCard } = useProjectActions();
   const cardName = getCardDisplayName(card, t);
+  const nextTheme = theme === "dark" ? "light" : "dark";
+  const themeLabel = t("a11y.switchTheme", { theme: theme === "dark" ? t("theme.light") : t("theme.dark") });
   const [sessionId, setSessionId] = useState(() => readSessionId(workspaceId));
   const [input, setInput] = useState("");
   const [mentionRange, setMentionRange] = useState<LorebookMentionRange>();
@@ -679,6 +684,11 @@ export function AgentStudio(): ReactNode {
       <aside className="agent-studio-sidebar">
         <div className="agent-studio-brand"><div className="agent-studio-mark"><Sparkles size={18} /></div><div><strong>Card Workshop</strong><span>AGENT STUDIO</span></div></div>
         <div className="agent-studio-card-summary"><span>当前卡片</span><strong>{cardName}</strong><small>{workspaceId.slice(0, 18)} · rev {cardRevision}</small></div>
+        <div className="agent-studio-card-actions">
+          <Button className={dirty ? "agent-studio-save-button is-dirty" : "agent-studio-save-button"} icon={<Save size={15} />} aria-label={dirty ? t("common.save") : t("common.saved")} title={dirty ? t("common.save") : t("common.saved")} onClick={() => void saveCurrentCard()}>
+            {dirty ? t("common.save") : t("common.saved")}
+          </Button>
+        </div>
         <AgentSessionHistory
           records={sessionHistory}
           current={{ workspaceId, sessionId, cardName, currentPath }}
@@ -686,11 +696,16 @@ export function AgentStudio(): ReactNode {
           onSelectSession={selectSession}
         />
         <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} disabled={actionBusy} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); setEvents([]); setProposals([]); setEditingLastUser(false); setEditedUserText(""); conversationSnapshotsRef.current = []; }}>新建会话</Button>
-        <nav className="agent-studio-nav" aria-label="卡片编辑入口">
-          <button type="button" aria-label="项目文件" title="项目文件" onClick={() => openEditor("home")}><FolderOpen size={15} /><span className="agent-nav-copy"><strong>项目文件</strong><small>打开、保存与导出</small></span></button>
-          <button type="button" aria-label="预览" title="预览" onClick={() => openEditor("preview")}><PanelRight size={15} /><span className="agent-nav-copy"><strong>预览</strong><small>查看当前卡片</small></span></button>
-          <button type="button" aria-label="设置" title="设置" onClick={() => openEditor("settings")}><Settings2 size={15} /><span className="agent-nav-copy"><strong>设置</strong><small>配置应用与 Agent</small></span></button>
-        </nav>
+        <div className="agent-studio-sidebar-footer">
+          <nav className="agent-studio-nav" aria-label="卡片编辑入口">
+            <button type="button" aria-label="项目文件" title="项目文件" onClick={() => openEditor("home")}><FolderOpen size={15} /><span className="agent-nav-copy"><strong>项目文件</strong><small>打开、保存与导出</small></span></button>
+            <button type="button" aria-label="预览" title="预览" onClick={() => openEditor("preview")}><PanelRight size={15} /><span className="agent-nav-copy"><strong>预览</strong><small>查看当前卡片</small></span></button>
+            <button type="button" aria-label="设置" title="设置" onClick={() => openEditor("settings")}><Settings2 size={15} /><span className="agent-nav-copy"><strong>设置</strong><small>配置应用与 Agent</small></span></button>
+          </nav>
+          <Button className="agent-studio-theme-button" variant="ghost" aria-label={themeLabel} title={themeLabel} icon={theme === "dark" ? <Sun size={15} /> : <Moon size={15} />} onClick={() => setTheme(nextTheme)}>
+            {theme === "dark" ? t("theme.lightAction") : t("theme.darkAction")}
+          </Button>
+        </div>
       </aside>
 
       <section className="agent-studio-main">

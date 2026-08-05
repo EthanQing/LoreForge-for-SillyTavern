@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, Moon, Sun } from "lucide-react";
+import { Download } from "lucide-react";
 import { useCardStore } from "./store";
 import { Button } from "../components/Button";
 import { ContextMenu } from "../components/ContextMenu";
@@ -11,7 +11,6 @@ import { checkForUpdates, skipUpdateVersion, type AvailableUpdate, type UpdatePr
 export function App() {
   const { locale, t } = useI18n();
   const theme = useCardStore((state) => state.theme);
-  const setTheme = useCardStore((state) => state.setTheme);
   const dirty = useCardStore((state) => state.dirty);
   const setStatus = useCardStore((state) => state.setStatus);
   const { saveCurrentCard } = useProjectActions();
@@ -76,13 +75,6 @@ export function App() {
 
   return (
     <main className="app-shell card-workshop-shell">
-      <header className="card-workshop-topbar">
-        <div className="card-workshop-topbar-copy"><span>CCv3 / LOCAL WORKSPACE</span></div>
-        <div className="card-workshop-topbar-actions">
-          <Button aria-label="切换主题" icon={theme === "dark" ? <Sun size={16} /> : <Moon size={16} />} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "浅色" : "深色"}</Button>
-          <Button onClick={() => void saveCurrentCard()}>{dirty ? "保存草稿" : "已保存"}</Button>
-        </div>
-      </header>
       {availableUpdate ? <div className="update-banner card-workshop-update" role="status"><div><strong>{t("updates.available", { version: availableUpdate.version })}</strong>{updateProgress ? <small>{formatUpdateProgress(updateProgress)}</small> : null}</div><div className="update-banner-actions">{availableUpdate.install ? <Button disabled={updateInstalling} icon={<Download size={15} />} onClick={() => void installUpdate()}>{updateInstalling ? t("updates.installing") : t("updates.installNow")}</Button> : null}<Button variant="ghost" onClick={dismissUpdate}>{t("updates.later")}</Button></div></div> : null}
       <AgentStudio />
       <ContextMenu />
