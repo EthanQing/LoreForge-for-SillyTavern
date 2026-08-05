@@ -2433,7 +2433,6 @@ select.input {
 }
 
 .agent-studio-card-summary small,
-.agent-mini-proposal span,
 .agent-muted {
   color: var(--muted-color);
   font-size: 11px;
@@ -2870,25 +2869,8 @@ select.input {
   font-size: 13px;
 }
 
-.agent-block-title b {
-  min-width: 22px;
-  padding: 2px 5px;
-  border: 1px solid var(--copper);
-  color: var(--copper);
-  font: 600 11px ui-monospace, SFMono-Regular, Consolas, monospace;
-  text-align: center;
-}
-
 .agent-good {
   color: var(--sage);
-}
-
-.agent-mini-proposal {
-  display: grid;
-  gap: 3px;
-  padding: 9px 10px;
-  border-left: 2px solid var(--copper);
-  background: var(--workbench);
 }
 
 .agent-proposal-card {

@@ -11,7 +11,6 @@ import { toAiConnectionProfile } from "../../lib/ai";
 import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts";
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
 import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser } from "../../lib/agent/conversationActions";
-import { getProposalStateLabel, getProposalSummary, isReviewableProposal } from "../../lib/agent/proposalPresentation";
 import { buildAgentTranscript, formatAgentToolContent, readAgentMessageContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
 import type { CharacterCardV3 } from "../../lib/schema";
 import { useI18n } from "../../lib/i18n";
@@ -687,7 +686,7 @@ export function AgentStudio(): ReactNode {
       {rightOpen ? <button className="agent-inspector-backdrop" type="button" aria-label="关闭编辑台" onClick={closeInspector} /> : null}
       <aside ref={inspectorRef} className="agent-studio-inspector" role={rightOpen ? "dialog" : undefined} aria-modal={rightOpen ? true : undefined} aria-label="卡片纲要与编辑台">
         <div className="agent-inspector-heading"><div className="agent-inspector-heading-copy"><span>{focusedEditor ? getEditorLabel(focusedEditor) : "卡片纲要"}</span>{focusedEditor ? <button className="agent-inspector-overview-button" type="button" onClick={returnToOverview}>返回纲要</button> : null}</div><button ref={inspectorCloseRef} type="button" onClick={closeInspector} aria-label="关闭编辑台">×</button></div>
-        {focusedEditor ? <Suspense fallback={<div className="agent-inspector-loading">正在加载编辑台…</div>}><EditorPanel tab={focusedEditor} /></Suspense> : <InspectorOverview card={card} report={report} proposals={proposals} onOpenEditor={openEditor} />}
+        {focusedEditor ? <Suspense fallback={<div className="agent-inspector-loading">正在加载编辑台…</div>}><EditorPanel tab={focusedEditor} /></Suspense> : <InspectorOverview card={card} report={report} onOpenEditor={openEditor} />}
         <div
           className="agent-inspector-resizer"
           role="separator"
@@ -736,9 +735,8 @@ function getEditorLabel(tab: StudioEditorTab): string {
   }
 }
 
-function InspectorOverview({ card, report, proposals, onOpenEditor }: { card: ReturnType<typeof useCardStore.getState>["card"]; report: ReturnType<typeof useCardStore.getState>["report"]; proposals: CardProposal[]; onOpenEditor: (tab: StudioEditorTab) => void }) {
+function InspectorOverview({ card, report, onOpenEditor }: { card: ReturnType<typeof useCardStore.getState>["card"]; report: ReturnType<typeof useCardStore.getState>["report"]; onOpenEditor: (tab: StudioEditorTab) => void }) {
   const stats = buildCardTokenStats(card);
-  const reviewableProposals = proposals.filter(isReviewableProposal);
   const fieldEditors: Array<[string, StudioEditorTab]> = [
     ["基础", "basic"],
     ["提示词", "prompts"],
@@ -769,11 +767,6 @@ function InspectorOverview({ card, report, proposals, onOpenEditor }: { card: Re
             <ChevronRight size={13} />
           </button>
         </div>
-      </section>
-      <section className="agent-inspector-block">
-        <div className="agent-block-title"><span>待审核修改</span><b aria-label={`${reviewableProposals.length} 个待审核修改`}>{reviewableProposals.length}</b></div>
-        <p className="agent-muted">Agent 只能创建修改提案；确认后才会写入卡片。</p>
-        {reviewableProposals.length === 0 ? <p className="agent-muted">暂无待审核修改。</p> : reviewableProposals.slice(-3).map((proposal) => <div className="agent-mini-proposal" key={proposal.id}><strong>{getProposalSummary(proposal.summary)}</strong><span>{proposal.diffs.length} 个字段 · {getProposalStateLabel(proposal.state)}</span></div>)}
       </section>
       <section className="agent-inspector-block">
         <div className="agent-block-title"><span>状态</span><button type="button" onClick={() => onOpenEditor("validation")}><ChevronRight size={13} /></button></div>
