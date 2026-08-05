@@ -22,6 +22,8 @@ Zustand store 维护当前卡片、文件路径/来源、工作区 ID、卡片 r
 - PNG 中的 `data.character_book` 是卡片内嵌 Lorebook。SillyTavern 导入角色后不会自动将它创建为已绑定世界书；用户需在角色面板的“更多”中执行“导入卡片世界书”。包含世界书的 PNG 导出完成后，前端应明确提示这一后续步骤。
 - 前端和 Rust 都有校验与迁移逻辑。共享规则变更应保持两侧一致。
 
+校验问题的 `path` 使用点号路径（例如 `data.name`、`data.character_book.entries.0.keys.0`、`data.assets.1.uri`）。前端展示将路径转换为用户可读位置，并通过 `src/lib/validationIssueNavigation.ts` 提供编辑台路由和精确/父级定位链；数组索引定位始终基于当前卡片 revision。没有直接编辑器的 spec、资源、extensions 或未知路径应明确显示技术路径并降级为 Agent/人工建议。
+
 资源位于 `card.data.assets`。内联图片可用作编辑器预览和 PNG 导出基础，但导出元数据会做兼容性处理；保存返回后，前端使用 `keepEditorAssetsAfterMetadataExport()` 保留编辑器所需资源。
 
 ## Agent 提案与历史

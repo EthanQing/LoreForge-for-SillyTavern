@@ -97,7 +97,7 @@ function createInspectValidationTool(context: CardAgentToolContext): AgentTool {
   return {
     name: "inspect_validation",
     label: "读取校验",
-    description: "读取当前前端 CCv3 校验报告和 cardRevision。",
+    description: "读取当前前端 CCv3 校验报告和 cardRevision；报告按当前权限过滤，逐项包含 level、code、path 和 message，供 Agent 解析原因并提出建议。",
     parameters: Type.Object({}),
     execute: async () => {
       const { report, cardRevision } = context.getSnapshot();

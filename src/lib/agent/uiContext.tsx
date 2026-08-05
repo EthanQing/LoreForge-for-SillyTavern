@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { CharacterCardV3 } from "../schema";
+import type { CharacterCardV3, ValidationIssue, ValidationReport } from "../schema";
 import { permissionForField, permissionForLorebookEntry, type AgentFieldPath, type AgentPermission, type CardFieldPath } from "./permissions";
 
 export type AgentFieldAction =
@@ -23,6 +23,7 @@ export interface AgentStudioActions {
   ready: boolean;
   busy: boolean;
   runFieldAction: (target: AgentFieldTarget, action: AgentFieldAction) => Promise<void>;
+  runValidationAction: (report: ValidationReport, issue?: ValidationIssue) => Promise<void>;
   prepareLorebookRequest: () => void;
 }
 

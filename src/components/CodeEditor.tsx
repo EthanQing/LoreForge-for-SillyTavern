@@ -14,6 +14,7 @@ interface CodeEditorProps {
   minHeight?: string;
   maxHeight?: string;
   readOnly?: boolean;
+  validationPath?: string;
 }
 
 const macroMatcher = /\{\{char\}\}|\{\{user\}\}|<char>|<bot>|<user>/g;
@@ -49,7 +50,7 @@ const macroHighlighter = ViewPlugin.fromClass(
   },
 );
 
-export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px", maxHeight = "360px", readOnly = false }: CodeEditorProps) {
+export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px", maxHeight = "360px", readOnly = false, validationPath }: CodeEditorProps) {
   const extensions: ReactCodeMirrorProps["extensions"] = [EditorView.lineWrapping];
   if (mode === "json") {
     extensions.push(json());
@@ -59,7 +60,7 @@ export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px
   }
 
   return (
-    <div className="code-editor-shell" data-context-menu={mode === "json" ? "json" : undefined} data-editor-readonly={readOnly ? "true" : undefined}>
+    <div className="code-editor-shell" data-context-menu={mode === "json" ? "json" : undefined} data-editor-readonly={readOnly ? "true" : undefined} data-validation-path={validationPath}>
       <CodeMirror
         basicSetup={{
           foldGutter: false,

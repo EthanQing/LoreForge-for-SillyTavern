@@ -69,16 +69,17 @@ interface AssetUriFieldProps {
   summaryLabel: string;
   uri: string;
   onChange: (value: string) => void;
+  validationPath?: string;
 }
 
-const AssetUriField = memo(function AssetUriField({ editLabel, hideLabel, label, onChange, summaryLabel, uri }: AssetUriFieldProps) {
+const AssetUriField = memo(function AssetUriField({ editLabel, hideLabel, label, onChange, summaryLabel, uri, validationPath }: AssetUriFieldProps) {
   const [editingLargeUri, setEditingLargeUri] = useState(false);
   const largeInlineUri = isLargeInlineUri(uri);
 
   if (!largeInlineUri || editingLargeUri) {
     return (
       <div className="asset-uri-editor">
-        <TextField label={label} value={uri} onChange={(event) => onChange(event.target.value)} />
+        <TextField validationPath={validationPath} label={label} value={uri} onChange={(event) => onChange(event.target.value)} />
         {largeInlineUri ? (
           <Button onClick={() => setEditingLargeUri(false)}>
             {hideLabel}
@@ -89,7 +90,7 @@ const AssetUriField = memo(function AssetUriField({ editLabel, hideLabel, label,
   }
 
   return (
-    <div className="field asset-uri-summary-field">
+    <div className="field asset-uri-summary-field" data-validation-path={validationPath}>
       <span className="field-label">
         {label}
         <small>{summaryLabel}</small>
@@ -198,9 +199,9 @@ export function AssetsPanel() {
           <span className="muted">{t("assets.emptyBody")}</span>
         </div>
       ) : null}
-      <div className="asset-grid">
+      <div className="asset-grid" data-validation-path="data.assets">
         {assets.map((asset, index) => (
-          <article className="asset-card" data-context-menu="asset" data-index={index} key={`${asset.type}-${asset.name}-${index}`}>
+          <article className="asset-card" data-context-menu="asset" data-index={index} data-validation-path={`data.assets.${index}`} key={`${asset.type}-${asset.name}-${index}`}>
             <div className="asset-preview">
               {asset.uri.startsWith("data:image/") ? (
                 <img alt={asset.name} decoding="async" loading="lazy" src={asset.uri} />
@@ -210,6 +211,7 @@ export function AssetsPanel() {
             </div>
             <div className="asset-fields">
               <SelectField
+                validationPath={`data.assets.${index}.type`}
                 label={t("assets.type")}
                 value={asset.type}
                 onChange={(event) => updateAsset(index, (item) => ({ ...item, type: event.target.value }))}
@@ -221,11 +223,13 @@ export function AssetsPanel() {
                 <option value="other">{t("assetType.other")}</option>
               </SelectField>
               <TextField
+                validationPath={`data.assets.${index}.name`}
                 label={t("field.name")}
                 value={asset.name}
                 onChange={(event) => updateAsset(index, (item) => ({ ...item, name: event.target.value }))}
               />
               <TextField
+                validationPath={`data.assets.${index}.ext`}
                 label={t("assets.ext")}
                 value={asset.ext}
                 onChange={(event) =>
@@ -238,6 +242,7 @@ export function AssetsPanel() {
                 label={t("assets.uri")}
                 summaryLabel={t("assets.uriFolded")}
                 uri={asset.uri}
+                validationPath={`data.assets.${index}.uri`}
                 onChange={(value) => updateAsset(index, (item) => ({ ...item, uri: value }))}
               />
               <Button

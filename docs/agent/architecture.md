@@ -38,6 +38,12 @@ Agent 编辑台支持桌面拖拽调整宽度和窄屏抽屉。编辑台内需�
 
 卡片纲要首页按“编辑卡片 → 预览效果 → 卡片状态”分区呈现；卡片状态同时提供校验摘要与 Token 统计入口，入口应保持完整点击区域，并继续沿用现有编辑台的焦点管理与容器查询响应式约束。
 
+### 校验报告与定位
+
+`src/features/card-editor/ValidationPanel.tsx` 使用 store 中的前端校验报告，并可按需显示 Rust 复检结果。`src/lib/validationIssueNavigation.ts` 将 `ValidationIssue.path` 路由到基础信息、提示词、开场白、世界书或资源编辑台；编辑器通过 `data-validation-path` 提供精确目标，世界书条目在定位时先展开懒挂载内容。找不到精确字段时只能降级到最近的父级位置或保留在校验面板，不制造虚假焦点。
+
+校验面板的 Agent 操作把报告作为诊断数据发送到当前 Agent 会话，要求先调用 `inspect_validation`，再按问题路径读取必要字段。单项问题使用最窄的字段/世界书条目权限，不支持直接提案的 spec、资源、扩展和未知路径使用只读权限；所有可写处理仍必须经过现有语义化提案和用户确认流程。
+
 ## Rust 后端边界
 
 - `commands.rs`：JSON、PNG/APNG、CHARX 的打开、保存、导入、导出与校验命令。

@@ -28,11 +28,22 @@ export function BasicInfoPanel() {
       <div className="panel-heading">
         <h2>{t("basic.title")}</h2>
       </div>
+      <div className="card-schema-summary" data-validation-path="data">
+        <div data-validation-path="spec">
+          <span>{t("validation.spec")}</span>
+          <code>{card.spec}</code>
+        </div>
+        <div data-validation-path="spec_version">
+          <span>{t("validation.specVersion")}</span>
+          <code>{card.spec_version}</code>
+        </div>
+      </div>
       <div className="two-column">
-        <TextField label={t("field.name")} value={data.name} onChange={(event) => updateData("name", event.target.value)} />
+        <TextField validationPath="data.name" label={t("field.name")} value={data.name} onChange={(event) => updateData("name", event.target.value)} />
         <TextField label={t("field.nickname")} value={data.nickname ?? ""} onChange={(event) => updateData("nickname", event.target.value)} />
-        <TextField label={t("field.creator")} value={data.creator} onChange={(event) => updateData("creator", event.target.value)} />
+        <TextField validationPath="data.creator" label={t("field.creator")} value={data.creator} onChange={(event) => updateData("creator", event.target.value)} />
         <TextField
+          validationPath="data.character_version"
           label={t("field.characterVersion")}
           value={data.character_version}
           onChange={(event) => updateData("character_version", event.target.value)}
@@ -40,12 +51,12 @@ export function BasicInfoPanel() {
         <TextField label={t("field.created")} value={formatTimestamp(data.creation_date, locale)} readOnly />
         <TextField label={t("field.modified")} value={formatTimestamp(data.modification_date, locale)} readOnly />
       </div>
-      <ChipInput label={t("field.tags")} values={data.tags} onChange={(tags) => updateData("tags", tags)} />
-      <div className="field">
+      <ChipInput validationPath="data.tags" label={t("field.tags")} values={data.tags} onChange={(tags) => updateData("tags", tags)} />
+      <div className="field" data-validation-path="data.source">
         <span className="field-label">{t("field.source")}</span>
         <div className="source-list">
           {(data.source ?? []).map((source, index) => (
-            <span className="source-item" key={`${source}-${index}`}>
+            <span className="source-item" data-validation-path={`data.source.${index}`} key={`${source}-${index}`}>
               {source}
             </span>
           ))}
@@ -74,11 +85,16 @@ export function BasicInfoPanel() {
       </div>
       <div className="editor-block">
         <span className="field-label">{t("field.creatorNotes")}</span>
-        <CodeEditor value={data.creator_notes} mode="prompt" minHeight="140px" onChange={(value) => updateData("creator_notes", value)} />
+        <CodeEditor validationPath="data.creator_notes" value={data.creator_notes} mode="prompt" minHeight="140px" onChange={(value) => updateData("creator_notes", value)} />
+      </div>
+      <div className="card-extension-summary" data-validation-path="data.extensions">
+        <span>{t("validation.extensions")}</span>
+        <small>{t("validation.extensionCount", { count: Object.keys(data.extensions).length })}</small>
       </div>
       <div className="editor-block">
         <span className="field-label">{t("field.creatorNotesMultilingual")}</span>
         <CodeEditor
+          validationPath="data.creator_notes_multilingual"
           value={multilingualText}
           mode="json"
           minHeight="150px"

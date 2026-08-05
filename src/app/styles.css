@@ -1816,8 +1816,158 @@ select.input {
 }
 
 /* --- Validation / Issues ------------------------------------ */
+.validation-summary-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+}
+
+.validation-summary-card.is-success {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.06);
+}
+
+.validation-summary-card.is-danger {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.validation-summary-card.is-warning {
+  border-color: rgba(251, 146, 60, 0.4);
+  background: rgba(251, 146, 60, 0.06);
+}
+
+.validation-summary-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--input);
+  color: var(--accent);
+}
+
+.validation-summary-card.is-success .validation-summary-icon {
+  color: var(--success);
+}
+
+.validation-summary-card.is-danger .validation-summary-icon {
+  color: var(--danger);
+}
+
+.validation-summary-card.is-warning .validation-summary-icon {
+  color: var(--warn);
+}
+
+.validation-summary-copy {
+  min-width: 0;
+}
+
+.validation-summary-copy > span,
+.validation-summary-copy > strong,
+.validation-summary-copy > p {
+  display: block;
+}
+
+.validation-summary-copy > span {
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.validation-summary-copy > strong {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: var(--text-lg);
+}
+
+.validation-summary-copy > p {
+  margin: 4px 0 0;
+  color: var(--muted-color);
+  font-size: var(--text-sm);
+}
+
+.validation-summary-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 105px;
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+}
+
+.validation-summary-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.validation-summary-stats span:first-child svg {
+  color: var(--danger);
+}
+
+.validation-summary-stats span:last-child svg {
+  color: var(--warn);
+}
+
+.validation-summary-stats strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.validation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+}
+
+.validation-source,
+.validation-agent-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.validation-source {
+  white-space: nowrap;
+}
+
 .issue-section {
   margin-top: var(--space-4);
+}
+
+.issue-section-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.issue-section-count {
+  display: inline-grid;
+  min-width: 24px;
+  min-height: 24px;
+  place-items: center;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-empty {
+  margin: var(--space-3) 0 0;
 }
 
 .issue-list {
@@ -1829,37 +1979,222 @@ select.input {
   list-style: none;
 }
 
-.issue-list li {
+.issue-card {
   display: grid;
-  grid-template-columns: minmax(160px, 0.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-3);
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--input);
   font-size: var(--text-sm);
+  border: 1px solid var(--line);
   border-left: 3px solid transparent;
-  transition: border-color var(--duration-fast) var(--ease-out);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
-.issue-list li span {
-  color: var(--muted-color);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+.issue-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
 }
 
-.issue-list li.error {
-  color: var(--danger);
+.issue-card.error {
   border-left-color: var(--danger);
   background: rgba(248, 113, 113, 0.04);
 }
 
-.issue-list li.warning {
-  color: var(--warn);
+.issue-card.warning {
   border-left-color: var(--warn);
   background: rgba(251, 146, 60, 0.04);
+}
+
+.issue-card-body {
+  min-width: 0;
+}
+
+.issue-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.issue-severity,
+.issue-location {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.issue-severity {
+  color: var(--text);
+  font-size: var(--text-xs);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.issue-card.error .issue-severity svg,
+.issue-card.error .issue-severity strong {
+  color: var(--danger);
+}
+
+.issue-card.warning .issue-severity svg,
+.issue-card.warning .issue-severity strong {
+  color: var(--warn);
+}
+
+.issue-location {
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  text-align: right;
+}
+
+.issue-card-message {
+  margin: var(--space-2) 0 0;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+}
+
+.issue-card-recovery {
+  margin: var(--space-1) 0 0;
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.issue-card-details {
+  margin-top: var(--space-2);
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+}
+
+.issue-card-details summary {
+  cursor: pointer;
+}
+
+.issue-card-details code {
+  display: block;
+  margin-top: var(--space-1);
+  overflow-wrap: anywhere;
+  color: var(--muted-color);
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.issue-card-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.issue-card-actions .button {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.card-schema-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.card-schema-summary > div,
+.card-extension-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-strong);
+}
+
+.card-schema-summary span,
+.card-extension-summary span {
+  color: var(--muted-color);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.card-schema-summary code,
+.card-extension-summary small {
+  color: var(--text);
+  font-size: var(--text-xs);
+}
+
+.card-extension-summary {
+  margin-top: var(--space-4);
+}
+
+[data-validation-path].validation-target-highlight {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-subtle), var(--shadow-md);
+  animation: validationTargetPulse 1.8s var(--ease-out) both;
+}
+
+@keyframes validationTargetPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  20% {
+    box-shadow: 0 0 0 4px var(--accent-subtle), var(--shadow-md);
+  }
+}
+
+@container agent-inspector (max-width: 560px) {
+  .validation-summary-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .validation-summary-stats,
+  .validation-summary-card > .button {
+    grid-column: 1 / -1;
+  }
+
+  .validation-summary-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .validation-summary-card > .button {
+    width: 100%;
+  }
+
+  .issue-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .issue-card-actions {
+    justify-content: flex-start;
+  }
+
+  .issue-card-heading,
+  .validation-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .issue-location {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .issue-card:hover {
+    transform: none;
+  }
+
+  [data-validation-path].validation-target-highlight {
+    animation: none;
+  }
 }
 
 /* --- Settings ----------------------------------------------- */

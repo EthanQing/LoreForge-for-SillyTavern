@@ -12,8 +12,9 @@ import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts"
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
 import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser } from "../../lib/agent/conversationActions";
 import { buildAgentTranscript, formatAgentToolContent, readAgentMessageContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
-import type { CharacterCardV3 } from "../../lib/schema";
+import type { CharacterCardV3, ValidationIssue, ValidationReport } from "../../lib/schema";
 import { useI18n } from "../../lib/i18n";
+import { buildValidationAgentInstruction, dispatchValidationNavigation, getValidationEditorTab, getValidationTargetPaths, listenForValidationNavigation, resolveValidationIssuePermission } from "../../lib/validationIssueNavigation";
 import { AgentSessionHistory } from "./AgentSessionHistory";
 import type { AgentSessionHistoryRecord } from "../../lib/agent/sessionHistory";
 import { AgentStudioContext, buildFieldActionInstruction, resolveFieldActionPermission, type AgentFieldAction, type AgentFieldTarget } from "../../lib/agent/uiContext";
@@ -90,6 +91,7 @@ export function AgentStudio(): ReactNode {
   const [rightOpen, setRightOpen] = useState(true);
   const [inspectorWidth, setInspectorWidth] = useState(560);
   const [focusedEditor, setFocusedEditor] = useState<StudioEditorTab | null>(null);
+  const [pendingValidationPath, setPendingValidationPath] = useState<string>();
   const [conversationOperation, setConversationOperation] = useState<ConversationOperation>("idle");
   const [editingLastUser, setEditingLastUser] = useState(false);
   const [editedUserText, setEditedUserText] = useState("");
@@ -509,6 +511,7 @@ export function AgentStudio(): ReactNode {
 
   const openEditor = (tab: StudioEditorTab) => {
     lastFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPendingValidationPath(undefined);
     setFocusedEditor(tab);
     setRightOpen(true);
     requestAnimationFrame(() => inspectorCloseRef.current?.focus());
@@ -516,6 +519,7 @@ export function AgentStudio(): ReactNode {
 
   const closeInspector = () => {
     setRightOpen(false);
+    setPendingValidationPath(undefined);
     setFocusedEditor(null);
     lastFocusRef.current?.focus();
   };
@@ -526,9 +530,61 @@ export function AgentStudio(): ReactNode {
   };
 
   const returnToOverview = () => {
+    setPendingValidationPath(undefined);
     setFocusedEditor(null);
     requestAnimationFrame(() => inspectorCloseRef.current?.focus());
   };
+
+  useEffect(() => listenForValidationNavigation(({ path }) => {
+    setPendingValidationPath(path);
+    setFocusedEditor(getValidationEditorTab(path));
+    setRightOpen(true);
+  }), []);
+
+  useEffect(() => {
+    if (!pendingValidationPath || !focusedEditor) {
+      return undefined;
+    }
+
+    let attempts = 0;
+    let timer: number | undefined;
+    let cancelled = false;
+    const locate = () => {
+      if (cancelled) {
+        return;
+      }
+      const targets = getValidationTargetPaths(pendingValidationPath);
+      const findTarget = (path: string) => Array.from(document.querySelectorAll<HTMLElement>("[data-validation-path]"))
+        .find((element) => element.dataset.validationPath === path);
+      const exactTarget = findTarget(targets[0]);
+      if (!exactTarget && attempts < 8) {
+        attempts += 1;
+        dispatchValidationNavigation(pendingValidationPath);
+        timer = window.setTimeout(locate, 80);
+        return;
+      }
+      const target = exactTarget ?? targets.map(findTarget).find(Boolean);
+      setPendingValidationPath(undefined);
+      if (!target) {
+        return;
+      }
+      target.scrollIntoView({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      const focusTarget = target.matches("input, select, textarea, button, [contenteditable='true'], [tabindex]:not([tabindex='-1'])")
+        ? target
+        : target.querySelector<HTMLElement>("input, select, textarea, button, [contenteditable='true'], [tabindex]:not([tabindex='-1'])");
+      focusTarget?.focus({ preventScroll: true });
+      target.classList.add("validation-target-highlight");
+      window.setTimeout(() => target.classList.remove("validation-target-highlight"), 1800);
+    };
+    const frame = requestAnimationFrame(locate);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [focusedEditor, pendingValidationPath]);
 
   const handleInspectorResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (window.innerWidth < 1100) return;
@@ -573,6 +629,22 @@ export function AgentStudio(): ReactNode {
     scrollTranscriptToBottom();
   }, [agentReady, controller, conversationOperation, scrollTranscriptToBottom, sessionId, workspaceId]);
 
+  const runValidationAction = useCallback(async (validationReport: ValidationReport, issue?: ValidationIssue) => {
+    if (!agentReady) throw new Error("请先配置可用的 Agent 模型与系统凭据。");
+    if (conversationOperation !== "idle" || controller.isStreaming) throw new Error("Agent 正在处理另一项请求，请稍后重试。");
+    const currentCard = useCardStore.getState().card;
+    const permission = resolveValidationIssuePermission(currentCard, issue);
+    const instruction = buildValidationAgentInstruction(validationReport, issue);
+    setFocusedEditor(null);
+    setRightOpen(false);
+    setEvents((current) => [...current, { type: "status", message: `校验诊断已发送 · ${describeAgentPermission(permission)}` }]);
+    await controller.send(encodeAgentRequest(permission, instruction), permission);
+    setMessages([...controller.messages]);
+    setStreamingMessage(controller.streamingMessage);
+    saveSessionId(workspaceId, sessionId);
+    scrollTranscriptToBottom();
+  }, [agentReady, controller, conversationOperation, scrollTranscriptToBottom, sessionId, workspaceId]);
+
   const prepareLorebookRequest = useCallback(() => {
     setRequestScope("worldbook");
     setFocusedEditor(null);
@@ -593,8 +665,9 @@ export function AgentStudio(): ReactNode {
     ready: agentReady,
     busy: actionBusy,
     runFieldAction,
+    runValidationAction,
     prepareLorebookRequest
-  }), [actionBusy, agentReady, prepareLorebookRequest, runFieldAction]);
+  }), [actionBusy, agentReady, prepareLorebookRequest, runFieldAction, runValidationAction]);
 
   return (
     <AgentStudioContext.Provider value={studioActions}>

@@ -8,9 +8,10 @@ interface ChipInputProps {
   values: string[];
   onChange: (values: string[]) => void;
   placeholder?: string;
+  validationPath?: string;
 }
 
-export function ChipInput({ label, values, onChange, placeholder }: ChipInputProps) {
+export function ChipInput({ label, values, onChange, placeholder, validationPath }: ChipInputProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const resolvedPlaceholder = placeholder ?? t("chip.placeholder");
@@ -25,7 +26,7 @@ export function ChipInput({ label, values, onChange, placeholder }: ChipInputPro
   };
 
   return (
-    <div className="field">
+    <div className="field" data-validation-path={validationPath}>
       <span className="field-label">{label}</span>
       <div className="chip-input">
         <div className="chip-list">

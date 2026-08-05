@@ -21,6 +21,7 @@ import {
 } from "../../lib/lorebookCompat";
 import { createBlankLorebook, lorebookEnvelopeSchema, type LorebookEntry } from "../../lib/schema";
 import { useAgentStudioActions } from "../../lib/agent/uiContext";
+import { listenForValidationNavigation } from "../../lib/validationIssueNavigation";
 
 function numberValue(value: number | undefined | null): string {
   return value === undefined || value === null ? "" : String(value);
@@ -362,6 +363,21 @@ export function LorebookPanel() {
     });
   };
 
+  useEffect(() => listenForValidationNavigation(({ path }) => {
+    const match = path.match(/^data\.character_book\.entries\.(\d+)(?:\.|$)/u);
+    if (!match || !book) {
+      return;
+    }
+    const index = Number(match[1]);
+    if (!book.entries[index]) {
+      return;
+    }
+    setOpenEntries((current) => ({ ...current, [index]: true }));
+    requestAnimationFrame(() => {
+      entryRefs.current[index]?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }), [book]);
+
   const importLorebook = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -463,24 +479,27 @@ export function LorebookPanel() {
         </div>
       </div>
       <div className="two-column">
-        <TextField label={t("field.name")} value={book.name ?? ""} onChange={(event) => updateLorebook((current) => ({ ...current, name: event.target.value }))} />
+        <TextField validationPath="data.character_book.name" label={t("field.name")} value={book.name ?? ""} onChange={(event) => updateLorebook((current) => ({ ...current, name: event.target.value }))} />
         <TextField
+          validationPath="data.character_book.description"
           label={t("field.description")}
           value={book.description ?? ""}
           onChange={(event) => updateLorebook((current) => ({ ...current, description: event.target.value }))}
         />
         <TextField
+          validationPath="data.character_book.scan_depth"
           label={t("lorebook.scanDepth")}
           value={numberValue(book.scan_depth)}
           onChange={(event) => updateLorebook((current) => ({ ...current, scan_depth: parseNumber(event.target.value) }))}
         />
         <TextField
+          validationPath="data.character_book.token_budget"
           label={t("lorebook.tokenBudget")}
           value={numberValue(book.token_budget)}
           onChange={(event) => updateLorebook((current) => ({ ...current, token_budget: parseNumber(event.target.value) }))}
         />
       </div>
-      <label className="toggle-row">
+      <label className="toggle-row" data-validation-path="data.character_book.recursive_scanning">
         <input
           checked={book.recursive_scanning ?? false}
           type="checkbox"
@@ -488,7 +507,7 @@ export function LorebookPanel() {
         />
         <span>{t("lorebook.recursiveScanning")}</span>
       </label>
-      <div className="stack">
+      <div className="stack" data-validation-path="data.character_book.entries">
         {book.entries.map((entry, index) => {
           const entryTitle = deriveLorebookEntryComment(entry, index) || t("lorebook.entryNumber", { index: index + 1 });
           const isOpen = openEntries[index] ?? false;
@@ -509,6 +528,7 @@ export function LorebookPanel() {
               bodyClassName="lore-entry-body"
               contextMenu="lorebook-entry"
               contextTargetId={`${LOREBOOK_ENTRY_CONTEXT_ID_PREFIX}${index}`}
+              validationPath={`data.character_book.entries.${index}`}
               open={isOpen}
               lazyMount
               unmountOnClose
@@ -572,28 +592,33 @@ export function LorebookPanel() {
               </div>
               <div className="two-column">
                 <TextField
+                  validationPath={`data.character_book.entries.${index}.comment`}
                   label={t("lorebook.titleMemo")}
                   value={entry.comment ?? ""}
                   onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, comment: event.target.value }))}
                 />
                 <TextField
+                  validationPath={`data.character_book.entries.${index}.insertion_order`}
                   label={t("lorebook.insertionOrder")}
                   type="number"
                   value={String(entry.insertion_order)}
                   onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, insertion_order: Number(event.target.value) || 0 }))}
                 />
                 <TextField
+                  validationPath={`data.character_book.entries.${index}.priority`}
                   label={t("lorebook.priority")}
                   type="number"
                   value={numberValue(entry.priority)}
                   onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, priority: parseNumber(event.target.value) }))}
                 />
                 <TextField
+                  validationPath={`data.character_book.entries.${index}.id`}
                   label={t("common.id")}
                   value={entry.id === undefined ? "" : String(entry.id)}
                   onChange={(event) => updateLorebookEntry(index, (item) => ({ ...item, id: event.target.value }))}
                 />
                 <SelectField
+                  validationPath={`data.character_book.entries.${index}.position`}
                   label={t("lorebook.position")}
                   value={insertionPositionValue(entry)}
                   onChange={(event) => updateLorebookEntry(index, (item) => updateInsertionPosition(item, event.target.value))}
@@ -611,6 +636,7 @@ export function LorebookPanel() {
                   <option value={sillyTavernWorldInfoPositions.outlet}>{t("lorebook.positionOutlet")}</option>
                 </SelectField>
                 <SelectField
+                  validationPath={`data.character_book.entries.${index}.triggerStrategy`}
                   label={t("lorebook.triggerStrategy")}
                   value={triggerStrategyValue(entry)}
                   onChange={(event) => updateLorebookEntry(index, (item) => updateTriggerStrategy(item, event.target.value))}
@@ -620,8 +646,9 @@ export function LorebookPanel() {
                   <option value="vectorized">{t("lorebook.triggerStrategyVectorized")}</option>
                 </SelectField>
               </div>
-              <ChipInput label={t("lorebook.keys")} values={entry.keys} onChange={(values) => updateLorebookEntry(index, (item) => ({ ...item, keys: values }))} />
+              <ChipInput validationPath={`data.character_book.entries.${index}.keys`} label={t("lorebook.keys")} values={entry.keys} onChange={(values) => updateLorebookEntry(index, (item) => ({ ...item, keys: values }))} />
               <ChipInput
+                validationPath={`data.character_book.entries.${index}.secondary_keys`}
                 label={t("lorebook.secondaryKeys")}
                 values={entry.secondary_keys ?? []}
                 onChange={(values) => updateLorebookEntry(index, (item) => ({ ...item, secondary_keys: values }))}
@@ -633,7 +660,7 @@ export function LorebookPanel() {
                   [t("lorebook.caseSensitive"), "case_sensitive"],
                   [t("lorebook.selective"), "selective"]
                 ].map(([label, key]) => (
-                  <label className="toggle-row" key={key}>
+                  <label className="toggle-row" data-validation-path={`data.character_book.entries.${index}.${key}`} key={key}>
                     <input
                       checked={Boolean(entry[key])}
                       type="checkbox"
@@ -659,12 +686,14 @@ export function LorebookPanel() {
               >
                 <div className="two-column">
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.depth`}
                     label={t("lorebook.depth")}
                     type="number"
                     value={extensionNumberValue(entry, "depth")}
                     onChange={(event) => updateLorebookEntry(index, (item) => updateEntryExtension(item, "depth", parseNumber(event.target.value)))}
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.probability`}
                     label={t("lorebook.probability")}
                     type="number"
                     value={extensionNumberValue(entry, "probability")}
@@ -673,6 +702,7 @@ export function LorebookPanel() {
                     }
                   />
                   <SelectField
+                    validationPath={`data.character_book.entries.${index}.extensions.selectiveLogic`}
                     label={t("lorebook.selectiveLogic")}
                     value={extensionNumberValue(entry, "selectiveLogic")}
                     onChange={(event) =>
@@ -686,6 +716,7 @@ export function LorebookPanel() {
                     <option value={sillyTavernWorldInfoLogic.andAll}>{t("lorebook.logicAndAll")}</option>
                   </SelectField>
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.scan_depth`}
                     label={t("lorebook.scanDepthOverride")}
                     type="number"
                     value={extensionNumberValue(entry, "scan_depth")}
@@ -694,6 +725,7 @@ export function LorebookPanel() {
                     }
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.display_index`}
                     label={t("lorebook.displayIndex")}
                     type="number"
                     value={extensionNumberValue(entry, "display_index")}
@@ -702,21 +734,25 @@ export function LorebookPanel() {
                     }
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.automation_id`}
                     label={t("lorebook.automationId")}
                     value={extensionStringValue(entry, "automation_id")}
                     onChange={(event) => updateLorebookEntry(index, (item) => updateEntryExtension(item, "automation_id", event.target.value))}
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.outlet_name`}
                     label={t("lorebook.outletName")}
                     value={extensionStringValue(entry, "outlet_name")}
                     onChange={(event) => updateLorebookEntry(index, (item) => updateEntryExtension(item, "outlet_name", event.target.value))}
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.group`}
                     label={t("lorebook.group")}
                     value={extensionStringValue(entry, "group")}
                     onChange={(event) => updateLorebookEntry(index, (item) => updateEntryExtension(item, "group", event.target.value))}
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.group_weight`}
                     label={t("lorebook.groupWeight")}
                     type="number"
                     value={extensionNumberValue(entry, "group_weight")}
@@ -725,18 +761,21 @@ export function LorebookPanel() {
                     }
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.sticky`}
                     label={t("lorebook.sticky")}
                     type="number"
                     value={extensionNumberValue(entry, "sticky")}
                     onChange={(event) => updateLorebookEntry(index, (item) => updateEntryExtension(item, "sticky", parseNumber(event.target.value)))}
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.cooldown`}
                     label={t("lorebook.cooldown")}
                     type="number"
                     value={extensionNumberValue(entry, "cooldown")}
                     onChange={(event) => updateLorebookEntry(index, (item) => updateEntryExtension(item, "cooldown", parseNumber(event.target.value)))}
                   />
                   <TextField
+                    validationPath={`data.character_book.entries.${index}.extensions.delay`}
                     label={t("lorebook.delay")}
                     type="number"
                     value={extensionNumberValue(entry, "delay")}
@@ -760,7 +799,7 @@ export function LorebookPanel() {
                     [t("lorebook.matchScenario"), "match_scenario"],
                     [t("lorebook.matchCreatorNotes"), "match_creator_notes"]
                   ].map(([label, key]) => (
-                    <label className="toggle-row" key={key}>
+                    <label className="toggle-row" data-validation-path={`data.character_book.entries.${index}.extensions.${key}`} key={key}>
                       <input
                         checked={extensionBooleanValue(entry, key as keyof SillyTavernLorebookEntryExtensions)}
                         type="checkbox"
@@ -775,6 +814,7 @@ export function LorebookPanel() {
                   ))}
                 </div>
                 <ChipInput
+                  validationPath={`data.character_book.entries.${index}.extensions.triggers`}
                   label={t("lorebook.triggers")}
                   values={extensionStringArrayValue(entry, "triggers")}
                   onChange={(values) => updateLorebookEntry(index, (item) => updateEntryExtension(item, "triggers", values))}
@@ -785,7 +825,7 @@ export function LorebookPanel() {
                 <AiFieldAssistant
                   target={{ path: `/worldBook/entries/${index}/content`, label: `${t("lorebook.entryNumber", { index: index + 1 })} ${t("lorebook.content")}`, value: entry.content }}
                 >
-                  <CodeEditor value={entry.content} mode="prompt" minHeight="150px" onChange={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))} />
+                <CodeEditor validationPath={`data.character_book.entries.${index}.content`} value={entry.content} mode="prompt" minHeight="150px" onChange={(value) => updateLorebookEntry(index, (item) => ({ ...item, content: value }))} />
                 </AiFieldAssistant>
               </div>
             </Collapsible>

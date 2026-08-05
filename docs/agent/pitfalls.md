@@ -6,6 +6,12 @@ OpenAI-compatible 消息中的 `tool` 必须紧跟声明对应 `tool_calls` 的 
 
 `src/lib/agent/context.ts` 将带工具调用的 assistant 消息及其连续工具结果作为一个压缩组。调整上下文预算、历史恢复或消息转换时，应继续保持这个原子边界，并覆盖单次 assistant 并行调用多个工具的情况。
 
+## 校验定位必须基于当前 revision
+
+校验报告中的数组路径（例如世界书条目和资源索引）只对生成报告时的卡片顺序有效。Rust 复检结果在卡片 revision 改变后必须清除；导航前应重新基于当前 DOM 的 `data-validation-path` 查找目标，不要缓存节点或索引。
+
+世界书条目使用懒挂载折叠内容。定位 `data.character_book.entries.{index}.{field}` 时，先打开当前索引条目，再等待具体字段挂载；具体字段不存在时只能聚焦条目或校验项本身。重排和删除条目后继续依赖当前索引，不要复用旧的 DOM 引用。
+
 ## 编辑台响应式断点看容器宽度
 
 Agent 编辑台在桌面端可以独立调整宽度，窗口较宽不代表编辑页面也有足够空间。编辑台内部的表单列数、工具栏和摘要布局应使用命名为 `agent-inspector` 的 CSS container query；仅使用 viewport media query 会在窄编辑台中保留桌面布局并造成内容裁切。

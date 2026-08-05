@@ -37,6 +37,7 @@ function GreetingList({
         {values.map((value, index) => (
           <article
             className="list-editor"
+            data-validation-path={`${path}.${index}`}
             draggable
             key={`${title}-${index}`}
             onDragStart={() => setDragIndex(index)}
@@ -74,6 +75,7 @@ function GreetingList({
                 target={{ path: `/alternateGreetings/${index}`, label: `${title} #${index + 1}`, value }}
               >
                 <CodeEditor
+                  validationPath={`${path}.${index}`}
                   value={value}
                   mode="prompt"
                   minHeight="110px"
@@ -82,6 +84,7 @@ function GreetingList({
               </AiFieldAssistant>
             ) : (
               <CodeEditor
+                validationPath={`${path}.${index}`}
                 value={value}
                 mode="prompt"
                 minHeight="110px"
@@ -109,11 +112,11 @@ export function GreetingsPanel() {
       <div className="editor-block">
         <span className="field-label">{t("greetings.firstMessage")}</span>
         <AiFieldAssistant target={{ path: "/firstMessage", label: t("greetings.firstMessage"), value: data.first_mes }}>
-          <CodeEditor value={data.first_mes} mode="prompt" minHeight="180px" onChange={(value) => updateData("first_mes", value)} />
+          <CodeEditor validationPath="data.first_mes" value={data.first_mes} mode="prompt" minHeight="180px" onChange={(value) => updateData("first_mes", value)} />
         </AiFieldAssistant>
       </div>
       <GreetingList
-        path="/alternateGreetings"
+        path="data.alternate_greetings"
         title={t("greetings.alternateGreetings")}
         values={data.alternate_greetings}
         onChange={(values) => updateData("alternate_greetings", values)}
@@ -128,7 +131,7 @@ export function GreetingsPanel() {
           }));
         }}
       />
-      <GreetingList path="" aiEnabled={false} title={t("greetings.groupOnlyGreetings")} values={data.group_only_greetings} onChange={(values) => updateData("group_only_greetings", values)} />
+      <GreetingList path="data.group_only_greetings" aiEnabled={false} title={t("greetings.groupOnlyGreetings")} values={data.group_only_greetings} onChange={(values) => updateData("group_only_greetings", values)} />
     </section>
   );
 }

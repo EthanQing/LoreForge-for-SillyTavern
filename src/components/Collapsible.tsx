@@ -11,6 +11,7 @@ interface CollapsibleProps extends Pick<HTMLAttributes<HTMLDivElement>, "onDragO
   bodyClassName?: string;
   contextMenu?: string;
   contextTargetId?: string;
+  validationPath?: string;
   triggerDraggable?: boolean;
   onTriggerDragStart?: DragEventHandler<HTMLButtonElement>;
   onTriggerDragEnd?: DragEventHandler<HTMLButtonElement>;
@@ -30,6 +31,7 @@ export function Collapsible({
   bodyClassName = "",
   contextMenu,
   contextTargetId,
+  validationPath,
   triggerDraggable = false,
   onTriggerDragStart,
   onTriggerDragEnd,
@@ -91,6 +93,7 @@ export function Collapsible({
       className={`collapsible ${isOpen ? "is-open" : "is-closed"} ${className}`}
       data-context-menu={contextMenu}
       data-context-target-id={contextTargetId}
+      data-validation-path={validationPath}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >

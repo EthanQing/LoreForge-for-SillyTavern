@@ -25,10 +25,29 @@ function PromptField({
         <small>{tokenLabel}</small>
       </span>
       <AiFieldAssistant target={{ path, label, value }}>
-        <CodeEditor value={value} mode="prompt" onChange={onChange} />
+        <CodeEditor validationPath={validationPathForCardField(path)} value={value} mode="prompt" onChange={onChange} />
       </AiFieldAssistant>
     </div>
   );
+}
+
+function validationPathForCardField(path: CardFieldPath): string {
+  const paths: Record<CardFieldPath, string> = {
+    "/description": "data.description",
+    "/personality": "data.personality",
+    "/scenario": "data.scenario",
+    "/firstMessage": "data.first_mes",
+    "/alternateGreetings": "data.alternate_greetings",
+    "/exampleDialogue": "data.mes_example",
+    "/creatorNotes": "data.creator_notes",
+    "/systemPrompt": "data.system_prompt",
+    "/postHistoryInstructions": "data.post_history_instructions",
+    "/name": "data.name",
+    "/tags": "data.tags",
+    "/creator": "data.creator",
+    "/characterVersion": "data.character_version"
+  };
+  return paths[path];
 }
 
 export function PromptPanel() {

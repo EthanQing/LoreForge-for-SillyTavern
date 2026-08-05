@@ -4,12 +4,13 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTML
 interface FieldShellProps {
   label: string;
   detail?: ReactNode;
+  validationPath?: string;
   children: ReactNode;
 }
 
-export function FieldShell({ label, detail, children }: FieldShellProps) {
+export function FieldShell({ label, detail, validationPath, children }: FieldShellProps) {
   return (
-    <label className="field">
+    <label className="field" data-validation-path={validationPath}>
       <span className="field-label">
         {label}
         {detail ? <small>{detail}</small> : null}
@@ -22,11 +23,12 @@ export function FieldShell({ label, detail, children }: FieldShellProps) {
 interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   detail?: ReactNode;
+  validationPath?: string;
 }
 
-export function TextField({ label, detail, ...props }: TextFieldProps) {
+export function TextField({ label, detail, validationPath, ...props }: TextFieldProps) {
   return (
-    <FieldShell label={label} detail={detail}>
+    <FieldShell label={label} detail={detail} validationPath={validationPath}>
       <input className="input" {...props} />
     </FieldShell>
   );
@@ -62,11 +64,12 @@ export const AutoResizeTextarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAt
 interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string;
   detail?: ReactNode;
+  validationPath?: string;
 }
 
-export function TextAreaField({ label, detail, ...props }: TextAreaFieldProps) {
+export function TextAreaField({ label, detail, validationPath, ...props }: TextAreaFieldProps) {
   return (
-    <FieldShell label={label} detail={detail}>
+    <FieldShell label={label} detail={detail} validationPath={validationPath}>
       <AutoResizeTextarea {...props} />
     </FieldShell>
   );
@@ -75,12 +78,13 @@ export function TextAreaField({ label, detail, ...props }: TextAreaFieldProps) {
 interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string;
   detail?: ReactNode;
+  validationPath?: string;
   children: ReactNode;
 }
 
-export function SelectField({ label, detail, children, ...props }: SelectFieldProps) {
+export function SelectField({ label, detail, validationPath, children, ...props }: SelectFieldProps) {
   return (
-    <FieldShell label={label} detail={detail}>
+    <FieldShell label={label} detail={detail} validationPath={validationPath}>
       <select className="input" {...props}>
         {children}
       </select>

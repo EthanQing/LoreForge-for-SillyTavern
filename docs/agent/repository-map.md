@@ -26,6 +26,7 @@
 | `src/features/settings/` | 设置界面。 |
 | `src/features/agent-studio/` | Agent 会话、提案审阅和历史界面。 |
 | `src/lib/` | 前端领域逻辑、Tauri 包装与通用工具。 |
+| `src/lib/validationIssueNavigation.ts` | 校验路径到编辑台/字段的路由、懒挂载导航事件和 Agent 诊断指令。 |
 | `src/lib/agent/` | Agent 权限、工具、提案、会话与持久化逻辑。 |
 | `src-tauri/src/` | Rust 领域、文件格式、AI 与 Tauri 命令。 |
 | `src-tauri/icons/` | 应用图标资源。 |
