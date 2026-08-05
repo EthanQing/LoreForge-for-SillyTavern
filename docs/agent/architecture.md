@@ -32,6 +32,10 @@ React UI
 
 Agent 编辑台支持桌面拖拽调整宽度和窄屏抽屉。编辑台内需要随可用栏宽变化的页面使用 `agent-inspector` CSS container query，不能只依赖窗口级 media query。
 
+### 编辑台导航层级
+
+左侧工作区导航的“项目文件”负责打开、保存、导入和导出角色卡文件；右侧“卡片纲要”中的“卡片资源”只编辑当前卡片的 `card.data.assets`。两者属于不同导航层级，新增入口时不要再使用不带范围说明的“资源”作为工作区文件入口。
+
 ## Rust 后端边界
 
 - `commands.rs`：JSON、PNG/APNG、CHARX 的打开、保存、导入、导出与校验命令。

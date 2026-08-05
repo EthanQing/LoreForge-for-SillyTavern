@@ -21,8 +21,8 @@
 | `src/components/` | 通用 UI 组件。 |
 | `src/features/card-editor/` | 卡片基础信息、提示词、开场白、预览与校验面板。 |
 | `src/features/lorebook/` | 世界书编辑器。 |
-| `src/features/assets/` | 卡片资源管理。 |
-| `src/features/import-export/` | 导入导出界面。 |
+| `src/features/assets/` | 卡片资源管理（`card.data.assets`）。 |
+| `src/features/import-export/` | 项目文件的打开、保存与导入导出界面。 |
 | `src/features/settings/` | 设置界面。 |
 | `src/features/agent-studio/` | Agent 会话、提案审阅和历史界面。 |
 | `src/lib/` | 前端领域逻辑、Tauri 包装与通用工具。 |

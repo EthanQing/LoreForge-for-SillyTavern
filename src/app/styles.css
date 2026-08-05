@@ -2471,6 +2471,24 @@ select.input {
   margin-top: auto;
 }
 
+.agent-nav-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.agent-nav-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-nav-copy small,
+.agent-inspector-hint {
+  color: var(--muted-color);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .agent-studio-main {
   display: flex;
   min-width: 0;
@@ -2816,6 +2834,10 @@ select.input {
   padding: 20px 18px;
 }
 
+.agent-inspector-hint {
+  margin: -4px 0 0;
+}
+
 .agent-inspector-block {
   display: grid;
   gap: 10px;
@@ -2998,6 +3020,7 @@ select.input {
   .agent-studio-session span,
   .agent-studio-session svg:last-child,
   .agent-studio-new-session span,
+  .agent-nav-copy,
   .agent-studio-nav button:not(:has(svg)) {
     display: none;
   }

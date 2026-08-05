@@ -615,9 +615,9 @@ export function AgentStudio(): ReactNode {
         />
         <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} disabled={actionBusy} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); setEvents([]); setProposals([]); setEditingLastUser(false); setEditedUserText(""); conversationSnapshotsRef.current = []; }}>新建会话</Button>
         <nav className="agent-studio-nav" aria-label="卡片编辑入口">
-          <button type="button" onClick={() => openEditor("home")}><FolderOpen size={15} />资源与文件</button>
-          <button type="button" onClick={() => openEditor("preview")}><PanelRight size={15} />预览</button>
-          <button type="button" onClick={() => openEditor("settings")}><Settings2 size={15} />设置</button>
+          <button type="button" aria-label="项目文件" title="项目文件" onClick={() => openEditor("home")}><FolderOpen size={15} /><span className="agent-nav-copy"><strong>项目文件</strong><small>打开、保存与导出</small></span></button>
+          <button type="button" aria-label="预览" title="预览" onClick={() => openEditor("preview")}><PanelRight size={15} /><span className="agent-nav-copy"><strong>预览</strong><small>查看当前卡片</small></span></button>
+          <button type="button" aria-label="设置" title="设置" onClick={() => openEditor("settings")}><Settings2 size={15} /><span className="agent-nav-copy"><strong>设置</strong><small>配置应用与 Agent</small></span></button>
         </nav>
       </aside>
 
@@ -723,12 +723,12 @@ function EditorPanel({ tab }: { tab: StudioEditorTab }) {
 
 function getEditorLabel(tab: StudioEditorTab): string {
   switch (tab) {
-    case "home": return "资源与文件";
+    case "home": return "项目文件";
     case "basic": return "基础信息";
     case "prompts": return "提示词";
     case "greetings": return "开场白";
     case "lorebook": return "世界书";
-    case "assets": return "资源";
+    case "assets": return "卡片资源";
     case "preview": return "预览";
     case "tokenStats": return "Token 统计";
     case "validation": return "校验";
@@ -739,7 +739,7 @@ function getEditorLabel(tab: StudioEditorTab): string {
 function InspectorOverview({ card, report, proposals, onOpenEditor }: { card: ReturnType<typeof useCardStore.getState>["card"]; report: ReturnType<typeof useCardStore.getState>["report"]; proposals: CardProposal[]; onOpenEditor: (tab: StudioEditorTab) => void }) {
   const stats = buildCardTokenStats(card);
   const reviewableProposals = proposals.filter(isReviewableProposal);
-  return <div className="agent-inspector-overview"><section className="agent-inspector-block"><span className="agent-inspector-label">CCv3 索引</span><div className="agent-index-grid">{[["基础", "basic"], ["提示词", "prompts"], ["开场白", "greetings"], ["世界书", "lorebook"], ["资源", "assets"]].map(([label, tab]) => <button type="button" key={tab} onClick={() => onOpenEditor(tab as StudioEditorTab)}><span>{label}</span><ChevronRight size={13} /></button>)}</div></section><section className="agent-inspector-block"><div className="agent-block-title"><span>待审核修改</span><b aria-label={`${reviewableProposals.length} 个待审核修改`}>{reviewableProposals.length}</b></div><p className="agent-muted">Agent 只能创建修改提案；确认后才会写入卡片。</p>{reviewableProposals.length === 0 ? <p className="agent-muted">暂无待审核修改。</p> : reviewableProposals.slice(-3).map((proposal) => <div className="agent-mini-proposal" key={proposal.id}><strong>{getProposalSummary(proposal.summary)}</strong><span>{proposal.diffs.length} 个字段 · {getProposalStateLabel(proposal.state)}</span></div>)}</section><section className="agent-inspector-block"><div className="agent-block-title"><span>状态</span><button type="button" onClick={() => onOpenEditor("validation")}><ChevronRight size={13} /></button></div><p className={report.valid ? "agent-good" : "agent-danger"}>{report.valid ? "当前卡片通过前端校验" : report.errors.length + " 个错误需要处理"}</p><p className="agent-muted">{report.warnings.length} 个警告 · {stats.totalTokens.toLocaleString()} estimated tokens</p></section></div>;
+  return <div className="agent-inspector-overview"><section className="agent-inspector-block"><span className="agent-inspector-label">CCv3 索引</span><p className="agent-inspector-hint">这里编辑当前卡片的数据字段；项目文件用于打开、保存和导出卡片。</p><div className="agent-index-grid">{[["基础", "basic"], ["提示词", "prompts"], ["开场白", "greetings"], ["世界书", "lorebook"], ["卡片资源", "assets"]].map(([label, tab]) => <button type="button" key={tab} onClick={() => onOpenEditor(tab as StudioEditorTab)}><span>{label}</span><ChevronRight size={13} /></button>)}</div></section><section className="agent-inspector-block"><div className="agent-block-title"><span>待审核修改</span><b aria-label={`${reviewableProposals.length} 个待审核修改`}>{reviewableProposals.length}</b></div><p className="agent-muted">Agent 只能创建修改提案；确认后才会写入卡片。</p>{reviewableProposals.length === 0 ? <p className="agent-muted">暂无待审核修改。</p> : reviewableProposals.slice(-3).map((proposal) => <div className="agent-mini-proposal" key={proposal.id}><strong>{getProposalSummary(proposal.summary)}</strong><span>{proposal.diffs.length} 个字段 · {getProposalStateLabel(proposal.state)}</span></div>)}</section><section className="agent-inspector-block"><div className="agent-block-title"><span>状态</span><button type="button" onClick={() => onOpenEditor("validation")}><ChevronRight size={13} /></button></div><p className={report.valid ? "agent-good" : "agent-danger"}>{report.valid ? "当前卡片通过前端校验" : report.errors.length + " 个错误需要处理"}</p><p className="agent-muted">{report.warnings.length} 个警告 · {stats.totalTokens.toLocaleString()} estimated tokens</p></section></div>;
 }
 
 interface AgentTranscriptTurnViewProps {

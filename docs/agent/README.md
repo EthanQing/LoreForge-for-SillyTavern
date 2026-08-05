@@ -19,7 +19,7 @@
 
 - 桌面壳为 Tauri v2；前端为 React 19、TypeScript、Vite 与 Zustand；后端为 Rust 2021。
 - 包管理器由 `package.json` 的 `packageManager` 字段指定为 pnpm 10.12.1。
-- 默认产品表面是 Agent Studio，同时提供角色卡、世界书、资源、设置与导入导出界面。
+- 默认产品表面是 Agent Studio，同时提供角色卡、世界书、卡片资源、项目文件、设置与导入导出界面；“项目文件”负责文件生命周期，“卡片资源”负责编辑当前卡片内的资源字段。
 - 前端测试使用 Vitest；Rust 单元测试位于 `src-tauri/src` 的模块内。
 
 ## 维护规则
