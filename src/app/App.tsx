@@ -77,7 +77,7 @@ export function App() {
   return (
     <main className="app-shell card-workshop-shell">
       <header className="card-workshop-topbar">
-        <div className="card-workshop-topbar-copy"><span>CCv3 / LOCAL WORKSPACE</span><strong>Agent-first card workshop</strong></div>
+        <div className="card-workshop-topbar-copy"><span>CCv3 / LOCAL WORKSPACE</span></div>
         <div className="card-workshop-topbar-actions">
           <Button aria-label="切换主题" icon={theme === "dark" ? <Sun size={16} /> : <Moon size={16} />} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "浅色" : "深色"}</Button>
           <Button onClick={() => void saveCurrentCard()}>{dirty ? "保存草稿" : "已保存"}</Button>

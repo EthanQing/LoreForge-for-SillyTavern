@@ -2705,11 +2705,6 @@ select.input {
   text-transform: uppercase;
 }
 
-.card-workshop-topbar-copy strong {
-  font-size: 15px;
-  letter-spacing: .02em;
-}
-
 .card-workshop-update {
   margin: 12px 20px 0;
 }
@@ -3577,9 +3572,6 @@ select.input {
 @media (max-width: 700px) {
   .card-workshop-topbar {
     padding-inline: 12px;
-  }
-  .card-workshop-topbar-copy strong {
-    font-size: 13px;
   }
   .card-workshop-topbar-actions .button {
     padding-inline: 8px;
@@ -4599,13 +4591,6 @@ select.input {
 }
 
 @media (max-width: 700px) {
-  .card-workshop-shell .card-workshop-topbar-copy strong {
-    max-width: 42vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .card-workshop-shell .card-workshop-topbar-actions .button span {
     display: none;
   }
