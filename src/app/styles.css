@@ -2985,6 +2985,10 @@ select.input {
   justify-self: end;
   border-left: 0;
   border-right: 2px solid var(--copper);
+  text-align: left;
+}
+
+.agent-message-user .agent-message-role {
   text-align: right;
 }
 
