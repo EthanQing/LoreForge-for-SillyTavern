@@ -739,7 +739,49 @@ function getEditorLabel(tab: StudioEditorTab): string {
 function InspectorOverview({ card, report, proposals, onOpenEditor }: { card: ReturnType<typeof useCardStore.getState>["card"]; report: ReturnType<typeof useCardStore.getState>["report"]; proposals: CardProposal[]; onOpenEditor: (tab: StudioEditorTab) => void }) {
   const stats = buildCardTokenStats(card);
   const reviewableProposals = proposals.filter(isReviewableProposal);
-  return <div className="agent-inspector-overview"><section className="agent-inspector-block"><span className="agent-inspector-label">CCv3 索引</span><p className="agent-inspector-hint">这里编辑当前卡片的数据字段；项目文件用于打开、保存和导出卡片。</p><div className="agent-index-grid">{[["基础", "basic"], ["提示词", "prompts"], ["开场白", "greetings"], ["世界书", "lorebook"], ["卡片资源", "assets"]].map(([label, tab]) => <button type="button" key={tab} onClick={() => onOpenEditor(tab as StudioEditorTab)}><span>{label}</span><ChevronRight size={13} /></button>)}</div></section><section className="agent-inspector-block"><div className="agent-block-title"><span>待审核修改</span><b aria-label={`${reviewableProposals.length} 个待审核修改`}>{reviewableProposals.length}</b></div><p className="agent-muted">Agent 只能创建修改提案；确认后才会写入卡片。</p>{reviewableProposals.length === 0 ? <p className="agent-muted">暂无待审核修改。</p> : reviewableProposals.slice(-3).map((proposal) => <div className="agent-mini-proposal" key={proposal.id}><strong>{getProposalSummary(proposal.summary)}</strong><span>{proposal.diffs.length} 个字段 · {getProposalStateLabel(proposal.state)}</span></div>)}</section><section className="agent-inspector-block"><div className="agent-block-title"><span>状态</span><button type="button" onClick={() => onOpenEditor("validation")}><ChevronRight size={13} /></button></div><p className={report.valid ? "agent-good" : "agent-danger"}>{report.valid ? "当前卡片通过前端校验" : report.errors.length + " 个错误需要处理"}</p><p className="agent-muted">{report.warnings.length} 个警告 · {stats.totalTokens.toLocaleString()} estimated tokens</p></section></div>;
+  const fieldEditors: Array<[string, StudioEditorTab]> = [
+    ["基础", "basic"],
+    ["提示词", "prompts"],
+    ["开场白", "greetings"],
+    ["世界书", "lorebook"],
+    ["卡片资源", "assets"]
+  ];
+  return (
+    <div className="agent-inspector-overview">
+      <section className="agent-inspector-block">
+        <span className="agent-inspector-label">CCv3 索引</span>
+        <p className="agent-inspector-hint">这里编辑当前卡片的数据字段；项目文件用于打开、保存和导出卡片。</p>
+        <div className="agent-index-grid">
+          {fieldEditors.map(([label, tab]) => (
+            <button type="button" key={tab} onClick={() => onOpenEditor(tab)}>
+              <span>{label}</span>
+              <ChevronRight size={13} />
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="agent-inspector-block">
+        <span className="agent-inspector-label">查看</span>
+        <p className="agent-inspector-hint">查看当前卡片的头像、开场白和实际 Prompt 效果。</p>
+        <div className="agent-index-grid">
+          <button type="button" onClick={() => onOpenEditor("preview")}>
+            <span>预览</span>
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      </section>
+      <section className="agent-inspector-block">
+        <div className="agent-block-title"><span>待审核修改</span><b aria-label={`${reviewableProposals.length} 个待审核修改`}>{reviewableProposals.length}</b></div>
+        <p className="agent-muted">Agent 只能创建修改提案；确认后才会写入卡片。</p>
+        {reviewableProposals.length === 0 ? <p className="agent-muted">暂无待审核修改。</p> : reviewableProposals.slice(-3).map((proposal) => <div className="agent-mini-proposal" key={proposal.id}><strong>{getProposalSummary(proposal.summary)}</strong><span>{proposal.diffs.length} 个字段 · {getProposalStateLabel(proposal.state)}</span></div>)}
+      </section>
+      <section className="agent-inspector-block">
+        <div className="agent-block-title"><span>状态</span><button type="button" onClick={() => onOpenEditor("validation")}><ChevronRight size={13} /></button></div>
+        <p className={report.valid ? "agent-good" : "agent-danger"}>{report.valid ? "当前卡片通过前端校验" : report.errors.length + " 个错误需要处理"}</p>
+        <p className="agent-muted">{report.warnings.length} 个警告 · {stats.totalTokens.toLocaleString()} estimated tokens</p>
+      </section>
+    </div>
+  );
 }
 
 interface AgentTranscriptTurnViewProps {
