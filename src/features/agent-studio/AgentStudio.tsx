@@ -3,7 +3,7 @@ import { ChevronRight, CircleStop, FolderOpen, MessageSquarePlus, Moon, PanelRig
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { useCardStore } from "../../app/store";
 import { useProjectActions } from "../../app/useProjectActions";
-import { getCardDisplayName } from "../../app/cardIdentity";
+import { getCardDisplayName, getCardIdentity } from "../../app/cardIdentity";
 import { Button } from "../../components/Button";
 import { MarkdownMessage } from "../../components/MarkdownMessage";
 import { buildCardTokenStats } from "../../lib/tokenStats";
@@ -68,6 +68,7 @@ interface ConversationSnapshot {
 export function AgentStudio(): ReactNode {
   const { t } = useI18n();
   const card = useCardStore((state) => state.card);
+  const cardOrigin = useCardStore((state) => state.cardOrigin);
   const report = useCardStore((state) => state.report);
   const workspaceId = useCardStore((state) => state.workspaceId);
   const cardRevision = useCardStore((state) => state.cardRevision);
@@ -79,6 +80,7 @@ export function AgentStudio(): ReactNode {
   const applyAgentCard = useCardStore((state) => state.applyAgentCard);
   const { openCard, saveCardSnapshot } = useProjectActions();
   const cardName = getCardDisplayName(card, t);
+  const cardIdentity = getCardIdentity(cardOrigin, currentPath, t);
   const nextTheme = theme === "dark" ? "light" : "dark";
   const themeLabel = t("a11y.switchTheme", { theme: theme === "dark" ? t("theme.light") : t("theme.dark") });
   const [sessionId, setSessionId] = useState(() => readSessionId(workspaceId));
@@ -511,7 +513,7 @@ export function AgentStudio(): ReactNode {
       return;
     }
     saveSessionId(record.workspaceId, record.id);
-    await openCard(record.currentPath);
+    await openCard(record.currentPath, record.workspaceId);
   }, [conversationOperation, openCard, sessionId, setStatus, workspaceId]);
 
   const openEditor = (tab: StudioEditorTab) => {
@@ -683,7 +685,7 @@ export function AgentStudio(): ReactNode {
     >
       <aside className="agent-studio-sidebar">
         <div className="agent-studio-brand"><div className="agent-studio-mark"><Sparkles size={18} /></div><div><strong>Card Workshop</strong><span>AGENT STUDIO</span></div></div>
-        <div className="agent-studio-card-summary"><span>当前卡片</span><strong>{cardName}</strong><small>{workspaceId.slice(0, 18)} · rev {cardRevision}</small></div>
+        <div className="agent-studio-card-summary"><span>当前项目</span><strong>{cardName}</strong><small title={cardIdentity.detail}>{cardIdentity.label} · rev {cardRevision}</small></div>
         <AgentSessionHistory
           records={sessionHistory}
           current={{ workspaceId, sessionId, cardName, currentPath }}

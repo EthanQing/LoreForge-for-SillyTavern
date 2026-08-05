@@ -13,18 +13,23 @@ export interface AgentSessionHistoryRecord {
   entryCount: number;
 }
 
+export interface AgentSessionProjectIdentity {
+  workspaceId: string;
+  cardName: string | null;
+  currentPath: string | null;
+}
+
 export interface AgentSessionHistoryGroup {
+  projectKey: string;
   workspaceId: string;
   cardName: string;
   currentPath: string | null;
   sessions: AgentSessionHistoryRecord[];
 }
 
-export interface CurrentAgentSession {
-  workspaceId: string;
+export interface CurrentAgentSession extends AgentSessionProjectIdentity {
   sessionId: string;
   cardName: string;
-  currentPath: string | null;
 }
 
 export function buildAgentSessionGroups(
@@ -32,34 +37,55 @@ export function buildAgentSessionGroups(
   current: CurrentAgentSession,
   now = Date.now()
 ): AgentSessionHistoryGroup[] {
-  const groups = new Map<string, AgentSessionHistoryGroup>();
+  const groups: AgentSessionHistoryGroup[] = [];
 
-  for (const record of records) {
-    const group = groups.get(record.workspaceId) ?? {
+  for (const record of dedupeSessionRecords(records)) {
+    const group = groups.find((candidate) => isSameAgentSessionProject(record, candidate));
+    if (group) {
+      group.sessions.push(record);
+      if (!group.currentPath && record.currentPath) {
+        group.currentPath = record.currentPath;
+      }
+      continue;
+    }
+
+    groups.push({
+      projectKey: getAgentSessionProjectKey(record),
       workspaceId: record.workspaceId,
       cardName: getCardName(record.cardName, record.currentPath),
       currentPath: record.currentPath,
-      sessions: []
-    };
-    if (!group.sessions.some((session) => session.id === record.id)) {
-      group.sessions.push(record);
-    }
-    if (!group.currentPath && record.currentPath) {
-      group.currentPath = record.currentPath;
-    }
-    groups.set(record.workspaceId, group);
+      sessions: [record]
+    });
   }
 
-  const currentGroup = groups.get(current.workspaceId) ?? {
-    workspaceId: current.workspaceId,
-    cardName: current.cardName,
-    currentPath: current.currentPath,
-    sessions: []
-  };
+  let currentGroup = groups.find((group) => isSameAgentSessionProject(current, group));
+  if (!currentGroup) {
+    currentGroup = {
+      projectKey: getAgentSessionProjectKey(current),
+      workspaceId: current.workspaceId,
+      cardName: current.cardName,
+      currentPath: current.currentPath,
+      sessions: []
+    };
+    groups.push(currentGroup);
+  }
+
+  currentGroup.projectKey = getAgentSessionProjectKey(current);
+  currentGroup.workspaceId = current.workspaceId;
   currentGroup.cardName = current.cardName;
-  currentGroup.currentPath = current.currentPath;
+  currentGroup.currentPath = current.currentPath ?? currentGroup.currentPath;
+
+  const currentSession = groups
+    .flatMap((group) => group.sessions)
+    .find((session) => session.id === current.sessionId);
+  for (const group of groups) {
+    if (group !== currentGroup) {
+      group.sessions = group.sessions.filter((session) => session.id !== current.sessionId);
+    }
+  }
+
   if (!currentGroup.sessions.some((session) => session.id === current.sessionId)) {
-    currentGroup.sessions.unshift({
+    currentGroup.sessions.unshift(currentSession ?? {
       id: current.sessionId,
       workspaceId: current.workspaceId,
       title: PENDING_AGENT_SESSION_TITLE,
@@ -70,18 +96,30 @@ export function buildAgentSessionGroups(
       entryCount: 0
     });
   }
-  groups.set(current.workspaceId, currentGroup);
 
-  return [...groups.values()]
+  return groups
+    .filter((group) => group.sessions.length > 0)
     .map((group) => ({
       ...group,
-      sessions: [...group.sessions].sort((left, right) => right.updatedAt - left.updatedAt)
+      sessions: [...group.sessions].sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt)
     }))
     .sort((left, right) => {
-      if (left.workspaceId === current.workspaceId) return -1;
-      if (right.workspaceId === current.workspaceId) return 1;
+      const leftIsCurrent = isSameAgentSessionProject(left, current);
+      const rightIsCurrent = isSameAgentSessionProject(right, current);
+      if (leftIsCurrent) return -1;
+      if (rightIsCurrent) return 1;
       return latestSessionTime(right) - latestSessionTime(left);
     });
+}
+
+export function getAgentSessionProjectKey(identity: AgentSessionProjectIdentity): string {
+  const path = normalizePath(identity.currentPath);
+  if (path) return `path:${path}`;
+  return `workspace:${identity.workspaceId}`;
+}
+
+export function isSameAgentSessionProject(left: AgentSessionProjectIdentity, right: AgentSessionProjectIdentity): boolean {
+  return getAgentSessionProjectKey(left) === getAgentSessionProjectKey(right);
 }
 
 export function getVisibleAgentSessions(sessions: AgentSessionHistoryRecord[], expanded: boolean): AgentSessionHistoryRecord[] {
@@ -106,16 +144,37 @@ export function formatAgentSessionTime(timestamp: number): string {
   }).format(new Date(timestamp));
 }
 
+function dedupeSessionRecords(records: AgentSessionHistoryRecord[]): AgentSessionHistoryRecord[] {
+  const uniqueRecords = new Map<string, AgentSessionHistoryRecord>();
+  for (const record of records) {
+    const previous = uniqueRecords.get(record.id);
+    if (!previous || shouldPreferSessionRecord(record, previous)) {
+      uniqueRecords.set(record.id, record);
+    }
+  }
+  return [...uniqueRecords.values()];
+}
+
+function shouldPreferSessionRecord(candidate: AgentSessionHistoryRecord, previous: AgentSessionHistoryRecord): boolean {
+  if (candidate.updatedAt !== previous.updatedAt) return candidate.updatedAt > previous.updatedAt;
+  if (Boolean(candidate.currentPath) !== Boolean(previous.currentPath)) return Boolean(candidate.currentPath);
+  return Boolean(candidate.cardName?.trim()) && !Boolean(previous.cardName?.trim());
+}
+
 function latestSessionTime(group: AgentSessionHistoryGroup): number {
   return group.sessions.reduce((latest, session) => Math.max(latest, session.updatedAt), 0);
 }
 
 function getCardName(cardName: string | null, currentPath: string | null): string {
-  const trimmedName = cardName?.trim();
+  const trimmedName = cardName?.trim().replace(/\s+/g, " ");
   if (trimmedName) return trimmedName;
+
   const pathName = currentPath?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
-  const withoutExtension = pathName.replace(/\.(?:json|png|apng|charx)$/i, "").trim();
-  return withoutExtension || "未命名角色卡";
+  return pathName.replace(/\.(?:json|png|apng|charx)$/i, "").trim() || "未命名角色卡";
+}
+
+function normalizePath(value: string | null): string {
+  return value?.trim().replaceAll("\\", "/").replace(/\/+$/, "").toLocaleLowerCase() ?? "";
 }
 
 function truncate(value: string, maxLength: number): string {

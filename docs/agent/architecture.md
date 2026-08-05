@@ -26,6 +26,8 @@ React UI
 
 `src/features/agent-studio/AgentStudio.tsx` 持有共享的 Agent 会话编排；字段助手与世界书入口通过 `src/lib/agent/uiContext.tsx` 进入相同会话和提案队列。运行时链路为：前端根据用户选择生成 `AgentPermission`，控制器调用 Pi Agent Core/Pi AI，模型通过类型化 inspect/propose 工具创建内存提案，用户审阅并确认后才由 store 写入卡片。
 
+Agent Studio 左侧历史由 `src/features/agent-studio/AgentSessionHistory.tsx` 展示，`src/lib/agent/sessionHistory.ts` 负责将多条会话聚合为角色卡项目。可识别文件路径时使用规范化路径作为项目键；未绑定文件的卡片继续使用 workspace ID，避免不同未保存卡片因同名被错误合并。切换跨 workspace 的历史会话时保留记录原始 workspace，以便正确恢复会话及其提案上下文。
+
 模型不能从工具输入扩大权限。提案应用会检查工作区、卡片 revision、卡片哈希以及（适用时）世界书条目指纹，再重新编译与校验语义变更。
 
 长会话在发送给模型前由 `src/lib/agent/context.ts` 压缩。带工具调用的 assistant 消息与其连续工具结果必须作为整体保留或整体省略，避免向 OpenAI-compatible 接口发送孤立的 `tool` 消息。

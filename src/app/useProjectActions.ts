@@ -123,7 +123,7 @@ export function useProjectActions() {
   }, [confirmDanger, dirty, t]);
 
   const openCard = useCallback(
-    async (forcedPath?: string) => {
+    async (forcedPath?: string, workspaceId?: string) => {
       try {
         const path = forcedPath ?? (await pickOpenCardPath());
         if (!path) {
@@ -143,6 +143,7 @@ export function useProjectActions() {
         replaceCard(parsed.card, {
           dirty: false,
           path,
+          workspaceId,
           status: parsed.warnings.length > 0 ? parsed.warnings.join(" ") : t("status.cardOpened"),
         });
       } catch (error) {
