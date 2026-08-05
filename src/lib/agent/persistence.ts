@@ -111,6 +111,75 @@ export async function persistAgentSessionTitle(sessionId: string, title: string)
   }
 }
 
+export async function persistNewAgentSession(
+  workspaceId: string,
+  sessionId: string,
+  cardName: string,
+  currentPath: string | null
+): Promise<AgentSessionHistoryRecord> {
+  const now = Date.now();
+  const record: AgentSessionHistoryRecord = {
+    id: sessionId,
+    workspaceId,
+    title: PENDING_AGENT_SESSION_TITLE,
+    createdAt: now,
+    updatedAt: now,
+    cardName,
+    currentPath,
+    entryCount: 0,
+    pinned: false,
+    isRead: true
+  };
+
+  try {
+    await invoke("save_agent_session", {
+      session: {
+        id: sessionId,
+        workspaceId,
+        title: PENDING_AGENT_SESSION_TITLE,
+        createdAt: now,
+        updatedAt: now,
+        cardName,
+        currentPath,
+        entryCount: 0,
+        pinned: false,
+        isRead: true
+      }
+    });
+  } catch {
+    // Keep the new session usable in browser-only development environments.
+  }
+
+  return record;
+}
+
+export async function deleteAgentSession(sessionId: string): Promise<boolean> {
+  try {
+    await invoke("delete_agent_session", { sessionId });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function setAgentSessionPinned(sessionId: string, pinned: boolean): Promise<boolean> {
+  try {
+    await invoke("set_agent_session_pinned", { sessionId, pinned });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function setAgentSessionRead(sessionId: string, isRead: boolean): Promise<boolean> {
+  try {
+    await invoke("set_agent_session_read", { sessionId, isRead });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function nextEntryPosition(sessionId: string): number {
   const now = Date.now() * 1_000;
   const previous = entryPositions.get(sessionId) ?? 0;

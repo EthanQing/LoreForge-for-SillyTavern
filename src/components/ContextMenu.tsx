@@ -14,12 +14,19 @@ import {
   FileJson,
   FolderOpen,
   ImageDown,
+  Info,
   ListChecks,
+  MessageSquare,
+  PanelRight,
+  Pin,
+  PinOff,
   Plus,
   Redo2,
   Save,
   Scissors,
+  Send,
   Settings,
+  SlidersHorizontal,
   Sparkles,
   Tags,
   Trash2,
@@ -53,6 +60,7 @@ interface MenuState {
   contextElement: HTMLElement | null;
   contextTarget: ContextMenuTarget | null;
   editableElement: HTMLElement | null;
+  triggerElement: HTMLElement | null;
   clipboardTextStatus: ClipboardTextStatus;
   kind: string;
 }
@@ -238,45 +246,57 @@ export function ContextMenu() {
   const [menu, setMenu] = useState<MenuState | null>(null);
 
   const closeMenu = useCallback(() => {
-    setMenu(null);
+    setMenu((current) => {
+      current?.triggerElement?.focus({ preventScroll: true });
+      return null;
+    });
   }, []);
 
   useEffect(() => {
-    const handleContextMenu = (event: MouseEvent) => {
-      const target = event.target;
-
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      if (target.closest("[data-context-menu-root]")) {
-        event.preventDefault();
-        return;
-      }
-
-      event.preventDefault();
+    const openAt = (clientX: number, clientY: number, target: EventTarget | null) => {
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-context-menu-root]")) return;
 
       const editableElement = findEditableElement(target);
       const contextElement = target.closest<HTMLElement>("[data-context-menu]");
       const contextTargetElement = target.closest<HTMLElement>("[data-context-target-id]");
       const contextTarget = getContextMenuTarget(contextTargetElement?.dataset.contextTargetId);
-      const kind = editableElement ? contextElement?.dataset.contextMenu ?? "text" : contextElement?.dataset.contextMenu ?? "workspace";
+      const kind = contextElement?.dataset.contextMenu ?? (editableElement ? "text" : "workspace");
+      const triggerElement = editableElement ?? contextElement ?? (target instanceof HTMLElement ? target : null);
 
       setMenu({
-        anchorX: event.clientX,
-        anchorY: event.clientY,
-        left: event.clientX,
-        top: event.clientY,
+        anchorX: clientX,
+        anchorY: clientY,
+        left: clientX,
+        top: clientY,
         contextElement,
         contextTarget,
         editableElement,
+        triggerElement,
         clipboardTextStatus: "unknown",
         kind,
       });
     };
 
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      openAt(event.clientX, event.clientY, event.target);
+    };
+
+    const handleContextMenuKey = (event: KeyboardEvent) => {
+      if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
+      const target = document.activeElement instanceof Element ? document.activeElement : document.body;
+      const rect = target.getBoundingClientRect();
+      event.preventDefault();
+      openAt(Math.min(rect.left, window.innerWidth - 12), Math.min(rect.bottom, window.innerHeight - 12), target);
+    };
+
     window.addEventListener("contextmenu", handleContextMenu);
-    return () => window.removeEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("keydown", handleContextMenuKey);
+    return () => {
+      window.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("keydown", handleContextMenuKey);
+    };
   }, []);
 
   useEffect(() => {
@@ -329,8 +349,33 @@ export function ContextMenu() {
       closeMenu();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
+      const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") ?? []);
       if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
         closeMenu();
+        return;
+      }
+      if (items.length === 0) return;
+      const activeIndex = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement));
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        items[(activeIndex + direction + items.length) % items.length]?.focus();
+        return;
+      }
+      if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        event.stopPropagation();
+        (event.key === "Home" ? items[0] : items[items.length - 1])?.focus();
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        if (!items.includes(document.activeElement as HTMLButtonElement)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        (document.activeElement as HTMLButtonElement).click();
       }
     };
 
@@ -341,6 +386,12 @@ export function ContextMenu() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [closeMenu, menu]);
+
+  useEffect(() => {
+    if (!menu) return;
+    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']:not(:disabled)");
+    firstItem?.focus();
+  }, [menu]);
 
   useLayoutEffect(() => {
     if (!menu || !menuRef.current) {
@@ -544,6 +595,279 @@ export function ContextMenu() {
         action: actions.exportJson,
       },
     ];
+
+    if (menu.kind === "agent-session-list" && menu.contextTarget?.kind === "agent-session-list") {
+      const target = menu.contextTarget;
+      return [
+        {
+          type: "item",
+          id: "agent-new-session",
+          label: "新建会话",
+          icon: <Plus size={15} />,
+          action: target.createSession,
+        },
+        separator("agent-session-list-1"),
+        {
+          type: "item",
+          id: "agent-previous-session",
+          label: "上一个会话",
+          icon: <ArrowUp size={15} />,
+          action: target.selectPrevious,
+        },
+        {
+          type: "item",
+          id: "agent-next-session",
+          label: "下一个会话",
+          icon: <ArrowDown size={15} />,
+          action: target.selectNext,
+        },
+      ];
+    }
+
+    if (menu.kind === "agent-session" && menu.contextTarget?.kind === "agent-session") {
+      const target = menu.contextTarget;
+      return [
+        {
+          type: "item",
+          id: "agent-select-session",
+          label: target.isCurrent ? "当前会话" : "切换到此会话",
+          icon: <FolderOpen size={15} />,
+          disabled: target.isCurrent || !target.canSelect,
+          action: target.selectSession,
+        },
+        {
+          type: "item",
+          id: "agent-rename-session",
+          label: "重命名会话",
+          icon: <FileJson size={15} />,
+          action: target.renameSession,
+        },
+        {
+          type: "item",
+          id: "agent-toggle-pin",
+          label: target.pinned ? "取消置顶" : "置顶会话",
+          icon: target.pinned ? <PinOff size={15} /> : <Pin size={15} />,
+          action: target.togglePinned,
+        },
+        {
+          type: "item",
+          id: "agent-toggle-read",
+          label: target.isRead ? "标记为未读" : "标记为已读",
+          icon: <Eye size={15} />,
+          action: target.toggleRead,
+        },
+        {
+          type: "item",
+          id: "agent-export-session",
+          label: "导出聊天记录",
+          icon: <Download size={15} />,
+          action: target.exportSession,
+        },
+        separator("agent-session-1"),
+        {
+          type: "item",
+          id: "agent-previous-session-item",
+          label: "上一个会话",
+          icon: <ArrowUp size={15} />,
+          action: target.selectPrevious,
+        },
+        {
+          type: "item",
+          id: "agent-next-session-item",
+          label: "下一个会话",
+          icon: <ArrowDown size={15} />,
+          action: target.selectNext,
+        },
+        separator("agent-session-2"),
+        {
+          type: "item",
+          id: "agent-delete-session",
+          label: "删除会话",
+          icon: <Trash2 size={15} />,
+          danger: true,
+          disabled: !target.canDelete,
+          action: target.deleteSession,
+        },
+      ];
+    }
+
+    if (menu.kind === "agent-message" && menu.contextTarget?.kind === "agent-message") {
+      const target = menu.contextTarget;
+      const selectedMessageText = selectedText(menu.contextElement);
+      return [
+        {
+          type: "item",
+          id: "agent-copy-message",
+          label: selectedMessageText ? "复制选中文本" : "复制消息",
+          icon: <Copy size={15} />,
+          action: () => target.copyMessage(selectedMessageText || target.text),
+        },
+        {
+          type: "item",
+          id: "agent-quote-message",
+          label: "引用回复",
+          icon: <MessageSquare size={15} />,
+          action: target.quoteMessage,
+        },
+        {
+          type: "item",
+          id: "agent-forward-message",
+          label: "转发消息",
+          icon: <Send size={15} />,
+          action: target.forwardMessage,
+        },
+        separator("agent-message-1"),
+        {
+          type: "item",
+          id: "agent-toggle-message-selection",
+          label: target.selected ? "取消选择消息" : "多选消息",
+          icon: <ListChecks size={15} />,
+          action: target.toggleSelection,
+        },
+        {
+          type: "item",
+          id: "agent-message-details",
+          label: "查看消息详情",
+          icon: <Info size={15} />,
+          action: target.showDetails,
+        },
+        separator("agent-message-2"),
+        {
+          type: "item",
+          id: "agent-delete-message",
+          label: "删除消息",
+          icon: <Trash2 size={15} />,
+          danger: true,
+          disabled: !target.canDelete,
+          action: target.deleteMessage,
+        },
+      ];
+    }
+
+    if (menu.kind === "agent-chat" && menu.contextTarget?.kind === "agent-chat") {
+      const target = menu.contextTarget;
+      return [
+        {
+          type: "item",
+          id: "agent-copy-session",
+          label: "复制当前会话",
+          icon: <Copy size={15} />,
+          action: target.copySession,
+        },
+        {
+          type: "item",
+          id: "agent-select-all-messages",
+          label: "多选消息",
+          icon: <ListChecks size={15} />,
+          action: target.selectAllMessages,
+        },
+        {
+          type: "item",
+          id: "agent-clear-message-selection",
+          label: "清除消息选择",
+          icon: <EyeOff size={15} />,
+          action: target.clearMessageSelection,
+        },
+        separator("agent-chat-1"),
+        {
+          type: "item",
+          id: "agent-scroll-top",
+          label: "滚动到顶部",
+          icon: <ArrowUp size={15} />,
+          action: target.scrollToTop,
+        },
+        {
+          type: "item",
+          id: "agent-scroll-bottom",
+          label: "滚动到底部",
+          icon: <ArrowDown size={15} />,
+          action: target.scrollToBottom,
+        },
+        {
+          type: "item",
+          id: "agent-regenerate",
+          label: "重新生成最后回复",
+          icon: <Redo2 size={15} />,
+          disabled: !target.canRegenerate,
+          action: target.regenerate,
+        },
+      ];
+    }
+
+    if (menu.kind === "agent-composer" && menu.contextTarget?.kind === "agent-composer") {
+      const target = menu.contextTarget;
+      return [
+        ...textItems,
+        separator("agent-composer-1"),
+        {
+          type: "item",
+          id: "agent-clear-input",
+          label: "清空输入",
+          icon: <Trash2 size={15} />,
+          disabled: !menu.editableElement || editableReadOnly || !hasText,
+          action: target.clearInput,
+        },
+        {
+          type: "item",
+          id: "agent-send-input",
+          label: "发送",
+          icon: <Send size={15} />,
+          disabled: !target.canSend,
+          action: target.send,
+        },
+        {
+          type: "item",
+          id: "agent-continue-input",
+          label: "完成后继续",
+          icon: <Redo2 size={15} />,
+          disabled: !target.canContinue,
+          action: target.continueAfterGeneration,
+        },
+      ];
+    }
+
+    if (menu.kind === "agent-toolbar" && menu.contextTarget?.kind === "agent-toolbar") {
+      const target = menu.contextTarget;
+      return [
+        {
+          type: "item",
+          id: "agent-customize-toolbar",
+          label: "自定义工具栏",
+          icon: <SlidersHorizontal size={15} />,
+          action: target.customizeToolbar,
+        },
+        {
+          type: "item",
+          id: "agent-toolbar-new-session",
+          label: "新建会话",
+          icon: <Plus size={15} />,
+          action: target.createSession,
+        },
+        {
+          type: "item",
+          id: "agent-toolbar-stop",
+          label: "停止生成",
+          icon: <EyeOff size={15} />,
+          disabled: !target.canStop,
+          action: target.stopGeneration,
+        },
+        separator("agent-toolbar-1"),
+        {
+          type: "item",
+          id: "agent-toolbar-panel",
+          label: "显示/隐藏面板",
+          icon: <PanelRight size={15} />,
+          action: target.toggleInspector,
+        },
+        {
+          type: "item",
+          id: "agent-toolbar-settings",
+          label: "设置选项",
+          icon: <Settings size={15} />,
+          action: target.openSettings,
+        },
+      ];
+    }
 
     if (menu.editableElement && !["json", "preview", "validation"].includes(menu.kind)) {
       return textItems;

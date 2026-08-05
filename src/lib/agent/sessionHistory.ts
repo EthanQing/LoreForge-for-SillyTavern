@@ -11,6 +11,8 @@ export interface AgentSessionHistoryRecord {
   cardName: string | null;
   currentPath: string | null;
   entryCount: number;
+  pinned?: boolean;
+  isRead?: boolean;
 }
 
 export interface AgentSessionProjectIdentity {
@@ -93,7 +95,9 @@ export function buildAgentSessionGroups(
       updatedAt: now,
       cardName: current.cardName,
       currentPath: current.currentPath,
-      entryCount: 0
+      entryCount: 0,
+      pinned: false,
+      isRead: true
     });
   }
 
@@ -101,15 +105,43 @@ export function buildAgentSessionGroups(
     .filter((group) => group.sessions.length > 0)
     .map((group) => ({
       ...group,
-      sessions: [...group.sessions].sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt)
+      sessions: [...group.sessions].sort(compareAgentSessions)
     }))
     .sort((left, right) => {
       const leftIsCurrent = isSameAgentSessionProject(left, current);
       const rightIsCurrent = isSameAgentSessionProject(right, current);
       if (leftIsCurrent) return -1;
       if (rightIsCurrent) return 1;
+      const leftPinned = left.sessions.some((session) => Boolean(session.pinned));
+      const rightPinned = right.sessions.some((session) => Boolean(session.pinned));
+      if (leftPinned !== rightPinned) return Number(rightPinned) - Number(leftPinned);
       return latestSessionTime(right) - latestSessionTime(left);
     });
+}
+
+export function isAgentSessionSelectable(record: AgentSessionHistoryRecord, current: CurrentAgentSession): boolean {
+  return record.workspaceId === current.workspaceId || Boolean(record.currentPath);
+}
+
+export function getAgentSessionNavigation(
+  records: AgentSessionHistoryRecord[],
+  current: CurrentAgentSession
+): AgentSessionHistoryRecord[] {
+  return buildAgentSessionGroups(records, current)
+    .flatMap((group) => group.sessions)
+    .filter((record) => isAgentSessionSelectable(record, current));
+}
+
+export function getAdjacentAgentSession(
+  records: AgentSessionHistoryRecord[],
+  current: CurrentAgentSession,
+  direction: -1 | 1
+): AgentSessionHistoryRecord | undefined {
+  const sessions = getAgentSessionNavigation(records, current);
+  if (sessions.length === 0) return undefined;
+  const currentIndex = sessions.findIndex((record) => record.id === current.sessionId);
+  if (currentIndex < 0) return sessions[direction > 0 ? 0 : sessions.length - 1];
+  return sessions[(currentIndex + direction + sessions.length) % sessions.length];
 }
 
 export function getAgentSessionProjectKey(identity: AgentSessionProjectIdentity): string {
@@ -147,9 +179,14 @@ export function formatAgentSessionTime(timestamp: number): string {
 function dedupeSessionRecords(records: AgentSessionHistoryRecord[]): AgentSessionHistoryRecord[] {
   const uniqueRecords = new Map<string, AgentSessionHistoryRecord>();
   for (const record of records) {
-    const previous = uniqueRecords.get(record.id);
-    if (!previous || shouldPreferSessionRecord(record, previous)) {
-      uniqueRecords.set(record.id, record);
+    const normalizedRecord = {
+      ...record,
+      pinned: Boolean(record.pinned),
+      isRead: record.isRead !== false
+    };
+    const previous = uniqueRecords.get(normalizedRecord.id);
+    if (!previous || shouldPreferSessionRecord(normalizedRecord, previous)) {
+      uniqueRecords.set(normalizedRecord.id, normalizedRecord);
     }
   }
   return [...uniqueRecords.values()];
@@ -163,6 +200,11 @@ function shouldPreferSessionRecord(candidate: AgentSessionHistoryRecord, previou
 
 function latestSessionTime(group: AgentSessionHistoryGroup): number {
   return group.sessions.reduce((latest, session) => Math.max(latest, session.updatedAt), 0);
+}
+
+function compareAgentSessions(left: AgentSessionHistoryRecord, right: AgentSessionHistoryRecord): number {
+  if (Boolean(left.pinned) !== Boolean(right.pinned)) return Number(Boolean(right.pinned)) - Number(Boolean(left.pinned));
+  return right.updatedAt - left.updatedAt || right.createdAt - left.createdAt;
 }
 
 function getCardName(cardName: string | null, currentPath: string | null): string {

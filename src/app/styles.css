@@ -810,13 +810,13 @@ textarea {
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2);
-  min-height: 30px;
+  min-height: 34px;
   padding: var(--space-1) var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  cursor: default;
+  cursor: pointer;
   text-align: left;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
@@ -846,6 +846,7 @@ textarea {
 }
 
 .context-menu-item:disabled {
+  cursor: not-allowed;
   opacity: 0.45;
 }
 
@@ -2977,6 +2978,98 @@ select.input {
   text-align: right;
 }
 
+.card-workshop-shell .agent-message.is-selected {
+  border-color: var(--copper);
+  background: color-mix(in srgb, var(--copper) 9%, var(--iron));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--copper) 18%, transparent);
+}
+
+.agent-message-details-backdrop {
+  position: fixed;
+  z-index: calc(var(--z-modal) + 10);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 18, 20, 0.48);
+}
+
+.agent-message-details {
+  width: min(620px, 100%);
+  max-height: min(680px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--workshop-line);
+  background: var(--workbench);
+  color: var(--paper);
+  box-shadow: var(--shadow-xl);
+}
+
+.agent-message-details-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--workshop-line);
+}
+
+.agent-message-details-heading h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.agent-message-details-heading button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 1px solid var(--workshop-line);
+  background: transparent;
+  color: var(--muted-color);
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.agent-message-details-heading button:hover,
+.agent-message-details-heading button:focus-visible {
+  border-color: var(--copper);
+  color: var(--paper);
+}
+
+.agent-message-details dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 0 0 14px;
+}
+
+.agent-message-details dl div {
+  display: grid;
+  gap: 3px;
+}
+
+.agent-message-details dt {
+  color: var(--muted-color);
+  font-size: 11px;
+}
+
+.agent-message-details dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.agent-message-details pre {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--workshop-line);
+  background: var(--iron);
+  color: var(--paper);
+  font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .agent-message-role {
   display: block;
   margin-bottom: 5px;
@@ -3272,6 +3365,17 @@ select.input {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.card-workshop-shell .agent-toolbar-compact .agent-toolbar-label {
+  display: none;
+}
+
+.card-workshop-shell .agent-toolbar-compact .agent-status-chip,
+.card-workshop-shell .agent-toolbar-compact .agent-stop-button {
+  min-width: 34px;
+  justify-content: center;
+  padding-inline: 8px;
 }
 
 .agent-index-grid-single {
@@ -4740,6 +4844,27 @@ select.input {
   flex: none;
   border-radius: 50%;
   background: var(--copper);
+}
+
+.card-workshop-shell .agent-session-history-state {
+  display: inline-flex;
+  min-width: 14px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  color: var(--muted-color);
+}
+
+.card-workshop-shell .agent-session-history-state svg {
+  color: var(--copper);
+}
+
+.card-workshop-shell .agent-session-history-unread {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--copper);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--copper) 16%, transparent);
 }
 
 .card-workshop-shell .agent-session-history-toggle {

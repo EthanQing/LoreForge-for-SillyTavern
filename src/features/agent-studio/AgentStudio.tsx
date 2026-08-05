@@ -6,6 +6,7 @@ import { useProjectActions } from "../../app/useProjectActions";
 import { getCardDisplayName, getCardIdentity } from "../../app/cardIdentity";
 import { Button } from "../../components/Button";
 import { MarkdownMessage } from "../../components/MarkdownMessage";
+import { useContextMenuTarget } from "../../lib/contextMenuTargets";
 import { buildCardTokenStats } from "../../lib/tokenStats";
 import { toAiConnectionProfile } from "../../lib/ai";
 import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts";
@@ -16,7 +17,12 @@ import type { CharacterCardV3, ValidationIssue, ValidationReport } from "../../l
 import { useI18n } from "../../lib/i18n";
 import { buildValidationAgentInstruction, dispatchValidationNavigation, getValidationEditorTab, getValidationTargetPaths, listenForValidationNavigation, resolveValidationIssuePermission } from "../../lib/validationIssueNavigation";
 import { AgentSessionHistory } from "./AgentSessionHistory";
-import type { AgentSessionHistoryRecord } from "../../lib/agent/sessionHistory";
+import {
+  getAdjacentAgentSession,
+  isAgentSessionSelectable,
+  type AgentSessionHistoryRecord,
+  type CurrentAgentSession
+} from "../../lib/agent/sessionHistory";
 import { AgentStudioContext, buildFieldActionInstruction, resolveFieldActionPermission, type AgentFieldAction, type AgentFieldTarget } from "../../lib/agent/uiContext";
 import {
   decodeAgentRequest,
@@ -34,11 +40,15 @@ import {
   hydrateAgentProposals,
   hydrateAgentSession,
   hydrateAgentSessionHistory,
+  deleteAgentSession,
+  persistNewAgentSession,
   persistAgentBranch,
   persistAgentEvent,
   persistAgentProposal,
   persistAgentSessionTitle,
-  persistWorkspace
+  persistWorkspace,
+  setAgentSessionPinned,
+  setAgentSessionRead
 } from "../../lib/agent/persistence";
 import { generateAgentSessionTitle, getAgentSessionTitleSource, PENDING_AGENT_SESSION_TITLE } from "../../lib/agent/sessionTitle";
 import { ProposalCard } from "./ProposalCard";
@@ -68,6 +78,12 @@ interface ConversationSnapshot {
   cardRevision: number;
 }
 
+interface MessageDetails {
+  role: "user" | "assistant";
+  text: string;
+  turnIndex: number;
+}
+
 export function AgentStudio(): ReactNode {
   const { t } = useI18n();
   const card = useCardStore((state) => state.card);
@@ -81,7 +97,7 @@ export function AgentStudio(): ReactNode {
   const aiSettings = useCardStore((state) => state.aiSettings);
   const setStatus = useCardStore((state) => state.setStatus);
   const applyAgentCard = useCardStore((state) => state.applyAgentCard);
-  const { openCard, saveCardSnapshot } = useProjectActions();
+  const { copyArbitraryText, openCard, saveCardSnapshot } = useProjectActions();
   const cardName = getCardDisplayName(card, t);
   const cardIdentity = getCardIdentity(cardOrigin, currentPath, t);
   const nextTheme = theme === "dark" ? "light" : "dark";
@@ -100,6 +116,11 @@ export function AgentStudio(): ReactNode {
   const [generatingTitleSessionIds, setGeneratingTitleSessionIds] = useState<Set<string>>(() => new Set());
   const [rightOpen, setRightOpen] = useState(true);
   const [inspectorWidth, setInspectorWidth] = useState(560);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(() => new Set());
+  const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
+  const [messageDetails, setMessageDetails] = useState<MessageDetails | null>(null);
+  const [toolbarCompact, setToolbarCompact] = useState(false);
   const [focusedEditor, setFocusedEditor] = useState<StudioEditorTab | null>(null);
   const [pendingValidationPath, setPendingValidationPath] = useState<string>();
   const [conversationOperation, setConversationOperation] = useState<ConversationOperation>("idle");
@@ -119,6 +140,7 @@ export function AgentStudio(): ReactNode {
   useEffect(() => {
     const nextSessionId = readSessionId(workspaceId);
     setSessionId(nextSessionId);
+    setInput("");
     setMessages([]);
     setStreamingMessage(undefined);
     setEvents([]);
@@ -126,6 +148,10 @@ export function AgentStudio(): ReactNode {
     setConversationOperation("idle");
     setEditingLastUser(false);
     setEditedUserText("");
+    setSelectedMessageIds(new Set());
+    setHiddenMessageIds(new Set());
+    setMessageDetails(null);
+    setSessionBusy(false);
     setMentionSurface("card");
     setRequestScope("card");
     setMentionRange(undefined);
@@ -179,6 +205,12 @@ export function AgentStudio(): ReactNode {
       if (active) setSessionHistory(stored);
     });
     return () => { active = false; };
+  }, [workspaceId]);
+
+  useEffect(() => {
+    void persistNewAgentSession(workspaceId, sessionId, cardName, currentPath).then((record) => {
+      setSessionHistory((current) => current.some((item) => item.id === record.id) ? current : [record, ...current]);
+    });
   }, [workspaceId]);
 
   useEffect(() => {
@@ -498,30 +530,54 @@ export function AgentStudio(): ReactNode {
     }
   }, [applyAgentCard, conversationOperation, controller, messages, proposals, requestScope, rollbackRelatedProposals, sessionId, setStatus, streamingMessage, workspaceId, scrollTranscriptToBottom]);
 
+  const resetConversationView = useCallback(() => {
+    setInput("");
+    setMessages([]);
+    setStreamingMessage(undefined);
+    setEvents([]);
+    setProposals([]);
+    setMentionRange(undefined);
+    setEditingLastUser(false);
+    setEditedUserText("");
+    setSelectedMessageIds(new Set());
+    setHiddenMessageIds(new Set());
+    setMessageDetails(null);
+    conversationSnapshotsRef.current = [];
+  }, []);
+
   const selectSession = useCallback(async (record: AgentSessionHistoryRecord) => {
-    if (actionLockRef.current || conversationOperation !== "idle") return;
-    if (record.workspaceId === workspaceId) {
-      saveSessionId(workspaceId, record.id);
-      if (record.id === sessionId) return;
-      controllerRef.current?.dispose();
-      controllerRef.current = null;
-      setSessionId(record.id);
-      setMessages([]);
-      setStreamingMessage(undefined);
-      setEvents([]);
-      setProposals([]);
-      setEditingLastUser(false);
-      setEditedUserText("");
-      conversationSnapshotsRef.current = [];
-      return;
+    if (actionLockRef.current || conversationOperation !== "idle" || controller.isStreaming || sessionBusy) return;
+    const currentSession: CurrentAgentSession = { workspaceId, sessionId, cardName, currentPath };
+    if (!isAgentSessionSelectable(record, currentSession)) return;
+    actionLockRef.current = true;
+    setSessionBusy(true);
+    try {
+      if (record.workspaceId === workspaceId) {
+        saveSessionId(workspaceId, record.id);
+        if (record.id === sessionId) {
+          setSessionHistory((current) => current.map((item) => item.id === record.id ? { ...item, isRead: true } : item));
+          void setAgentSessionRead(record.id, true);
+          return;
+        }
+        controllerRef.current?.dispose();
+        controllerRef.current = null;
+        setSessionId(record.id);
+        resetConversationView();
+        setSessionHistory((current) => current.map((item) => item.id === record.id ? { ...item, isRead: true } : item));
+        void setAgentSessionRead(record.id, true);
+        return;
+      }
+      if (!record.currentPath) {
+        setStatus("该角色卡没有可重新打开的文件路径，无法切换会话。");
+        return;
+      }
+      saveSessionId(record.workspaceId, record.id);
+      await openCard(record.currentPath, record.workspaceId);
+    } finally {
+      actionLockRef.current = false;
+      setSessionBusy(false);
     }
-    if (!record.currentPath) {
-      setStatus("该角色卡没有可重新打开的文件路径，无法切换会话。");
-      return;
-    }
-    saveSessionId(record.workspaceId, record.id);
-    await openCard(record.currentPath, record.workspaceId);
-  }, [conversationOperation, openCard, sessionId, setStatus, workspaceId]);
+  }, [cardName, controller, conversationOperation, currentPath, openCard, resetConversationView, sessionBusy, sessionId, setStatus, workspaceId]);
 
   const openEditor = (tab: StudioEditorTab) => {
     lastFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -689,6 +745,206 @@ export function AgentStudio(): ReactNode {
     ? transcript.reduce((lastIndex, turn, index) => turn.assistantPresent || turn.streaming ? index : lastIndex, -1)
     : -1;
   const actionBusy = conversationOperation !== "idle" || controller.isStreaming;
+
+  const createSession = useCallback(async () => {
+    if (actionLockRef.current || actionBusy || sessionBusy) return;
+    actionLockRef.current = true;
+    setSessionBusy(true);
+    try {
+      const nextSessionId = createSessionId();
+      const record = await persistNewAgentSession(workspaceId, nextSessionId, cardName, currentPath);
+      setSessionHistory((current) => [record, ...current.filter((item) => item.id !== record.id)]);
+      saveSessionId(workspaceId, nextSessionId);
+      controllerRef.current?.dispose();
+      controllerRef.current = null;
+      setSessionId(nextSessionId);
+      resetConversationView();
+    } finally {
+      actionLockRef.current = false;
+      setSessionBusy(false);
+    }
+  }, [actionBusy, cardName, currentPath, resetConversationView, sessionBusy, workspaceId]);
+
+  const selectAdjacentSession = useCallback((direction: -1 | 1) => {
+    const currentSession: CurrentAgentSession = { workspaceId, sessionId, cardName, currentPath };
+    const next = getAdjacentAgentSession(sessionHistory, currentSession, direction);
+    if (next && next.id !== sessionId) void selectSession(next);
+  }, [cardName, currentPath, sessionHistory, selectSession, sessionId, workspaceId]);
+
+  const renameSession = useCallback(async (record: AgentSessionHistoryRecord) => {
+    const currentTitle = record.title.trim() || "新会话";
+    const nextTitle = window.prompt("重命名会话", currentTitle)?.trim();
+    if (!nextTitle || nextTitle === currentTitle) return;
+    if ([...nextTitle].length > 24) {
+      setStatus("会话名称不能超过 24 个字符。");
+      return;
+    }
+    if (!await persistAgentSessionTitle(record.id, nextTitle)) {
+      setStatus("会话重命名失败，请稍后重试。");
+      return;
+    }
+    setSessionHistory((current) => current.map((item) => item.id === record.id ? { ...item, title: nextTitle } : item));
+  }, [setStatus]);
+
+  const deleteSession = useCallback(async (record: AgentSessionHistoryRecord) => {
+    if (actionLockRef.current || actionBusy || sessionBusy) return;
+    if (!window.confirm(`确定删除会话“${record.title.trim() || "新会话"}”吗？聊天记录也会被删除。`)) return;
+    actionLockRef.current = true;
+    setSessionBusy(true);
+    try {
+      if (!await deleteAgentSession(record.id)) {
+        setStatus("会话删除失败，请稍后重试。");
+        return;
+      }
+      setSessionHistory((current) => current.filter((item) => item.id !== record.id));
+      if (record.id !== sessionId) return;
+      const replacement = await persistNewAgentSession(workspaceId, createSessionId(), cardName, currentPath);
+      saveSessionId(workspaceId, replacement.id);
+      controllerRef.current?.dispose();
+      controllerRef.current = null;
+      setSessionId(replacement.id);
+      setSessionHistory((current) => [replacement, ...current]);
+      resetConversationView();
+    } finally {
+      actionLockRef.current = false;
+      setSessionBusy(false);
+    }
+  }, [actionBusy, cardName, currentPath, resetConversationView, sessionBusy, sessionId, setStatus, workspaceId]);
+
+  const toggleSessionPinned = useCallback(async (record: AgentSessionHistoryRecord) => {
+    const pinned = !Boolean(record.pinned);
+    if (!await setAgentSessionPinned(record.id, pinned)) {
+      setStatus("会话置顶状态更新失败，请稍后重试。");
+      return;
+    }
+    setSessionHistory((current) => current.map((item) => item.id === record.id ? { ...item, pinned } : item));
+  }, [setStatus]);
+
+  const toggleSessionRead = useCallback(async (record: AgentSessionHistoryRecord) => {
+    const isRead = record.isRead === false;
+    if (!await setAgentSessionRead(record.id, isRead)) {
+      setStatus("会话已读状态更新失败，请稍后重试。");
+      return;
+    }
+    setSessionHistory((current) => current.map((item) => item.id === record.id ? { ...item, isRead } : item));
+  }, [setStatus]);
+
+  const exportSession = useCallback(async (record: AgentSessionHistoryRecord) => {
+    const storedMessages = await hydrateAgentSession(record.id);
+    const exportPayload = {
+      title: record.title.trim() || "新会话",
+      sessionId: record.id,
+      workspaceId: record.workspaceId,
+      exportedAt: new Date().toISOString(),
+      messages: storedMessages
+    };
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeFileName(exportPayload.title)}-${record.id.slice(0, 8)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const appendComposerText = useCallback((text: string) => {
+    setInput((current) => current ? `${current}\n\n${text}` : text);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }, []);
+
+  const messageKey = (turnIndex: number, role: "user" | "assistant") => `${turnIndex}:${role}`;
+  const toggleMessageSelection = useCallback((turnIndex: number, role: "user" | "assistant") => {
+    const id = messageKey(turnIndex, role);
+    setSelectedMessageIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const deleteMessage = useCallback((turnIndex: number, role: "user" | "assistant") => {
+    const id = messageKey(turnIndex, role);
+    setHiddenMessageIds((current) => new Set(current).add(id));
+    setSelectedMessageIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllMessages = useCallback(() => {
+    const next = new Set<string>();
+    transcript.forEach((turn, index) => {
+      if (turn.userText && !hiddenMessageIds.has(messageKey(index, "user"))) next.add(messageKey(index, "user"));
+      if ((turn.assistantText || turn.assistantPresent || turn.tools.length > 0 || turn.streaming) && !hiddenMessageIds.has(messageKey(index, "assistant"))) {
+        next.add(messageKey(index, "assistant"));
+      }
+    });
+    setSelectedMessageIds(next);
+  }, [hiddenMessageIds, transcript]);
+
+  const clearMessageSelection = useCallback(() => setSelectedMessageIds(new Set()), []);
+
+  const copyCurrentSession = useCallback(async () => {
+    const text = transcript.map((turn) => [
+      turn.userText ? `用户：${turn.userText}` : "",
+      turn.assistantText ? `Agent：${turn.assistantText}` : "",
+      ...turn.tools.map((tool) => `工具 ${tool.toolName}：${tool.content}`)
+    ].filter(Boolean).join("\n")).filter(Boolean).join("\n\n");
+    await copyArbitraryText(text || "当前会话暂无消息");
+  }, [copyArbitraryText, transcript]);
+
+  const showMessageDetails = useCallback((role: "user" | "assistant", text: string, turnIndex: number) => {
+    setMessageDetails({ role, text, turnIndex });
+  }, []);
+
+  useEffect(() => {
+    const handleSessionShortcut = (event: globalThis.KeyboardEvent) => {
+      if (!event.ctrlKey || !["Tab", "PageUp", "PageDown"].includes(event.key) || event.isComposing) return;
+      if (event.target instanceof Element && (event.target.matches("input, textarea, select, [contenteditable='true']") || event.target.closest("[data-context-menu-root]"))) return;
+      if (actionBusy || sessionBusy) return;
+      event.preventDefault();
+      const direction: -1 | 1 = event.key === "PageUp" || (event.key === "Tab" && event.shiftKey) ? -1 : 1;
+      selectAdjacentSession(direction);
+    };
+    document.addEventListener("keydown", handleSessionShortcut);
+    return () => document.removeEventListener("keydown", handleSessionShortcut);
+  }, [actionBusy, selectAdjacentSession, sessionBusy]);
+
+  const toolbarContextTargetId = useContextMenuTarget(() => ({
+    kind: "agent-toolbar" as const,
+    createSession,
+    customizeToolbar: () => {
+      setToolbarCompact((current) => !current);
+      setStatus("工具栏布局已切换。");
+    },
+    toggleInspector: () => rightOpen ? closeInspector() : reopenInspector(),
+    stopGeneration: () => controller.abort(),
+    openSettings: () => openEditor("settings"),
+    canStop: controller.isStreaming
+  }));
+
+  const chatContextTargetId = useContextMenuTarget(() => ({
+    kind: "agent-chat" as const,
+    copySession: copyCurrentSession,
+    selectAllMessages,
+    clearMessageSelection,
+    scrollToTop: () => transcriptRef.current?.scrollTo({ top: 0, behavior: "smooth" }),
+    scrollToBottom: () => scrollTranscriptToBottom(),
+    regenerate: () => void replaceConversation("regenerating"),
+    canRegenerate: actionTarget.canRegenerate && !actionBusy
+  }));
+
+  const composerContextTargetId = useContextMenuTarget(() => ({
+    kind: "agent-composer" as const,
+    clearInput: () => setInput(""),
+    send: () => void submit(),
+    continueAfterGeneration: () => void queueFollowUp(),
+    canSend: Boolean(input.trim()) && !actionBusy && !editingLastUser,
+    canContinue: Boolean(input.trim()) && controller.isStreaming && conversationOperation === "idle" && !editingLastUser
+  }));
+
   const studioActions = useMemo(() => ({
     ready: agentReady,
     busy: actionBusy,
@@ -711,9 +967,18 @@ export function AgentStudio(): ReactNode {
           records={sessionHistory}
           current={{ workspaceId, sessionId, cardName, currentPath }}
           generatingTitleSessionIds={generatingTitleSessionIds}
+          busy={actionBusy || sessionBusy}
           onSelectSession={selectSession}
+          onSelectPrevious={() => selectAdjacentSession(-1)}
+          onSelectNext={() => selectAdjacentSession(1)}
+          onCreateSession={createSession}
+          onRenameSession={renameSession}
+          onDeleteSession={deleteSession}
+          onTogglePinned={toggleSessionPinned}
+          onToggleRead={toggleSessionRead}
+          onExportSession={exportSession}
         />
-        <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} disabled={actionBusy} onClick={() => { const next = createSessionId(); saveSessionId(workspaceId, next); setSessionId(next); setMessages([]); setStreamingMessage(undefined); setEvents([]); setProposals([]); setEditingLastUser(false); setEditedUserText(""); conversationSnapshotsRef.current = []; }}>新建会话</Button>
+        <Button className="agent-studio-new-session" variant="ghost" icon={<Plus size={15} />} disabled={actionBusy || sessionBusy} onClick={() => void createSession()}>新建会话</Button>
         <div className="agent-studio-sidebar-footer">
           <nav className="agent-studio-nav" aria-label="卡片编辑入口">
             <button type="button" aria-label="项目文件" title="项目文件" onClick={() => openEditor("home")}><FolderOpen size={15} /><span className="agent-nav-copy"><strong>项目文件</strong><small>打开、保存与导出</small></span></button>
@@ -727,8 +992,8 @@ export function AgentStudio(): ReactNode {
       </aside>
 
       <section className="agent-studio-main">
-        <header className="agent-studio-header"><div><span className="agent-studio-eyebrow">当前工作区</span><h2>{getCardDisplayName(card, t)}</h2></div><div className="agent-studio-header-status"><span className={report.valid ? "agent-status-chip" : "agent-status-chip danger"}><ShieldCheck size={14} />{report.valid ? "校验通过" : report.errors.length + " 个阻塞错误"}</span><span className="agent-status-chip">rev {cardRevision}</span><button type="button" className="agent-stop-button" onClick={() => controller.abort()} disabled={!controller.isStreaming}><CircleStop size={15} />停止</button>{!rightOpen ? <Button className="agent-inspector-toggle" variant="ghost" icon={<PanelRight size={15} />} onClick={reopenInspector}>打开纲要</Button> : null}</div></header>
-        <div ref={transcriptRef} className="agent-studio-transcript" aria-live="polite">
+        <header className={toolbarCompact ? "agent-studio-header agent-toolbar-compact" : "agent-studio-header"} data-context-menu="agent-toolbar" data-context-target-id={toolbarContextTargetId}><div><span className="agent-studio-eyebrow">当前工作区</span><h2>{getCardDisplayName(card, t)}</h2></div><div className="agent-studio-header-status"><span className={report.valid ? "agent-status-chip" : "agent-status-chip danger"}><ShieldCheck size={14} /><span className="agent-toolbar-label">{report.valid ? "校验通过" : report.errors.length + " 个阻塞错误"}</span></span><span className="agent-status-chip"><span className="agent-toolbar-label">rev {cardRevision}</span></span><button type="button" className="agent-stop-button" onClick={() => controller.abort()} disabled={!controller.isStreaming}><CircleStop size={15} /><span className="agent-toolbar-label">停止</span></button>{!rightOpen ? <Button className="agent-inspector-toggle" variant="ghost" icon={<PanelRight size={15} />} onClick={reopenInspector}>打开纲要</Button> : null}</div></header>
+        <div ref={transcriptRef} className="agent-studio-transcript" aria-live="polite" data-context-menu="agent-chat" data-context-target-id={chatContextTargetId}>
           {transcript.length === 0 ? <div className="agent-empty-state"><div className="agent-empty-icon"><Sparkles size={24} /></div><h3>从卡片事实开始</h3><p>先读取当前卡片、校验或 Token 统计，再让 Agent 创建待审核提案。用户确认前不会修改卡片或文件。</p><div className="agent-suggestion-row">{["检查这张卡的问题", "读取提示词和开场白", "优化 Token 占用"].map((suggestion) => <button type="button" key={suggestion} onClick={() => setInput(suggestion)}>{suggestion}</button>)}</div></div> : transcript.map((turn, index) => <AgentTranscriptTurnView
             key={`${turn.userText}-${index}`}
             turn={turn}
@@ -743,11 +1008,22 @@ export function AgentStudio(): ReactNode {
             onCancelEdit={cancelEditLastUser}
             onResend={() => void replaceConversation("resending", editedUserText)}
             onRegenerate={() => void replaceConversation("regenerating")}
+            turnIndex={index}
+            userSelected={selectedMessageIds.has(messageKey(index, "user"))}
+            assistantSelected={selectedMessageIds.has(messageKey(index, "assistant"))}
+            hideUser={hiddenMessageIds.has(messageKey(index, "user"))}
+            hideAssistant={hiddenMessageIds.has(messageKey(index, "assistant"))}
+            onCopyMessage={(text) => void copyArbitraryText(text)}
+            onQuoteMessage={(text) => appendComposerText(`> ${text.split("\n").join("\n> ")}`)}
+            onForwardMessage={(text) => appendComposerText(`转发：\n${text}`)}
+            onDeleteMessage={deleteMessage}
+            onToggleMessageSelection={toggleMessageSelection}
+            onShowMessageDetails={showMessageDetails}
           />)}
           {events.filter((event) => event.type === "status").slice(-3).map((event, index) => <div className={`agent-runtime-status${event.statusTone ? ` is-${event.statusTone}` : ""}`} role={event.statusTone === "error" ? "alert" : "status"} key={(event.message ?? "status") + "-" + index}>{event.message}</div>)}
           {proposals.filter((proposal) => proposal.state === "pending" || proposal.state === "conflicted").map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} disabled={actionBusy} onApply={() => void applyProposal(proposal)} onDiscard={() => discardProposal(proposal)} onToggleCandidate={(candidateId, selected) => toggleCandidate(proposal, candidateId, selected)} />)}
         </div>
-        <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <form className="agent-composer" data-context-menu="agent-composer" data-context-target-id={composerContextTargetId} onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           <div className="agent-composer-scope-row">
             <label htmlFor="agent-request-scope">权限范围</label>
             <select id="agent-request-scope" value={requestScope} onChange={(event) => setRequestScope(event.currentTarget.value as AgentScopePreset)} disabled={controller.isStreaming}>
@@ -806,6 +1082,13 @@ export function AgentStudio(): ReactNode {
           onKeyDown={handleInspectorResizeKeyDown}
         />
       </aside>
+      {messageDetails ? <div className="agent-message-details-backdrop" data-context-menu-root onMouseDown={() => setMessageDetails(null)}>
+        <section className="agent-message-details" role="dialog" aria-modal="true" aria-labelledby="agent-message-details-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="agent-message-details-heading"><div><span className="agent-studio-eyebrow">消息详情</span><h3 id="agent-message-details-title">{messageDetails.role === "user" ? "用户消息" : "Agent 消息"}</h3></div><button type="button" aria-label="关闭消息详情" onClick={() => setMessageDetails(null)}>×</button></div>
+          <dl><div><dt>轮次</dt><dd>{messageDetails.turnIndex + 1}</dd></div><div><dt>字符数</dt><dd>{messageDetails.text.length}</dd></div></dl>
+          <pre>{messageDetails.text || "（无文本内容）"}</pre>
+        </section>
+      </div> : null}
     </section>
     </AgentStudioContext.Provider>
   );
@@ -927,8 +1210,13 @@ function InspectorOverview({ card, report, onOpenEditor }: { card: ReturnType<ty
 
 interface AgentTranscriptTurnViewProps {
   turn: AgentTranscriptTurn;
+  turnIndex: number;
   isLatestUser: boolean;
   isLatestAssistant: boolean;
+  userSelected: boolean;
+  assistantSelected: boolean;
+  hideUser: boolean;
+  hideAssistant: boolean;
   editingUser: boolean;
   editedUserText: string;
   actionBusy: boolean;
@@ -938,12 +1226,23 @@ interface AgentTranscriptTurnViewProps {
   onCancelEdit: () => void;
   onResend: () => void;
   onRegenerate: () => void;
+  onCopyMessage: (text: string) => void;
+  onQuoteMessage: (text: string) => void;
+  onForwardMessage: (text: string) => void;
+  onDeleteMessage: (turnIndex: number, role: "user" | "assistant") => void;
+  onToggleMessageSelection: (turnIndex: number, role: "user" | "assistant") => void;
+  onShowMessageDetails: (role: "user" | "assistant", text: string, turnIndex: number) => void;
 }
 
 function AgentTranscriptTurnView({
   turn,
+  turnIndex,
   isLatestUser,
   isLatestAssistant,
+  userSelected,
+  assistantSelected,
+  hideUser,
+  hideAssistant,
   editingUser,
   editedUserText,
   actionBusy,
@@ -952,12 +1251,46 @@ function AgentTranscriptTurnView({
   onEditedUserTextChange,
   onCancelEdit,
   onResend,
-  onRegenerate
+  onRegenerate,
+  onCopyMessage,
+  onQuoteMessage,
+  onForwardMessage,
+  onDeleteMessage,
+  onToggleMessageSelection,
+  onShowMessageDetails
 }: AgentTranscriptTurnViewProps) {
-  const hasAssistantContent = turn.assistantPresent || Boolean(turn.assistantText || turn.tools.length > 0 || turn.streaming);
+  const hasUserContent = Boolean(turn.userText) && !hideUser;
+  const hasAssistantContent = !hideAssistant && (turn.assistantPresent || Boolean(turn.assistantText || turn.tools.length > 0 || turn.streaming));
+  const assistantMessageText = turn.assistantText || turn.tools.map((tool) => tool.content).filter(Boolean).join("\n\n");
+  const userContextTargetId = useContextMenuTarget(() => ({
+    kind: "agent-message" as const,
+    role: "user" as const,
+    text: turn.userText,
+    selected: userSelected,
+    canDelete: hasUserContent,
+    copyMessage: onCopyMessage,
+    quoteMessage: () => onQuoteMessage(turn.userText),
+    forwardMessage: () => onForwardMessage(turn.userText),
+    deleteMessage: () => onDeleteMessage(turnIndex, "user"),
+    toggleSelection: () => onToggleMessageSelection(turnIndex, "user"),
+    showDetails: () => onShowMessageDetails("user", turn.userText, turnIndex)
+  }));
+  const assistantContextTargetId = useContextMenuTarget(() => ({
+    kind: "agent-message" as const,
+    role: "assistant" as const,
+    text: assistantMessageText,
+    selected: assistantSelected,
+    canDelete: hasAssistantContent,
+    copyMessage: onCopyMessage,
+    quoteMessage: () => onQuoteMessage(assistantMessageText),
+    forwardMessage: () => onForwardMessage(assistantMessageText),
+    deleteMessage: () => onDeleteMessage(turnIndex, "assistant"),
+    toggleSelection: () => onToggleMessageSelection(turnIndex, "assistant"),
+    showDetails: () => onShowMessageDetails("assistant", assistantMessageText, turnIndex)
+  }));
   const resendDisabled = actionBusy || !editedUserText.trim();
   return <div className="agent-transcript-turn">
-    {turn.userText ? <div className="agent-message agent-message-user">
+    {hasUserContent ? <div className={userSelected ? "agent-message agent-message-user is-selected" : "agent-message agent-message-user"} data-context-menu="agent-message" data-context-target-id={userContextTargetId}>
       <span className="agent-message-role">你</span>
       {editingUser ? <>
         <textarea
@@ -990,7 +1323,7 @@ function AgentTranscriptTurnView({
         {isLatestUser ? <div className="agent-message-actions agent-message-actions-user"><button type="button" className="agent-message-action-button" onClick={onStartEdit} disabled={actionBusy}><Pencil size={13} />编辑</button></div> : null}
       </>}
     </div> : null}
-    {hasAssistantContent ? <article className="agent-message agent-message-assistant" aria-busy={turn.streaming}>
+    {hasAssistantContent ? <article className={assistantSelected ? "agent-message agent-message-assistant is-selected" : "agent-message agent-message-assistant"} aria-busy={turn.streaming} data-context-menu="agent-message" data-context-target-id={assistantContextTargetId}>
       <span className="agent-message-role">Agent</span>
       {turn.assistantStatus ? <div className={`agent-message-content agent-message-outcome is-${turn.assistantStatus}`} role="alert"><strong>{turn.assistantStatus === "aborted" ? "本轮生成已中断" : turn.assistantStatus === "incomplete" ? "本轮生成未完成" : "本轮生成失败"}</strong>{turn.assistantError ? <span>{turn.assistantError}</span> : <span>{turn.assistantStatus === "aborted" ? "可以重新生成本轮 Agent 消息。" : "未收到有效的 Agent 回复，可以重新生成。"}</span>}</div> : null}
       {turn.assistantText ? <><MarkdownMessage className="agent-message-content" text={turn.assistantText} />{turn.streaming ? <span className="agent-message-caret" aria-label="正在生成">▍</span> : null}</> : <div className="agent-message-content agent-message-placeholder">正在读取卡片信息…</div>}
@@ -1033,6 +1366,10 @@ function saveSessionId(workspaceId: string, sessionId: string): void {
 
 function createSessionId(): string {
   return globalThis.crypto?.randomUUID?.() ?? "agent-session-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+}
+
+function safeFileName(value: string): string {
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").trim() || "agent-session";
 }
 
 function readMessageText(message: AgentMessage): string {

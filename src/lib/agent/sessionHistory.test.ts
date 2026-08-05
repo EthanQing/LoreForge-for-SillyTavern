@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAgentSessionGroups,
+  getAdjacentAgentSession,
   getAgentSessionTitle,
   getHiddenAgentSessionCount,
   getVisibleAgentSessions,
+  isAgentSessionSelectable,
   type AgentSessionHistoryRecord
 } from "./sessionHistory";
 
@@ -138,5 +140,38 @@ describe("agent session history", () => {
     };
 
     expect(getAgentSessionTitle(record)).toBe("优化都市世界书");
+  });
+
+  it("keeps two empty sessions in the same workspace selectable", () => {
+    const current = {
+      workspaceId: "workspace",
+      sessionId: "empty-2",
+      cardName: "未命名角色卡",
+      currentPath: "C:/cards/hero.json"
+    };
+    const records = [
+      { ...session("empty-1", "workspace", 10), currentPath: null },
+      { ...session("empty-2", "workspace", 20), currentPath: null }
+    ];
+
+    expect(isAgentSessionSelectable(records[0], current)).toBe(true);
+    expect(getAdjacentAgentSession(records, current, -1)?.id).toBe("empty-1");
+    expect(getAdjacentAgentSession(records, current, 1)?.id).toBe("empty-1");
+  });
+
+  it("skips pathless sessions from other workspaces during navigation", () => {
+    const current = {
+      workspaceId: "workspace-a",
+      sessionId: "current",
+      cardName: "卡片 A",
+      currentPath: "C:/cards/a.json"
+    };
+    const records = [
+      { ...session("current", "workspace-a", 10), currentPath: null },
+      { ...session("other-draft", "workspace-b", 20), currentPath: null },
+      session("other-file", "workspace-b", 30)
+    ];
+
+    expect(getAdjacentAgentSession(records, current, 1)?.id).toBe("other-file");
   });
 });
