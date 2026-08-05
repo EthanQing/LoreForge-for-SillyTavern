@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createBlankCard } from "../schema";
-import { canEditCardField, canEditLorebookEntry, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
-import { stableHash } from "./projection";
+import { canEditCardField, canEditCardPath, canEditLorebookEntry, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
+import { projectCardForPermission, stableHash } from "./projection";
 
 describe("agent request permissions", () => {
   it("turns @ targets into enforced scopes", () => {
@@ -92,5 +92,71 @@ describe("agent request permissions", () => {
       instruction: "新指令",
       permission: permissionForPreset("greetings")
     });
+  });
+
+  it("resolves greeting mentions to one alternate greeting field", () => {
+    const card = createBlankCard();
+    card.data.alternate_greetings = ["备用一", "备用二"];
+
+    const request = resolveAgentRequest("@开场白/备用2 润色", card, "greetings", "greetings");
+
+    expect(request.instruction).toBe("润色");
+    expect(request.permission.scope).toMatchObject({ kind: "field", path: "/alternateGreetings/1" });
+    expect(canEditCardPath(request.permission, "/alternateGreetings/1")).toBe(true);
+    expect(canEditCardPath(request.permission, "/alternateGreetings/0")).toBe(false);
+  });
+
+  it("rejects a target from another page surface", () => {
+    const card = createBlankCard();
+    card.data.alternate_greetings = ["备用一"];
+
+    expect(() => resolveAgentRequest("@开场白/备用1 修改", card, "worldbook", "worldbook")).toThrow("世界书条目");
+  });
+
+  it("clamps the fallback scope to the active page", () => {
+    const request = resolveAgentRequest("整理当前页面", createBlankCard(), "card", "greetings");
+
+    expect(request.permission).toEqual(permissionForPreset("greetings"));
+  });
+
+  it("combines exact card targets without granting injection", () => {
+    const card = createBlankCard();
+    card.data.alternate_greetings = ["备用一"];
+    card.data.character_book = {
+      extensions: {},
+      entries: [{ id: 1, comment: "城市", keys: [], secondary_keys: [], content: "Lore", extensions: {}, enabled: true, insertion_order: 0, use_regex: false }]
+    };
+
+    const request = resolveAgentRequest("@开场白/备用1 @\"城市\" 同时检查", card, "card", "card");
+
+    expect(request.permission.scope).toMatchObject({
+      kind: "targets",
+      fields: [{ path: "/alternateGreetings/0" }],
+      entries: [{ index: 0 }]
+    });
+    expect(canEditCardPath(request.permission, "/alternateGreetings/0")).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 0, stableHash(card.data.character_book.entries[0]))).toBe(true);
+    expect(canInjectLorebook(request.permission)).toBe(false);
+  });
+
+  it("rejects a stale alternate greeting target", () => {
+    const card = createBlankCard();
+    card.data.alternate_greetings = ["备用一"];
+
+    expect(() => resolveAgentRequest("@开场白/备用2 修改", card, "greetings", "greetings")).toThrow("开场白选项可能已变化");
+  });
+
+  it("projects only exact targets on a mixed card request", () => {
+    const card = createBlankCard();
+    card.data.alternate_greetings = ["备用一"];
+    card.data.character_book = {
+      extensions: {},
+      entries: [{ id: 1, comment: "城市", keys: [], secondary_keys: [], content: "Lore", extensions: {}, enabled: true, insertion_order: 0, use_regex: false }]
+    };
+    const request = resolveAgentRequest("@开场白/备用1 @\"城市\" 检查", card, "card", "card");
+    const projection = projectCardForPermission(card, 4, request.permission) as { fields: Array<{ path: string }>; entries: Array<{ index: number }> };
+
+    expect(projection.fields.map((field) => field.path)).toEqual(["/alternateGreetings/0"]);
+    expect(projection.entries.map((entry) => entry.index)).toEqual([0]);
   });
 });

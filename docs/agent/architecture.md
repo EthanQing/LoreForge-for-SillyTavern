@@ -28,6 +28,8 @@ React UI
 
 Agent Studio 左侧历史由 `src/features/agent-studio/AgentSessionHistory.tsx` 展示，`src/lib/agent/sessionHistory.ts` 负责将多条会话聚合为角色卡项目。可识别文件路径时使用规范化路径作为项目键；未绑定文件的卡片继续使用 workspace ID，避免不同未保存卡片因同名被错误合并。切换跨 workspace 的历史会话时保留记录原始 workspace，以便正确恢复会话及其提案上下文。
 
+Agent Studio 输入框的 `@` 候选由当前页面上下文限制。`AgentStudio.tsx` 将基础信息、提示词、开场白和世界书编辑页分别映射到对应 section 权限；卡片纲要页才使用整卡上下文，预览、资源、设置和项目文件页暂不提供 `@` 候选。右侧编辑台关闭后保留最后一个业务页面上下文，不能因为 `focusedEditor` 被清空而把世界书或开场白权限扩大为整张卡片。候选插入后，`permissions.ts` 仍会按当前卡片重新解析目标，页面筛选不是唯一安全边界。
+
 模型不能从工具输入扩大权限。提案应用会检查工作区、卡片 revision、卡片哈希以及（适用时）世界书条目指纹，再重新编译与校验语义变更。
 
 长会话在发送给模型前由 `src/lib/agent/context.ts` 压缩。带工具调用的 assistant 消息与其连续工具结果必须作为整体保留或整体省略，避免向 OpenAI-compatible 接口发送孤立的 `tool` 消息。

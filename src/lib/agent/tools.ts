@@ -135,6 +135,10 @@ function permissionAllowsValidationIssue(permission: AgentPermission, issue: Val
     return !scope.fields || scope.fields.some((field) => issue.path.startsWith(`${prefix}${rawLorebookField(field)}`));
   }
   if (scope.kind === "lorebookEntries") return scope.entries.some((entry) => permissionAllowsLorebookValidationIssue(entry, issue));
+  if (scope.kind === "targets") {
+    return scope.fields.some((field) => permissionAllowsFieldValidationIssue(field.path, issue))
+      || scope.entries.some((entry) => permissionAllowsLorebookValidationIssue(entry, issue));
+  }
   if (scope.kind === "section") {
     const prefix = scope.section === "basic"
       ? ["data.name", "data.creator_notes", "data.tags", "data.creator", "data.character_version"]
@@ -159,7 +163,7 @@ function projectTokenUsage(card: CharacterCardV3, permission: AgentPermission) {
     }] : [];
   });
   const scope = permission.scope;
-  const lorebookEntries = scope.kind === "lorebookEntry" || scope.kind === "lorebookEntries"
+  const lorebookEntries = scope.kind === "lorebookEntry" || scope.kind === "lorebookEntries" || scope.kind === "targets"
     ? stats.lorebookEntries.filter((entry) => lorebookScopeEntries(scope).some((scopeEntry) => entry.index === scopeEntry.index))
     : scope.kind === "card" || scope.kind === "lorebook" ? stats.lorebookEntries : [];
   return {
@@ -181,6 +185,10 @@ function permissionAllowsTokenItem(permission: AgentPermission, item: TokenStatI
     return !scope.fields || scope.fields.some((field) => item.path.startsWith(`${prefix}${rawLorebookField(field)}`));
   }
   if (scope.kind === "lorebookEntries") return scope.entries.some((entry) => permissionAllowsLorebookTokenItem(entry, item));
+  if (scope.kind === "targets") {
+    return scope.fields.some((field) => tokenPathForField(field.path).some((path) => item.path === path || item.path.startsWith(`${path}/`)))
+      || scope.entries.some((entry) => permissionAllowsLorebookTokenItem(entry, item));
+  }
   if (scope.kind === "section") return item.sectionId === scope.section;
   return tokenPathForField(scope.path).some((path) => item.path === path || item.path.startsWith(`${path}/`));
 }
@@ -188,6 +196,10 @@ function permissionAllowsTokenItem(permission: AgentPermission, item: TokenStatI
 function validationPathForField(path: string): string[] {
   const tokenPaths = tokenPathForField(path);
   return tokenPaths.map((tokenPath) => `data${tokenPath.replaceAll("/", ".")}`);
+}
+
+function permissionAllowsFieldValidationIssue(path: string, issue: ValidationIssue): boolean {
+  return validationPathForField(path).some((validationPath) => issue.path.startsWith(validationPath));
 }
 
 function tokenPathForField(path: string): string[] {
@@ -227,7 +239,9 @@ function permissionAllowsLorebookTokenItem(scope: { index: number; fields?: stri
 }
 
 function lorebookScopeEntries(scope: AgentPermission["scope"]): Array<{ index: number; fields?: string[] }> {
-  return scope.kind === "lorebookEntry" ? [scope] : scope.kind === "lorebookEntries" ? scope.entries : [];
+  if (scope.kind === "lorebookEntry") return [scope];
+  if (scope.kind === "lorebookEntries" || scope.kind === "targets") return scope.entries;
+  return [];
 }
 
 function createProposeCardEditsTool(context: CardAgentToolContext): AgentTool {

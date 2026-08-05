@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createBlankCard } from "../../lib/schema";
-import { findLorebookMentionRange, getLorebookMentionOptions, insertLorebookMention } from "./agentMention";
+import { findLorebookMentionRange, getAgentMentionOptions, getLorebookMentionOptions, insertLorebookMention } from "./agentMention";
 
 function cardWithEntries(titles: string[]) {
   const card = createBlankCard();
@@ -54,5 +54,21 @@ describe("agent lorebook mentions", () => {
       value: '@"东京 大学"#1 ',
       cursor: 11
     });
+  });
+
+  it("limits candidates to the current page surface", () => {
+    const card = cardWithEntries(["城市"]);
+    card.data.first_mes = "初次见面";
+    card.data.alternate_greetings = ["备用一", "备用二"];
+
+    expect(getAgentMentionOptions(card, "worldbook", "").every((option) => option.kind === "lorebookEntry")).toBe(true);
+    expect(getAgentMentionOptions(card, "worldbook", "备用")).toHaveLength(0);
+    expect(getAgentMentionOptions(card, "greetings", "备用").map((option) => option.title)).toEqual(["备用开场白 #1", "备用开场白 #2"]);
+    expect(getAgentMentionOptions(card, "card", "").some((option) => option.kind === "lorebookEntry")).toBe(true);
+    expect(getAgentMentionOptions(card, "card", "").some((option) => option.title === "描述")).toBe(true);
+  });
+
+  it("keeps unsupported pages from exposing mention targets", () => {
+    expect(getAgentMentionOptions(createBlankCard(), "none", "")).toEqual([]);
   });
 });

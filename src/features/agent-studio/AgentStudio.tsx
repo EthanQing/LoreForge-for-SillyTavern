@@ -22,9 +22,11 @@ import {
   decodeAgentRequest,
   describeAgentPermission,
   encodeAgentRequest,
+  getAllowedAgentScopePresets,
   permissionForPreset,
   resolveAgentRequest,
   resolveReplacementAgentRequest,
+  type AgentMentionSurface,
   type AgentScopePreset
 } from "../../lib/agent/permissions";
 import {
@@ -40,7 +42,7 @@ import {
 import { generateAgentSessionTitle, getAgentSessionTitleSource, PENDING_AGENT_SESSION_TITLE } from "../../lib/agent/sessionTitle";
 import { ProposalCard } from "./ProposalCard";
 import { AgentMentionMenu, AGENT_MENTION_LISTBOX_ID, getAgentMentionOptionId } from "./AgentMentionMenu";
-import { findLorebookMentionRange, getLorebookMentionOptions, insertLorebookMention, type LorebookMentionOption, type LorebookMentionRange } from "./agentMention";
+import { findLorebookMentionRange, getAgentMentionOptions, insertAgentMention, type AgentMentionOption, type LorebookMentionRange } from "./agentMention";
 
 const BasicInfoPanel = lazy(() => import("../card-editor/BasicInfoPanel").then((module) => ({ default: module.BasicInfoPanel })));
 const PromptPanel = lazy(() => import("../card-editor/PromptPanel").then((module) => ({ default: module.PromptPanel })));
@@ -87,6 +89,7 @@ export function AgentStudio(): ReactNode {
   const [input, setInput] = useState("");
   const [mentionRange, setMentionRange] = useState<LorebookMentionRange>();
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const [mentionSurface, setMentionSurface] = useState<AgentMentionSurface>("card");
   const [requestScope, setRequestScope] = useState<AgentScopePreset>("card");
   const [messages, setMessages] = useState<unknown[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<unknown>();
@@ -122,6 +125,7 @@ export function AgentStudio(): ReactNode {
     setConversationOperation("idle");
     setEditingLastUser(false);
     setEditedUserText("");
+    setMentionSurface("card");
     setRequestScope("card");
     setMentionRange(undefined);
     actionLockRef.current = false;
@@ -225,11 +229,12 @@ export function AgentStudio(): ReactNode {
   }, [controller]);
 
   const mentionOptions = useMemo(
-    () => mentionRange ? getLorebookMentionOptions(card, mentionRange.query) : [],
-    [card, mentionRange]
+    () => mentionRange ? getAgentMentionOptions(card, mentionSurface, mentionRange.query) : [],
+    [card, mentionRange, mentionSurface]
   );
   const activeMentionIndex = Math.min(mentionActiveIndex, Math.max(0, mentionOptions.length - 1));
   const activeMention = mentionOptions[activeMentionIndex];
+  const requestScopeOptions = getAllowedAgentScopePresets(mentionSurface);
 
   const syncMention = (value: string, cursor: number | null) => {
     const nextRange = cursor === null ? undefined : findLorebookMentionRange(value, cursor);
@@ -242,13 +247,13 @@ export function AgentStudio(): ReactNode {
     }
   };
 
-  const selectMention = (option: LorebookMentionOption) => {
+  const selectMention = (option: AgentMentionOption) => {
     if (!mentionRange) return;
-    const next = insertLorebookMention(input, mentionRange, option);
+    const next = insertAgentMention(input, mentionRange, option);
     setInput(next.value);
     setMentionRange(undefined);
     setMentionActiveIndex(0);
-    setRequestScope("worldbook");
+    setRequestScope(option.preset);
     requestAnimationFrame(() => {
       composerRef.current?.focus();
       composerRef.current?.setSelectionRange(next.cursor, next.cursor);
@@ -310,7 +315,7 @@ export function AgentStudio(): ReactNode {
     const message = input.trim();
     if (!message || editingLastUser || conversationOperation !== "idle") return;
     try {
-      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope);
+      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope, mentionSurface);
       if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
       setInput("");
       setMentionRange(undefined);
@@ -322,13 +327,13 @@ export function AgentStudio(): ReactNode {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [controller, conversationOperation, editingLastUser, input, requestScope, sessionId, setStatus, workspaceId]);
+  }, [controller, conversationOperation, editingLastUser, input, mentionSurface, requestScope, sessionId, setStatus, workspaceId]);
 
   const queueFollowUp = useCallback(async () => {
     const message = input.trim();
     if (!message || editingLastUser || conversationOperation !== "idle") return;
     try {
-      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope);
+      const request = resolveAgentRequest(message, useCardStore.getState().card, requestScope, mentionSurface);
       if (!request.instruction) throw new Error("请在目标范围后输入具体指令。");
       setInput("");
       setMentionRange(undefined);
@@ -336,7 +341,7 @@ export function AgentStudio(): ReactNode {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [controller, conversationOperation, editingLastUser, input, requestScope, setStatus]);
+  }, [controller, conversationOperation, editingLastUser, input, mentionSurface, requestScope, setStatus]);
 
   const applyProposal = useCallback(async (proposal: CardProposal) => {
     if (actionLockRef.current || conversationOperation !== "idle") return;
@@ -518,6 +523,9 @@ export function AgentStudio(): ReactNode {
 
   const openEditor = (tab: StudioEditorTab) => {
     lastFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const nextSurface = mentionSurfaceForEditor(tab);
+    setMentionSurface(nextSurface);
+    setRequestScope(nextSurface === "none" ? "card" : nextSurface);
     setPendingValidationPath(undefined);
     setFocusedEditor(tab);
     setRightOpen(true);
@@ -532,11 +540,17 @@ export function AgentStudio(): ReactNode {
   };
 
   const reopenInspector = () => {
+    if (mentionSurface === "none") {
+      setMentionSurface("card");
+      setRequestScope("card");
+    }
     setRightOpen(true);
     requestAnimationFrame(() => inspectorCloseRef.current?.focus());
   };
 
   const returnToOverview = () => {
+    setMentionSurface("card");
+    setRequestScope("card");
     setPendingValidationPath(undefined);
     setFocusedEditor(null);
     requestAnimationFrame(() => inspectorCloseRef.current?.focus());
@@ -544,7 +558,11 @@ export function AgentStudio(): ReactNode {
 
   useEffect(() => listenForValidationNavigation(({ path }) => {
     setPendingValidationPath(path);
-    setFocusedEditor(getValidationEditorTab(path));
+    const nextEditor = getValidationEditorTab(path);
+    const nextSurface = mentionSurfaceForEditor(nextEditor);
+    setMentionSurface(nextSurface);
+    setRequestScope(nextSurface === "none" ? "card" : nextSurface);
+    setFocusedEditor(nextEditor);
     setRightOpen(true);
   }), []);
 
@@ -653,6 +671,7 @@ export function AgentStudio(): ReactNode {
   }, [agentReady, controller, conversationOperation, scrollTranscriptToBottom, sessionId, workspaceId]);
 
   const prepareLorebookRequest = useCallback(() => {
+    setMentionSurface("worldbook");
     setRequestScope("worldbook");
     setFocusedEditor(null);
     setRightOpen(false);
@@ -730,7 +749,7 @@ export function AgentStudio(): ReactNode {
           <div className="agent-composer-scope-row">
             <label htmlFor="agent-request-scope">权限范围</label>
             <select id="agent-request-scope" value={requestScope} onChange={(event) => setRequestScope(event.currentTarget.value as AgentScopePreset)} disabled={controller.isStreaming}>
-              <option value="card">整张卡片</option><option value="basic">基础信息</option><option value="prompts">提示词</option><option value="greetings">开场白</option><option value="worldbook">世界书</option>
+              {requestScopeOptions.map((scope) => <option value={scope} key={scope}>{describeAgentPermission(permissionForPreset(scope))}</option>)}
             </select>
             <span className="agent-scope-pill">{describeAgentPermission(permissionForPreset(requestScope))}</span>
           </div>
@@ -748,12 +767,12 @@ export function AgentStudio(): ReactNode {
             aria-autocomplete="list"
             aria-controls={mentionRange ? AGENT_MENTION_LISTBOX_ID : undefined}
             aria-expanded={Boolean(mentionRange)}
-            aria-activedescendant={mentionRange && activeMention ? getAgentMentionOptionId(activeMention.entryIndex) : undefined}
+            aria-activedescendant={mentionRange && activeMention ? getAgentMentionOptionId(activeMention.optionId) : undefined}
             aria-haspopup="listbox"
             aria-label="Agent 请求"
             aria-multiline="true"
             value={input}
-            placeholder="描述你想检查、整理或提出的修改… 输入 @ 后选择世界书条目"
+            placeholder="描述你想检查、整理或提出的修改… 输入 @ 后选择当前页面目标"
             rows={3}
             disabled={editingLastUser || conversationOperation !== "idle"}
             onBlur={() => setMentionRange(undefined)}
@@ -788,6 +807,11 @@ export function AgentStudio(): ReactNode {
     </section>
     </AgentStudioContext.Provider>
   );
+}
+
+function mentionSurfaceForEditor(tab: StudioEditorTab): AgentMentionSurface {
+  if (tab === "basic" || tab === "prompts" || tab === "greetings" || tab === "lorebook") return tab === "lorebook" ? "worldbook" : tab;
+  return "none";
 }
 
 function EditorPanel({ tab }: { tab: StudioEditorTab }) {

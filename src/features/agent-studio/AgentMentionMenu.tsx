@@ -1,17 +1,17 @@
 import { useEffect, useRef } from "react";
-import type { LorebookMentionOption } from "./agentMention";
+import type { AgentMentionOption } from "./agentMention";
 
-export const AGENT_MENTION_LISTBOX_ID = "agent-lorebook-mentions";
+export const AGENT_MENTION_LISTBOX_ID = "agent-mentions";
 
-export function getAgentMentionOptionId(entryIndex: number): string {
-  return `agent-lorebook-mention-${entryIndex}`;
+export function getAgentMentionOptionId(optionId: string | number): string {
+  return `agent-mention-${String(optionId).replace(/[^a-zA-Z0-9_-]/gu, "-")}`;
 }
 
 interface AgentMentionMenuProps {
-  options: LorebookMentionOption[];
+  options: AgentMentionOption[];
   activeIndex: number;
   onActiveIndexChange: (index: number) => void;
-  onSelect: (option: LorebookMentionOption) => void;
+  onSelect: (option: AgentMentionOption) => void;
 }
 
 export function AgentMentionMenu({ options, activeIndex, onActiveIndexChange, onSelect }: AgentMentionMenuProps) {
@@ -24,18 +24,18 @@ export function AgentMentionMenu({ options, activeIndex, onActiveIndexChange, on
   return (
     <div className="agent-mention-popover">
       <div className="agent-mention-heading">
-        <strong>选择世界书条目</strong>
+        <strong>选择 @ 目标</strong>
         <span>{options.length > 0 ? `${options.length} 个匹配项` : "无匹配项"}</span>
       </div>
-      <div className="agent-mention-list" id={AGENT_MENTION_LISTBOX_ID} role="listbox" aria-label="世界书条目">
+      <div className="agent-mention-list" id={AGENT_MENTION_LISTBOX_ID} role="listbox" aria-label="Agent @ 目标">
         {options.length === 0 ? (
-          <div className="agent-mention-empty" role="status">当前卡片没有匹配的世界书条目。</div>
+          <div className="agent-mention-empty" role="status">当前页面没有匹配的可 @ 目标。</div>
         ) : options.map((option, index) => (
           <button
             ref={index === activeIndex ? activeRef : undefined}
             className={index === activeIndex ? "agent-mention-option is-active" : "agent-mention-option"}
-            id={getAgentMentionOptionId(option.entryIndex)}
-            key={option.entryIndex}
+            id={getAgentMentionOptionId(option.optionId)}
+            key={option.optionId}
             role="option"
             type="button"
             tabIndex={-1}
@@ -45,10 +45,7 @@ export function AgentMentionMenu({ options, activeIndex, onActiveIndexChange, on
             onMouseEnter={() => onActiveIndexChange(index)}
           >
             <strong>{option.title}</strong>
-            <span>
-              第 {option.entryIndex + 1} 条 · 插入顺序 #{option.insertionOrder} · {option.keyCount} 个关键词
-              {option.id === undefined || option.id === "" ? "" : ` · ID ${option.id}`}
-            </span>
+            <span>{option.description}</span>
           </button>
         ))}
       </div>
