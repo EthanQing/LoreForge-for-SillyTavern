@@ -28,6 +28,8 @@ React UI
 
 Agent Studio 左侧历史由 `src/features/agent-studio/AgentSessionHistory.tsx` 展示，`src/lib/agent/sessionHistory.ts` 负责将多条会话聚合为角色卡项目。可识别文件路径时使用规范化路径作为项目键；未绑定文件的卡片继续使用 workspace ID，避免不同未保存卡片因同名被错误合并。切换跨 workspace 的历史会话时保留记录原始 workspace，以便正确恢复会话及其提案上下文。
 
+侧栏历史使用紧凑的无卡片分组列表；侧栏壳保持固定且不承担滚动，窄视口下按既有断点收缩为图标导航，避免窗口缩放时出现侧栏滚动条。
+
 新建会话通过 `src/lib/agent/persistence.ts` 立即写入 SQLite，再更新前端历史状态；因此连续创建的空会话也能被点击或通过 `Ctrl+Tab`、`Ctrl+PageUp/PageDown` 切换。当前 workspace 内的无路径会话始终可切换；其他 workspace 的无路径草稿仍保持不可切换，避免把没有卡片快照的草稿误当成当前卡片。会话置顶、已读状态与删除记录保存在 `agent_session_metadata` 及 `agent_sessions` 关联表中。
 
 `src/components/ContextMenu.tsx` 仍是全局菜单呈现层，但 Agent Studio 通过 `src/lib/contextMenuTargets.ts` 注册类型化目标，并在会话列表、消息、输入框和工具栏分别使用 `data-context-menu` 标记。菜单动作只能调用 Agent Studio 暴露的会话、消息或面板回调；菜单支持鼠标、Shift+F10/菜单键、方向键和 Escape，关闭后恢复触发元素焦点。

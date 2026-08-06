@@ -4375,7 +4375,7 @@ select.input {
 }
 
 .card-workshop-shell .agent-studio {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   width: 100%;
   max-width: 100%;
   min-height: 0;
@@ -4386,7 +4386,7 @@ select.input {
 
 .card-workshop-shell .agent-studio-sidebar {
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   border-radius: 0;
 }
 
@@ -5104,10 +5104,14 @@ select.input {
 }
 
 .card-workshop-shell .agent-session-history {
-  display: grid;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-width: 0;
-  gap: 10px;
+  min-height: 0;
+  gap: 6px;
   margin: 0;
+  overflow: hidden;
 }
 
 .card-workshop-shell .agent-session-history-heading {
@@ -5115,7 +5119,7 @@ select.input {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 2px 8px;
+  padding: 0 2px 6px;
   border-bottom: 1px solid var(--workshop-line);
 }
 
@@ -5127,7 +5131,9 @@ select.input {
 .card-workshop-shell .agent-session-projects {
   display: grid;
   min-width: 0;
-  gap: 10px;
+  min-height: 0;
+  gap: 4px;
+  overflow: hidden;
 }
 
 .card-workshop-shell .agent-session-group {
@@ -5135,15 +5141,11 @@ select.input {
   min-width: 0;
   gap: 0;
   overflow: hidden;
-  border-top: 1px solid var(--workshop-line);
-  border-right: 1px solid var(--workshop-line);
-  border-bottom: 1px solid var(--workshop-line);
-  border-left: 1px solid var(--workshop-line);
-  background: var(--workbench);
+  border-bottom: 1px solid color-mix(in srgb, var(--workshop-line) 72%, transparent);
 }
 
 .card-workshop-shell .agent-session-group.is-current {
-  border-color: var(--copper);
+  border-bottom-color: color-mix(in srgb, var(--copper) 58%, var(--workshop-line));
 }
 
 .card-workshop-shell .agent-session-group-heading {
@@ -5152,8 +5154,8 @@ select.input {
   align-items: center;
   gap: 8px;
   margin: 0;
-  padding: 9px 10px;
-  background: var(--iron);
+  padding: 4px 4px 3px;
+  background: transparent;
   font-size: inherit;
   font-weight: inherit;
 }
@@ -5204,20 +5206,21 @@ select.input {
   display: grid;
   list-style: none;
   min-width: 0;
-  gap: 2px;
+  gap: 1px;
   margin: 0;
-  padding: 4px;
+  padding: 0 0 4px;
 }
 
 .card-workshop-shell .agent-session-history-item {
   display: flex;
   width: 100%;
-  min-height: 44px;
+  min-height: 34px;
   min-width: 0;
   align-items: center;
   gap: 7px;
-  padding: 7px 8px;
-  border: 1px solid transparent;
+  padding: 5px 6px 5px 8px;
+  border: 0;
+  border-left: 2px solid transparent;
   background: transparent;
   color: var(--paper);
   cursor: pointer;
@@ -5226,13 +5229,11 @@ select.input {
 
 .card-workshop-shell .agent-session-history-item:hover,
 .card-workshop-shell .agent-session-history-item.active {
-  border-color: var(--workshop-line);
   background: var(--iron);
 }
 
 .card-workshop-shell .agent-session-history-item.active {
-  border-color: var(--copper);
-  box-shadow: inset 2px 0 0 var(--copper);
+  border-left-color: var(--copper);
 }
 
 .card-workshop-shell .agent-session-history-item:disabled {
@@ -5300,7 +5301,7 @@ select.input {
   max-width: 100%;
   align-items: center;
   gap: 4px;
-  margin: 0 4px 4px;
+  margin: 0 4px 3px;
   padding: 7px 4px 3px;
   border: 0;
   border-top: 1px solid var(--workshop-line);
@@ -5323,7 +5324,7 @@ select.input {
 
 .card-workshop-shell .agent-studio-card-summary {
   gap: 6px;
-  padding: 12px 12px 11px 14px;
+  padding: 10px 10px 9px 12px;
   border-color: var(--workshop-line);
   border-left: 3px solid var(--copper);
   background: var(--workbench);
@@ -5348,7 +5349,7 @@ select.input {
 }
 
 .card-workshop-shell .agent-studio-new-session {
-  min-height: 40px;
+  min-height: 36px;
   border: 1px solid var(--workshop-line);
   background: transparent;
 }
@@ -5360,7 +5361,7 @@ select.input {
 
 .card-workshop-shell .agent-studio-sidebar-footer {
   gap: 6px;
-  padding-top: 12px;
+  padding-top: 8px;
   border-top: 1px solid var(--workshop-line);
 }
 
