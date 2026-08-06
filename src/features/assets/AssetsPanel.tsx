@@ -1,10 +1,11 @@
-import { ImagePlus, Package, Plus, Star, Trash2 } from "lucide-react";
+import { Copy, ImagePlus, Info, Link2, Package, Plus, Star, Trash2 } from "lucide-react";
 import { ChangeEvent, memo, useMemo, useRef, useState } from "react";
 import { useCardStore } from "../../app/store";
+import { useProjectActions } from "../../app/useProjectActions";
 import { Button } from "../../components/Button";
 import { SelectField, TextField } from "../../components/Field";
 import { useI18n, type TranslationKey } from "../../lib/i18n";
-import { dataImageToPngDataUrl, extensionFromName, isDataImageUri, readFileAsDataUrl, readFileAsPngDataUrl } from "../../lib/imageAssets";
+import { dataImageToPngDataUrl, extensionFromName, fileUriToPath, isDataImageUri, readFileAsDataUrl, readFileAsPngDataUrl } from "../../lib/imageAssets";
 import type { CardAsset } from "../../lib/schema";
 
 const emptyAssets: CardAsset[] = [];
@@ -47,6 +48,14 @@ function isLargeInlineUri(uri: string): boolean {
   return uri.startsWith("data:") || uri.length > INLINE_URI_LIMIT;
 }
 
+function isMainCover(asset: CardAsset): boolean {
+  return asset.type === "icon" && asset.name === "main";
+}
+
+function canUseAsPngCover(asset: CardAsset): boolean {
+  return isDataImageUri(asset.uri) || Boolean(fileUriToPath(asset.uri));
+}
+
 function summarizeUri(uri: string): string {
   if (uri.length <= 96) {
     return uri || "empty";
@@ -80,11 +89,7 @@ const AssetUriField = memo(function AssetUriField({ editLabel, hideLabel, label,
     return (
       <div className="asset-uri-editor">
         <TextField validationPath={validationPath} label={label} value={uri} onChange={(event) => onChange(event.target.value)} />
-        {largeInlineUri ? (
-          <Button onClick={() => setEditingLargeUri(false)}>
-            {hideLabel}
-          </Button>
-        ) : null}
+        {largeInlineUri ? <Button onClick={() => setEditingLargeUri(false)}>{hideLabel}</Button> : null}
       </div>
     );
   }
@@ -98,9 +103,7 @@ const AssetUriField = memo(function AssetUriField({ editLabel, hideLabel, label,
       <div className="asset-uri-summary">
         <span>{formatUriSize(uri)}</span>
         <code title={uri}>{summarizeUri(uri)}</code>
-        <Button onClick={() => setEditingLargeUri(true)}>
-          {editLabel}
-        </Button>
+        <Button onClick={() => setEditingLargeUri(true)}>{editLabel}</Button>
       </div>
     </div>
   );
@@ -113,9 +116,19 @@ export function AssetsPanel() {
   const addAssets = useCardStore((state) => state.addAssets);
   const updateAsset = useCardStore((state) => state.updateAsset);
   const removeAsset = useCardStore((state) => state.removeAsset);
+  const { copyAsset } = useProjectActions();
   const coverInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const assets = useMemo(() => (Array.isArray(storedAssets) ? storedAssets.map(normalizeAssetForUi) : emptyAssets), [storedAssets]);
+  const coverAsset = assets.find(isMainCover);
+  const coverStatusLabel = coverAsset
+    ? canUseAsPngCover(coverAsset)
+      ? t("assets.coverReady")
+      : t("assets.coverReference")
+    : t("assets.coverMissing");
+  const coverHint = coverAsset && !canUseAsPngCover(coverAsset) ? t("assets.coverReferenceHint") : t("assets.coverHint");
+  const embeddedImageCount = assets.filter((asset) => isDataImageUri(asset.uri)).length;
+  const referenceCount = assets.filter((asset) => !isDataImageUri(asset.uri)).length;
 
   const addReferenceAsset = () => {
     addAssets([createDefaultReferenceAsset(assets)]);
@@ -175,9 +188,13 @@ export function AssetsPanel() {
   };
 
   return (
-    <section className="panel" data-context-menu="project">
-      <div className="panel-heading">
-        <h2>{t("assets.title")}</h2>
+    <section className="panel assets-panel" data-context-menu="project">
+      <div className="panel-heading assets-panel-heading">
+        <div className="assets-heading-copy">
+          <span className="assets-kicker">{t("assets.kicker")}</span>
+          <h2>{t("assets.title")}</h2>
+          <p>{t("assets.subtitle")}</p>
+        </div>
         <div className="inline-row compact">
           <input ref={coverInputRef} className="hidden-file" type="file" accept="image/*" onChange={uploadCover} />
           <input ref={inputRef} className="hidden-file" type="file" accept="image/*" multiple onChange={addImageAsset} />
@@ -192,73 +209,180 @@ export function AssetsPanel() {
           </Button>
         </div>
       </div>
-      {assets.length === 0 ? (
-        <div className="empty-state">
-          <Package size={48} aria-hidden="true" />
-          <p>{t("assets.emptyTitle")}</p>
-          <span className="muted">{t("assets.emptyBody")}</span>
-        </div>
-      ) : null}
-      <div className="asset-grid" data-validation-path="data.assets">
-        {assets.map((asset, index) => (
-          <article className="asset-card" data-context-menu="asset" data-index={index} data-validation-path={`data.assets.${index}`} key={`${asset.type}-${asset.name}-${index}`}>
-            <div className="asset-preview">
-              {asset.uri.startsWith("data:image/") ? (
-                <img alt={asset.name} decoding="async" loading="lazy" src={asset.uri} />
-              ) : (
-                <span>{t(assetTypeLabelKeys[asset.type] ?? "assetType.other")}</span>
-              )}
+
+      <div className="asset-overview">
+        <article className={`asset-cover-card ${coverAsset ? "has-cover" : "is-empty"}`}>
+          <div className="asset-cover-preview">
+            {coverAsset && isDataImageUri(coverAsset.uri) ? (
+              <img alt={coverAsset.name} decoding="async" src={coverAsset.uri} />
+            ) : (
+              <div className="asset-cover-placeholder">
+                <Star size={28} aria-hidden="true" />
+                <span>{coverStatusLabel}</span>
+              </div>
+            )}
+          </div>
+          <div className="asset-cover-copy">
+            <span className="assets-kicker">{t("assets.coverSection")}</span>
+            <strong>{coverAsset ? coverAsset.name : t("assets.coverMissing")}</strong>
+            <p>{coverHint}</p>
+            <Button icon={<Star size={16} />} variant="primary" onClick={() => coverInputRef.current?.click()}>
+              {coverAsset ? t("assets.replaceCover") : t("assets.cover")}
+            </Button>
+          </div>
+        </article>
+
+        <div className="asset-overview-side">
+          <article className="asset-purpose-card">
+            <div className="asset-purpose-heading">
+              <Info size={16} aria-hidden="true" />
+              <strong>{t("assets.whyTitle")}</strong>
             </div>
-            <div className="asset-fields">
-              <SelectField
-                validationPath={`data.assets.${index}.type`}
-                label={t("assets.type")}
-                value={asset.type}
-                onChange={(event) => updateAsset(index, (item) => ({ ...item, type: event.target.value }))}
-              >
-                <option value="icon">{t("assetType.icon")}</option>
-                <option value="background">{t("assetType.background")}</option>
-                <option value="user_icon">{t("assetType.userIcon")}</option>
-                <option value="emotion">{t("assetType.emotion")}</option>
-                <option value="other">{t("assetType.other")}</option>
-              </SelectField>
-              <TextField
-                validationPath={`data.assets.${index}.name`}
-                label={t("field.name")}
-                value={asset.name}
-                onChange={(event) => updateAsset(index, (item) => ({ ...item, name: event.target.value }))}
-              />
-              <TextField
-                validationPath={`data.assets.${index}.ext`}
-                label={t("assets.ext")}
-                value={asset.ext}
-                onChange={(event) =>
-                  updateAsset(index, (item) => ({ ...item, ext: event.target.value.toLowerCase().replace(/^\./, "") }))
-                }
-              />
-              <AssetUriField
-                editLabel={t("assets.editUri")}
-                hideLabel={t("assets.hideUri")}
-                label={t("assets.uri")}
-                summaryLabel={t("assets.uriFolded")}
-                uri={asset.uri}
-                validationPath={`data.assets.${index}.uri`}
-                onChange={(value) => updateAsset(index, (item) => ({ ...item, uri: value }))}
-              />
-              <Button
-                disabled={asset.type === "icon" && asset.name === "main"}
-                icon={<Star size={16} />}
-                onClick={() => void promoteAssetToCover(asset, index)}
-              >
-                {t("assets.setCover")}
-              </Button>
-              <Button icon={<Trash2 size={16} />} variant="danger" onClick={() => removeAsset(index)}>
-                {t("common.delete")}
-              </Button>
-            </div>
+            <ul className="asset-purpose-list">
+              <li>
+                <Star size={15} aria-hidden="true" />
+                <span>
+                  <strong>{t("assets.usageCoverLabel")}</strong>
+                  {t("assets.usageCover")}
+                </span>
+              </li>
+              <li>
+                <ImagePlus size={15} aria-hidden="true" />
+                <span>
+                  <strong>{t("assets.usageImagesLabel")}</strong>
+                  {t("assets.usageImages")}
+                </span>
+              </li>
+              <li>
+                <Link2 size={15} aria-hidden="true" />
+                <span>
+                  <strong>{t("assets.usageReferencesLabel")}</strong>
+                  {t("assets.usageReferences")}
+                </span>
+              </li>
+            </ul>
           </article>
-        ))}
+          <div className="asset-stat-grid" aria-label={t("assets.statsLabel")}>
+            <div>
+              <strong>{assets.length}</strong>
+              <span>{t("assets.total")}</span>
+            </div>
+            <div>
+              <strong>{embeddedImageCount}</strong>
+              <span>{t("assets.embedded")}</span>
+            </div>
+            <div>
+              <strong>{referenceCount}</strong>
+              <span>{t("assets.reference")}</span>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <div className="asset-library-heading">
+        <div>
+          <h3>{t("assets.libraryTitle")}</h3>
+          <span>{assets.length ? t("assets.libraryCount", { count: assets.length }) : t("assets.libraryEmptyHint")}</span>
+        </div>
+      </div>
+
+      {assets.length === 0 ? (
+        <div className="asset-empty-state">
+          <Package size={28} aria-hidden="true" />
+          <div>
+            <p>{t("assets.emptyTitle")}</p>
+            <span>{t("assets.emptyBody")}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="asset-grid" data-validation-path="data.assets">
+          {assets.map((asset, index) => (
+            <article
+              className={`asset-card ${isMainCover(asset) ? "is-cover" : ""}`}
+              data-context-menu="asset"
+              data-index={index}
+              data-validation-path={`data.assets.${index}`}
+              key={`${asset.type}-${asset.name}-${index}`}
+            >
+              <div className="asset-preview">
+                {isDataImageUri(asset.uri) ? (
+                  <img alt={asset.name} decoding="async" loading="lazy" src={asset.uri} />
+                ) : (
+                  <span>{t(assetTypeLabelKeys[asset.type] ?? "assetType.other")}</span>
+                )}
+              </div>
+              <div className="asset-card-content">
+                <div className="asset-card-heading">
+                  <div className="asset-card-title">
+                    <strong title={asset.name}>{asset.name}</strong>
+                    <span className="asset-type-badge">{t(assetTypeLabelKeys[asset.type] ?? "assetType.other")}</span>
+                  </div>
+                  {isMainCover(asset) ? <span className="asset-cover-badge">{coverStatusLabel}</span> : null}
+                </div>
+                <div className="asset-card-meta">
+                  <span>{asset.ext}</span>
+                  <span>{isDataImageUri(asset.uri) ? t("assets.embedded") : t("assets.reference")}</span>
+                </div>
+                <details className="asset-details">
+                  <summary>{t("assets.editDetails")}</summary>
+                  <div className="asset-fields">
+                    <SelectField
+                      validationPath={`data.assets.${index}.type`}
+                      label={t("assets.type")}
+                      value={asset.type}
+                      onChange={(event) => updateAsset(index, (item) => ({ ...item, type: event.target.value }))}
+                    >
+                      <option value="icon">{t("assetType.icon")}</option>
+                      <option value="background">{t("assetType.background")}</option>
+                      <option value="user_icon">{t("assetType.userIcon")}</option>
+                      <option value="emotion">{t("assetType.emotion")}</option>
+                      <option value="other">{t("assetType.other")}</option>
+                    </SelectField>
+                    <TextField
+                      validationPath={`data.assets.${index}.name`}
+                      label={t("field.name")}
+                      value={asset.name}
+                      onChange={(event) => updateAsset(index, (item) => ({ ...item, name: event.target.value }))}
+                    />
+                    <TextField
+                      validationPath={`data.assets.${index}.ext`}
+                      label={t("assets.ext")}
+                      value={asset.ext}
+                      onChange={(event) =>
+                        updateAsset(index, (item) => ({ ...item, ext: event.target.value.toLowerCase().replace(/^\./, "") }))
+                      }
+                    />
+                    <AssetUriField
+                      editLabel={t("assets.editUri")}
+                      hideLabel={t("assets.hideUri")}
+                      label={t("assets.uri")}
+                      summaryLabel={t("assets.uriFolded")}
+                      uri={asset.uri}
+                      validationPath={`data.assets.${index}.uri`}
+                      onChange={(value) => updateAsset(index, (item) => ({ ...item, uri: value }))}
+                    />
+                    <div className="asset-card-actions">
+                      <Button icon={<Copy size={16} />} onClick={() => void copyAsset(index)}>
+                        {t("assets.copyDefinition")}
+                      </Button>
+                      <Button
+                        disabled={isMainCover(asset)}
+                        icon={<Star size={16} />}
+                        onClick={() => void promoteAssetToCover(asset, index)}
+                      >
+                        {t("assets.setCover")}
+                      </Button>
+                      <Button icon={<Trash2 size={16} />} variant="danger" onClick={() => removeAsset(index)}>
+                        {t("common.delete")}
+                      </Button>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

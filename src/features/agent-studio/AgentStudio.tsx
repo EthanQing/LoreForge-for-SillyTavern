@@ -651,6 +651,10 @@ export function AgentStudio(): ReactNode {
       if (!target) {
         return;
       }
+      const targetDetails = target.closest<HTMLDetailsElement>("details");
+      if (targetDetails && !targetDetails.open) {
+        targetDetails.open = true;
+      }
       target.scrollIntoView({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       const focusTarget = target.matches("input, select, textarea, button, [contenteditable='true'], [tabindex]:not([tabindex='-1'])")
         ? target
