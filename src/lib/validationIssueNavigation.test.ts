@@ -15,6 +15,7 @@ describe("validation issue navigation", () => {
     expect(getValidationEditorTab("data.character_book.entries.2.keys.0")).toBe("lorebook");
     expect(getValidationEditorTab("data.character_book.entries")).toBe("validation");
     expect(getValidationEditorTab("data.character_book.entries.2.keys")).toBe("validation");
+    expect(getValidationEditorTab("data.extensions.world")).toBe("lorebook");
     expect(getValidationEditorTab("data.group_only_greetings")).toBe("validation");
     expect(getValidationEditorTab("data.assets.1.uri")).toBe("assets");
     expect(getValidationEditorTab("unknown.path")).toBe("validation");

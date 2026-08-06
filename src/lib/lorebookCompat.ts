@@ -26,6 +26,12 @@ export const sillyTavernPromptRoles = {
   assistant: 2
 } as const;
 
+export interface SillyTavernLorebookBinding {
+  embeddedName?: string;
+  linkedName?: string;
+  isMismatched: boolean;
+}
+
 export interface SillyTavernLorebookEntryExtensions extends Record<string, unknown> {
   display_index?: number;
   exclude_recursion?: boolean;
@@ -114,6 +120,50 @@ export function normalizeCardLorebookForSillyTavern(card: CharacterCardV3): Char
   };
 }
 
+export function getSillyTavernPrimaryWorldName(card: CharacterCardV3): string | undefined {
+  return readBindingName(card.data.extensions?.world);
+}
+
+export function getSillyTavernLorebookBinding(card: CharacterCardV3): SillyTavernLorebookBinding {
+  const embeddedName = readBindingName(card.data.character_book?.name);
+  const linkedName = getSillyTavernPrimaryWorldName(card);
+  return {
+    embeddedName,
+    linkedName,
+    isMismatched: Boolean(embeddedName && linkedName && embeddedName !== linkedName)
+  };
+}
+
+export function syncSillyTavernLorebookBinding(card: CharacterCardV3): CharacterCardV3 {
+  const extensions = isRecord(card.data.extensions) ? { ...card.data.extensions } : {};
+  const embeddedName = readBindingName(card.data.character_book?.name);
+  if (embeddedName) {
+    extensions.world = embeddedName;
+  } else {
+    delete extensions.world;
+  }
+
+  return {
+    ...card,
+    data: {
+      ...card.data,
+      extensions
+    }
+  };
+}
+
+export function syncSillyTavernLorebookBindingAfterRename(
+  card: CharacterCardV3,
+  previousEmbeddedName: string | undefined
+): CharacterCardV3 {
+  const linkedName = getSillyTavernPrimaryWorldName(card);
+  const previousName = readBindingName(previousEmbeddedName);
+  if (!linkedName || linkedName === previousName) {
+    return syncSillyTavernLorebookBinding(card);
+  }
+  return card;
+}
+
 export function normalizeLorebookEntryForSillyTavern(entry: LorebookEntry, index: number): LorebookEntry {
   const extensions: SillyTavernLorebookEntryExtensions = isRecord(entry.extensions) ? { ...entry.extensions } : {};
   const passthrough = entry as Record<string, unknown>;
@@ -164,4 +214,8 @@ function copyBooleanExtension(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readBindingName(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }

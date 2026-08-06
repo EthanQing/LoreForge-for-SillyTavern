@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { promoteAlternateGreetingToFirst, reorderLorebookEntriesForDisplay } from "./store";
-import type { LorebookEntry } from "../lib/schema";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createBlankCard, createBlankLorebook, type LorebookEntry } from "../lib/schema";
+import { promoteAlternateGreetingToFirst, reorderLorebookEntriesForDisplay, useCardStore } from "./store";
 
 function entry(comment: string, order: number): LorebookEntry {
   return {
@@ -36,5 +36,73 @@ describe("store greeting helpers", () => {
     const alternates = ["Alt 1"];
 
     expect(promoteAlternateGreetingToFirst("First", alternates, 2)).toBe(alternates);
+  });
+});
+
+function createStorageMock() {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key)
+  };
+}
+
+function cardWithLorebookBinding() {
+  const card = createBlankCard(1);
+  const book = createBlankLorebook();
+  book.name = "Old World";
+  card.data.character_book = book;
+  card.data.extensions.world = "Old World";
+  return card;
+}
+
+describe("store lorebook binding actions", () => {
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", createStorageMock());
+    useCardStore.getState().replaceCard(cardWithLorebookBinding(), {
+      dirty: false,
+      origin: "new",
+      workspaceId: "store-test"
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("syncs the binding for an explicit lorebook rename", () => {
+    const beforeRevision = useCardStore.getState().cardRevision;
+
+    useCardStore.getState().renameLorebook("New World");
+
+    const state = useCardStore.getState();
+    expect(state.card.data.character_book?.name).toBe("New World");
+    expect(state.card.data.extensions.world).toBe("New World");
+    expect(state.cardRevision).toBe(beforeRevision + 1);
+    expect(state.dirty).toBe(true);
+  });
+
+  it("keeps the binding when a whole lorebook is imported", () => {
+    const imported = createBlankLorebook();
+    imported.name = "Imported World";
+
+    useCardStore.getState().updateData("character_book", imported);
+
+    const state = useCardStore.getState();
+    expect(state.card.data.character_book?.name).toBe("Imported World");
+    expect(state.card.data.extensions.world).toBe("Old World");
+    expect(state.report.warnings).toContainEqual(expect.objectContaining({ code: "lorebook_binding_mismatch" }));
+  });
+
+  it("does not rewrite a binding when a card is loaded", () => {
+    const loaded = cardWithLorebookBinding();
+    loaded.data.character_book!.name = "Loaded World";
+
+    useCardStore.getState().replaceCard(loaded, { dirty: false, origin: "file", workspaceId: "store-test" });
+
+    const state = useCardStore.getState();
+    expect(state.card.data.extensions.world).toBe("Old World");
+    expect(state.report.warnings).toContainEqual(expect.objectContaining({ code: "lorebook_binding_mismatch" }));
   });
 });

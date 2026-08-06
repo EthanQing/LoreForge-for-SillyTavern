@@ -1,5 +1,5 @@
 import type { CharacterCardV3, LorebookEntry } from "../schema";
-import { deriveLorebookEntryComment } from "../lorebookCompat";
+import { deriveLorebookEntryComment, getSillyTavernPrimaryWorldName } from "../lorebookCompat";
 import type { AgentPermission, CardFieldPath } from "./permissions";
 
 export interface AgentCardProjection {
@@ -22,6 +22,7 @@ export interface AgentCardProjection {
 
 export interface AgentLorebookProjection {
   name?: string;
+  linkedWorldName?: string;
   description?: string;
   scanDepth?: number;
   tokenBudget?: number;
@@ -71,6 +72,7 @@ export function projectCard(card: CharacterCardV3, cardRevision: number): AgentC
     characterVersion: data.character_version,
     lorebook: {
       name: book?.name,
+      linkedWorldName: getSillyTavernPrimaryWorldName(card),
       description: book?.description,
       scanDepth: book?.scan_depth,
       tokenBudget: book?.token_budget,

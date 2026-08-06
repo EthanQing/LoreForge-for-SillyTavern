@@ -55,6 +55,9 @@ export function getValidationEditorTab(path: string): ValidationEditorTab {
   if (path === "data.character_book" || path.startsWith("data.character_book.")) {
     return "lorebook";
   }
+  if (path === "data.extensions.world") {
+    return "lorebook";
+  }
   if (path === "data.first_mes" || path === "data.alternate_greetings" || path.startsWith("data.alternate_greetings.") || path === "data.group_only_greetings" || path.startsWith("data.group_only_greetings.")) {
     return "greetings";
   }

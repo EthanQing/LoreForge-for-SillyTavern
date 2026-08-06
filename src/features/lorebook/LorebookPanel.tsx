@@ -13,6 +13,7 @@ import { useI18n } from "../../lib/i18n";
 import {
   deriveLorebookEntryComment,
   fillEmptyLorebookEntryComments,
+  getSillyTavernLorebookBinding,
   normalizeLorebookForSillyTavern,
   sillyTavernPromptRoles,
   sillyTavernWorldInfoLogic,
@@ -220,6 +221,9 @@ export function LorebookPanel() {
   const card = useCardStore((state) => state.card);
   const updateData = useCardStore((state) => state.updateData);
   const updateLorebook = useCardStore((state) => state.updateLorebook);
+  const renameLorebook = useCardStore((state) => state.renameLorebook);
+  const syncLorebookBinding = useCardStore((state) => state.syncLorebookBinding);
+  const setStatus = useCardStore((state) => state.setStatus);
   const addLorebookEntry = useCardStore((state) => state.addLorebookEntry);
   const updateLorebookEntry = useCardStore((state) => state.updateLorebookEntry);
   const removeLorebookEntry = useCardStore((state) => state.removeLorebookEntry);
@@ -455,6 +459,33 @@ export function LorebookPanel() {
 
   entryRefs.current.length = book.entries.length;
 
+  const binding = getSillyTavernLorebookBinding(card);
+  const hasOrphanedBinding = Boolean(!binding.embeddedName && binding.linkedName);
+  const hasMissingBinding = Boolean(binding.embeddedName && !binding.linkedName);
+  const bindingNeedsAction = binding.isMismatched || hasOrphanedBinding || hasMissingBinding;
+  const bindingIsWarning = binding.isMismatched || hasOrphanedBinding;
+  const bindingStatusTitle = binding.isMismatched
+    ? t("lorebook.sillyTavernBindingMismatch")
+    : hasOrphanedBinding
+      ? t("lorebook.sillyTavernBindingMissingEmbedded")
+      : t("lorebook.sillyTavernBindingStatus");
+  const bindingStatusDetail = binding.isMismatched
+    ? t("lorebook.sillyTavernBindingMismatchDetail", { embedded: binding.embeddedName, linked: binding.linkedName })
+    : hasOrphanedBinding
+      ? t("lorebook.sillyTavernBindingMissingEmbeddedDetail", { linked: binding.linkedName })
+      : hasMissingBinding
+        ? t("lorebook.sillyTavernBindingMissingDetail", { embedded: binding.embeddedName })
+        : binding.embeddedName
+          ? t("lorebook.sillyTavernBindingHint")
+          : t("lorebook.sillyTavernBindingEmptyDetail");
+  const bindingActionLabel = hasOrphanedBinding
+    ? t("lorebook.clearSillyTavernBinding")
+    : t("lorebook.syncSillyTavernBinding");
+  const syncBinding = () => {
+    syncLorebookBinding();
+    setStatus(t(hasOrphanedBinding ? "status.lorebookBindingCleared" : "status.lorebookBindingSynced"));
+  };
+
   return (
     <section className="panel lorebook-panel" data-context-menu="lorebook-panel" data-context-target-id={panelContextTargetId}>
       <div className="panel-heading">
@@ -479,7 +510,7 @@ export function LorebookPanel() {
         </div>
       </div>
       <div className="two-column">
-        <TextField validationPath="data.character_book.name" label={t("field.name")} value={book.name ?? ""} onChange={(event) => updateLorebook((current) => ({ ...current, name: event.target.value }))} />
+        <TextField validationPath="data.character_book.name" label={t("field.name")} value={book.name ?? ""} onChange={(event) => renameLorebook(event.target.value)} />
         <TextField
           validationPath="data.character_book.description"
           label={t("field.description")}
@@ -498,6 +529,26 @@ export function LorebookPanel() {
           value={numberValue(book.token_budget)}
           onChange={(event) => updateLorebook((current) => ({ ...current, token_budget: parseNumber(event.target.value) }))}
         />
+      </div>
+      <div className="lorebook-binding" data-validation-path="data.extensions.world">
+        <TextField
+          label={t("lorebook.sillyTavernBinding")}
+          detail={t("lorebook.sillyTavernBindingDetail")}
+          value={binding.linkedName ?? ""}
+          placeholder={t("lorebook.sillyTavernBindingEmpty")}
+          readOnly
+        />
+        <div className={`lorebook-binding-status${bindingIsWarning ? " is-warning" : ""}`} role={bindingIsWarning ? "alert" : "status"}>
+          <div className="lorebook-binding-status-copy">
+            <strong>{bindingStatusTitle}</strong>
+            <span>{bindingStatusDetail}</span>
+          </div>
+          {bindingNeedsAction ? (
+            <Button onClick={syncBinding}>
+              {bindingActionLabel}
+            </Button>
+          ) : null}
+        </div>
       </div>
       <label className="toggle-row" data-validation-path="data.character_book.recursive_scanning">
         <input

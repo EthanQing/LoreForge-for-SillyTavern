@@ -903,6 +903,51 @@ textarea {
   font-size: var(--text-sm);
 }
 
+.lorebook-binding {
+  margin-top: var(--space-4);
+}
+
+.lorebook-binding > .field {
+  margin-top: 0;
+}
+
+.lorebook-binding-status {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted-color);
+  background: var(--input);
+  font-size: var(--text-sm);
+}
+
+.lorebook-binding-status.is-warning {
+  border-color: rgba(251, 146, 60, 0.35);
+  color: var(--warn);
+  background: rgba(251, 146, 60, 0.08);
+}
+
+.lorebook-binding-status-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.lorebook-binding-status-copy strong {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.lorebook-binding-status-copy span {
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
 .state-pill {
   display: inline-flex;
   align-items: center;
@@ -4929,6 +4974,14 @@ select.input {
 
   .card-workshop-shell .lorebook-panel .two-column {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card-workshop-shell .lorebook-panel .lorebook-binding-status {
+    flex-direction: column;
+  }
+
+  .card-workshop-shell .lorebook-panel .lorebook-binding-status .button {
+    align-self: flex-start;
   }
 
   .card-workshop-shell .lorebook-panel .list-editor-toolbar {

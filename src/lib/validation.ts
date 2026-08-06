@@ -1,5 +1,6 @@
 import { CharacterCardV3, ValidationIssue, ValidationReport } from "./schema";
 import { translate } from "./i18n";
+import { getSillyTavernLorebookBinding } from "./lorebookCompat";
 
 function issue(level: "error" | "warning", code: string, path: string, message: string): ValidationIssue {
   return { level, code, path, message };
@@ -98,6 +99,21 @@ export function validateCard(card: CharacterCardV3): ValidationReport {
           );
         }
       });
+    }
+
+    const binding = getSillyTavernLorebookBinding(card);
+    if (binding.isMismatched) {
+      warnings.push(
+        issue(
+          "warning",
+          "lorebook_binding_mismatch",
+          "data.extensions.world",
+          translate("validation.lorebookBindingMismatch", {
+            embedded: binding.embeddedName,
+            linked: binding.linkedName
+          })
+        )
+      );
     }
   }
 

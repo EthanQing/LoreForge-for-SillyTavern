@@ -111,6 +111,26 @@ pub fn validate_card_report(card: &CharacterCardV3) -> ValidationReport {
                 }
             }
         }
+
+        if let (Some(embedded_name), Some(linked_name)) = (
+            book.name.as_deref().filter(|value| !value.trim().is_empty()),
+            card.data
+                .extensions
+                .get("world")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.trim().is_empty()),
+        ) {
+            if embedded_name != linked_name {
+                warnings.push(issue(
+                    "warning",
+                    "lorebook_binding_mismatch",
+                    "data.extensions.world",
+                    &format!(
+                        "SillyTavern primary lorebook binding '{linked_name}' does not match embedded lorebook '{embedded_name}'; exports will still use the bound name."
+                    ),
+                ));
+            }
+        }
     }
 
     if let Some(assets) = &card.data.assets {
@@ -292,6 +312,56 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.code == "invalid_regex"));
+    }
+
+    #[test]
+    fn lorebook_binding_mismatch_is_warning() {
+        let mut card = CharacterCardV3::blank(1);
+        card.data.character_book = Some(Lorebook {
+            name: Some("Embedded World".to_string()),
+            description: None,
+            scan_depth: None,
+            token_budget: None,
+            recursive_scanning: None,
+            extensions: Default::default(),
+            entries: Vec::new(),
+            extra: Default::default(),
+        });
+        card.data.extensions.insert(
+            "world".to_string(),
+            serde_json::Value::String("Linked World".to_string()),
+        );
+
+        let report = validate_card_report(&card);
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "lorebook_binding_mismatch"));
+    }
+
+    #[test]
+    fn matching_lorebook_binding_is_not_a_warning() {
+        let mut card = CharacterCardV3::blank(1);
+        card.data.character_book = Some(Lorebook {
+            name: Some("Same World".to_string()),
+            description: None,
+            scan_depth: None,
+            token_budget: None,
+            recursive_scanning: None,
+            extensions: Default::default(),
+            entries: Vec::new(),
+            extra: Default::default(),
+        });
+        card.data.extensions.insert(
+            "world".to_string(),
+            serde_json::Value::String("Same World".to_string()),
+        );
+
+        let report = validate_card_report(&card);
+        assert!(!report
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "lorebook_binding_mismatch"));
     }
 
     #[test]

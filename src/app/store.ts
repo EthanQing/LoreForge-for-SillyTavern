@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { CardAsset, CharacterCardV3, Lorebook, LorebookEntry, ParsedCard, ValidationReport } from "../lib/schema";
 import { createBlankCard, createBlankLorebook, createBlankLorebookEntry, unixNow } from "../lib/schema";
 import { prepareCardForExport } from "../lib/migrations";
+import { syncSillyTavernLorebookBinding, syncSillyTavernLorebookBindingAfterRename } from "../lib/lorebookCompat";
 import { validateCard } from "../lib/validation";
 import type { AiModel, AiSettings } from "../lib/ai";
 import { defaultAiSettings, normalizeAiSettings } from "../lib/ai";
@@ -54,6 +55,8 @@ interface CardStore {
   markSaved: (card?: CharacterCardV3, path?: string) => void;
   refreshValidation: () => void;
   updateLorebook: (updater: (book: Lorebook) => Lorebook) => void;
+  renameLorebook: (name: string) => void;
+  syncLorebookBinding: () => void;
   addLorebookEntry: () => void;
   updateLorebookEntry: (index: number, updater: (entry: LorebookEntry) => LorebookEntry) => void;
   removeLorebookEntry: (index: number) => void;
@@ -327,6 +330,25 @@ export const useCardStore = create<CardStore>((set, get) => ({
   updateLorebook: (updater) => {
     const current = get().card.data.character_book ?? createBlankLorebook();
     get().updateData("character_book", updater(current));
+  },
+  renameLorebook: (name) => {
+    get().updateCard((card) => {
+      const current = card.data.character_book ?? createBlankLorebook();
+      const nextCard = {
+        ...card,
+        data: {
+          ...card.data,
+          character_book: {
+            ...current,
+            name
+          }
+        }
+      };
+      return syncSillyTavernLorebookBindingAfterRename(nextCard, current.name);
+    });
+  },
+  syncLorebookBinding: () => {
+    get().updateCard((card) => syncSillyTavernLorebookBinding(card));
   },
   addLorebookEntry: () => {
     const current = get().card.data.character_book ?? createBlankLorebook();
