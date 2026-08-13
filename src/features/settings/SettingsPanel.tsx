@@ -1,11 +1,26 @@
-import { useEffect, useState } from "react";
-import { Bot, BrainCircuit, CheckCircle2, Download, LoaderCircle, PlugZap, RefreshCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bot, BrainCircuit, CheckCircle2, Download, ExternalLink, LoaderCircle, LogIn, LogOut, PlugZap, RefreshCcw, X } from "lucide-react";
 import { Button } from "../../components/Button";
 import { FieldShell, SelectField, TextField } from "../../components/Field";
 import { useCardStore } from "../../app/store";
 import { useI18n, type Locale } from "../../lib/i18n";
-import { AI_MAX_OUTPUT_TOKENS, AI_MAX_TIMEOUT_MS, fetchAiModels, testAiConnection, type AiSettings } from "../../lib/ai";
+import {
+  AI_MAX_OUTPUT_TOKENS,
+  AI_MAX_TIMEOUT_MS,
+  beginOpenAiOauth,
+  cancelOpenAiOauth,
+  completeOpenAiOauth,
+  fetchAiModels,
+  getOpenAiOauthStatus,
+  logoutOpenAiOauth,
+  settingsForProvider,
+  testAiConnection,
+  type AiProviderProfile,
+  type AiSettings,
+  type OpenAiOauthStart
+} from "../../lib/ai";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   checkForUpdates,
   loadUpdatePreferences,
@@ -33,18 +48,40 @@ export function SettingsPanel() {
   const [panelMessage, setPanelMessage] = useState("");
   const [testContent, setTestContent] = useState("");
   const [credentialConfigured, setCredentialConfigured] = useState(false);
+  const [oauthStart, setOauthStart] = useState<OpenAiOauthStart | null>(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const activeOauthFlowRef = useRef<string | null>(null);
   const [updatePreferences, setUpdatePreferencesState] = useState<UpdatePreferences>(() => loadUpdatePreferences());
   const [updateLoading, setUpdateLoading] = useState(false);
   const [manualUpdate, setManualUpdate] = useState<AvailableUpdate | null>(null);
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
-  const credentialBlocked = Boolean(aiSettings.apiKey.trim()) && !credentialConfigured;
+  const usesOauth = aiSettings.providerProfile === "openai-codex";
+  const credentialBlocked = !usesOauth && Boolean(aiSettings.apiKey.trim()) && !credentialConfigured;
+  const hasCredential = usesOauth ? credentialConfigured : Boolean(aiSettings.apiKey.trim()) || credentialConfigured;
 
   useEffect(() => {
-    void invoke<{ configured: boolean }>("ai_credential_status", { credentialId: aiSettings.credentialId })
-      .then((status) => setCredentialConfigured(status.configured))
-      .catch(() => setCredentialConfigured(false));
-  }, [aiSettings.apiKey, aiSettings.credentialId]);
+    let active = true;
+    const statusPromise = usesOauth
+      ? getOpenAiOauthStatus(aiSettings.credentialId)
+      : invoke<{ configured: boolean }>("ai_credential_status", { credentialId: aiSettings.credentialId });
+    void statusPromise
+      .then((status) => {
+        if (active) setCredentialConfigured(status.configured);
+      })
+      .catch(() => {
+        if (active) setCredentialConfigured(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [aiSettings.apiKey, aiSettings.credentialId, usesOauth]);
+
+  useEffect(() => () => {
+    const flowId = activeOauthFlowRef.current;
+    if (flowId) void cancelOpenAiOauth(flowId).catch(() => undefined);
+    activeOauthFlowRef.current = null;
+  }, []);
 
   const updateManualModelInput = (manualModelInput: boolean) => {
     updateAiSettings({
@@ -136,12 +173,87 @@ export function SettingsPanel() {
     }
   };
 
+  const startOpenAiLogin = async () => {
+    setOauthLoading(true);
+    setPanelMessage(t("settings.openaiStartingLogin"));
+    let flowId: string | null = null;
+    try {
+      const start = await beginOpenAiOauth(aiSettings.credentialId);
+      flowId = start.flowId;
+      activeOauthFlowRef.current = flowId;
+      setOauthStart(start);
+      setPanelMessage(t("settings.openaiWaiting", { code: start.userCode }));
+      try {
+        await openUrl(start.verificationUri);
+      } catch {
+        setPanelMessage(t("settings.openaiOpenManually", { code: start.userCode }));
+      }
+      const status = await completeOpenAiOauth(start.flowId);
+      if (activeOauthFlowRef.current !== flowId) return;
+      activeOauthFlowRef.current = null;
+      setCredentialConfigured(status.configured);
+      setOauthStart(null);
+      setPanelMessage(t("settings.openaiConnected"));
+      setStatus(t("settings.openaiConnected"));
+      setOauthLoading(false);
+    } catch (error) {
+      if (flowId && activeOauthFlowRef.current !== flowId) return;
+      activeOauthFlowRef.current = null;
+      const message = error instanceof Error ? error.message : String(error);
+      setPanelMessage(message);
+      setStatus(message);
+      setOauthLoading(false);
+    }
+  };
+
+  const cancelOpenAiLogin = async () => {
+    const flowId = oauthStart?.flowId;
+    if (!flowId) return;
+    activeOauthFlowRef.current = null;
+    await cancelOpenAiOauth(flowId).catch(() => undefined);
+    setOauthStart(null);
+    setOauthLoading(false);
+    setPanelMessage(t("settings.openaiCancelled"));
+  };
+
+  const openOpenAiLoginPage = async () => {
+    if (!oauthStart) return;
+    try {
+      await openUrl(oauthStart.verificationUri);
+    } catch {
+      setPanelMessage(t("settings.openaiOpenManually", { code: oauthStart.userCode }));
+    }
+  };
+
+  const signOutOpenAi = async () => {
+    setOauthLoading(true);
+    try {
+      await logoutOpenAiOauth(aiSettings.credentialId);
+      setCredentialConfigured(false);
+      setOauthStart(null);
+      setPanelMessage(t("settings.openaiSignedOut"));
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
+  const changeProvider = (providerProfile: AiProviderProfile) => {
+    const flowId = activeOauthFlowRef.current;
+    if (flowId) void cancelOpenAiOauth(flowId).catch(() => undefined);
+    activeOauthFlowRef.current = null;
+    setOauthStart(null);
+    setOauthLoading(false);
+    updateAiSettings(settingsForProvider(providerProfile, aiSettings));
+  };
+
   return (
     <section className="panel">
       <div className="panel-heading">
         <h2>{t("settings.title")}</h2>
         <span className={credentialBlocked ? "state-pill state-pill-hot" : credentialConfigured ? "state-pill" : "state-pill state-pill-hot"}>
-          {credentialBlocked ? "API Key 尚未保存到系统凭据库" : credentialConfigured ? "系统凭据已配置" : t("settings.apiKeyMissing")}
+          {usesOauth
+            ? credentialConfigured ? t("settings.openaiConnected") : t("settings.openaiSignedOutState")
+            : credentialBlocked ? "API Key 尚未保存到系统凭据库" : credentialConfigured ? "系统凭据已配置" : t("settings.apiKeyMissing")}
         </span>
       </div>
 
@@ -200,34 +312,63 @@ export function SettingsPanel() {
               label={t("settings.provider")}
               value={aiSettings.providerProfile}
               onChange={(event) => {
-                const providerProfile = event.currentTarget.value === "openai-compatible" ? "openai-compatible" : "deepseek";
-                updateAiSettings({
-                  providerProfile,
-                  baseUrl:
-                    providerProfile === "deepseek" && !aiSettings.baseUrl.trim()
-                      ? "https://api.deepseek.com"
-                      : aiSettings.baseUrl
-                });
+                const providerProfile = event.currentTarget.value as AiProviderProfile;
+                changeProvider(providerProfile);
               }}
             >
               <option value="deepseek">DeepSeek</option>
+              <option value="openai-codex">ChatGPT Plus/Pro (OpenAI Codex)</option>
               <option value="openai-compatible">{t("settings.openaiCompatible")}</option>
             </SelectField>
-            <TextField
-              label={t("settings.baseUrl")}
-              spellCheck={false}
-              value={aiSettings.baseUrl}
-              onChange={(event) => updateAiSettings({ baseUrl: event.currentTarget.value })}
-            />
+            {usesOauth ? null : (
+              <TextField
+                label={t("settings.baseUrl")}
+                spellCheck={false}
+                value={aiSettings.baseUrl}
+                onChange={(event) => updateAiSettings({ baseUrl: event.currentTarget.value })}
+              />
+            )}
           </div>
-          <TextField
-            autoComplete="off"
-            label="API Key（仅写入系统凭据库）"
-            spellCheck={false}
-            type="password"
-            value={aiSettings.apiKey}
-            onChange={(event) => updateAiSettings({ apiKey: event.currentTarget.value })}
-          />
+          {usesOauth ? (
+            <div className="oauth-login-panel" aria-busy={oauthLoading}>
+              <p>{t("settings.openaiOauthDetail")}</p>
+              {oauthStart ? (
+                <div className="oauth-device-code" role="status" aria-live="polite">
+                  <span>{t("settings.openaiDeviceCode")}</span>
+                  <strong>{oauthStart.userCode}</strong>
+                  <div className="inline-row compact">
+                    <Button icon={<ExternalLink size={16} />} onClick={() => void openOpenAiLoginPage()}>
+                      {t("settings.openaiOpenLogin")}
+                    </Button>
+                    <Button icon={<X size={16} />} onClick={() => void cancelOpenAiLogin()}>
+                      {t("common.cancel")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="inline-row compact">
+                  {credentialConfigured ? (
+                    <Button disabled={oauthLoading} icon={<LogOut size={16} />} onClick={() => void signOutOpenAi()}>
+                      {t("settings.openaiSignOut")}
+                    </Button>
+                  ) : (
+                    <Button disabled={oauthLoading} icon={oauthLoading ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />} onClick={() => void startOpenAiLogin()}>
+                      {t("settings.openaiSignIn")}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <TextField
+              autoComplete="off"
+              label="API Key（仅写入系统凭据库）"
+              spellCheck={false}
+              type="password"
+              value={aiSettings.apiKey}
+              onChange={(event) => updateAiSettings({ apiKey: event.currentTarget.value })}
+            />
+          )}
           <div className="model-row">
             <div className="model-field-stack">
               {aiSettings.manualModelInput ? (
@@ -251,17 +392,19 @@ export function SettingsPanel() {
                   ))}
                 </SelectField>
               )}
-              <label className="toggle-row model-manual-toggle">
-                <input
-                  checked={aiSettings.manualModelInput}
-                  type="checkbox"
-                  onChange={(event) => updateManualModelInput(event.currentTarget.checked)}
-                />
-                <span>{t("settings.manualModelInput")}</span>
-              </label>
+              {usesOauth ? null : (
+                <label className="toggle-row model-manual-toggle">
+                  <input
+                    checked={aiSettings.manualModelInput}
+                    type="checkbox"
+                    onChange={(event) => updateManualModelInput(event.currentTarget.checked)}
+                  />
+                  <span>{t("settings.manualModelInput")}</span>
+                </label>
+              )}
             </div>
             <Button
-              disabled={modelsLoading || !aiSettings.baseUrl.trim() || (!aiSettings.apiKey.trim() && !credentialConfigured)}
+              disabled={modelsLoading || !aiSettings.baseUrl.trim() || !hasCredential}
               icon={modelsLoading ? <LoaderCircle className="spin" size={18} /> : <RefreshCcw size={18} />}
               onClick={fetchModels}
             >
@@ -339,7 +482,7 @@ export function SettingsPanel() {
         <div className="subpanel-heading">
           <h3>{t("settings.connectionTest")}</h3>
           <Button
-            disabled={testLoading || (!aiSettings.apiKey.trim() && !credentialConfigured) || !aiSettings.baseUrl.trim() || !aiSettings.model.trim()}
+            disabled={testLoading || !hasCredential || !aiSettings.baseUrl.trim() || !aiSettings.model.trim()}
             icon={testLoading ? <LoaderCircle className="spin" size={18} /> : <PlugZap size={18} />}
             onClick={testConnection}
           >

@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { describe, expect, it } from "vitest";
 import { encodeAgentRequest, permissionForPreset } from "./permissions";
-import { getAgentSessionTitleSource, normalizeAgentSessionTitle } from "./sessionTitle";
+import { getAgentSessionTitleSource, localAgentSessionTitle, normalizeAgentSessionTitle } from "./sessionTitle";
 
 describe("Agent session titles", () => {
   it("uses the first completed user and assistant turn without exposing the permission envelope", () => {
@@ -38,5 +38,11 @@ describe("Agent session titles", () => {
       .toBe("优化都市世界书");
     expect(normalizeAgentSessionTitle("《重写角色开场白。》")).toBe("重写角色开场白");
     expect([...normalizeAgentSessionTitle("这是一个超过十八个字符而且非常冗长的会话标题")]).toHaveLength(18);
+  });
+
+  it("creates a local title for OAuth-backed Codex sessions", () => {
+    expect(localAgentSessionTitle({ user: "请帮我完善世界书条目", assistant: "已生成提案" }))
+      .toBe("请帮我完善世界书条目");
+    expect(localAgentSessionTitle({ user: "……", assistant: "已完成" })).toBe("角色卡编辑");
   });
 });

@@ -23,6 +23,7 @@ import {
 import { createBlankLorebook, lorebookEnvelopeSchema, type LorebookEntry } from "../../lib/schema";
 import { useAgentStudioActions } from "../../lib/agent/uiContext";
 import { listenForValidationNavigation } from "../../lib/validationIssueNavigation";
+import { exportLorebookJson, pickLorebookSavePath } from "../../lib/tauri";
 
 function numberValue(value: number | undefined | null): string {
   return value === undefined || value === null ? "" : String(value);
@@ -392,18 +393,23 @@ export function LorebookPanel() {
     event.target.value = "";
   };
 
-  const exportLorebook = () => {
+  const exportLorebook = async () => {
     if (!book) {
       return;
     }
-    const exportBook = normalizeLorebookForSillyTavern(book) ?? book;
-    const blob = new Blob([JSON.stringify({ spec: "lorebook_v3", data: exportBook }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${book.name || card.data.name || "lorebook"}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const path = await pickLorebookSavePath(book.name || card.data.name || "lorebook");
+      if (!path) {
+        return;
+      }
+      const exportBook = normalizeLorebookForSillyTavern(book) ?? book;
+      await exportLorebookJson(path, exportBook);
+      setStatus(t("status.lorebookExported"));
+    } catch (error) {
+      setStatus(t("status.lorebookExportFailed", {
+        message: error instanceof Error ? error.message : String(error)
+      }));
+    }
   };
 
   const panelContextTargetId = useContextMenuTarget(() => ({
@@ -412,7 +418,7 @@ export function LorebookPanel() {
     createLorebook: () => updateData("character_book", createBlankLorebook()),
     addEntry: addLorebookEntry,
     importLorebook: () => inputRef.current?.click(),
-    exportLorebook,
+    exportLorebook: () => void exportLorebook(),
     fillEmptyMemos: () => updateLorebook(fillEmptyLorebookEntryComments)
   }));
 
@@ -498,7 +504,7 @@ export function LorebookPanel() {
           <Button icon={<Upload size={16} />} onClick={() => inputRef.current?.click()}>
             {t("common.import")}
           </Button>
-          <Button icon={<Download size={16} />} onClick={exportLorebook}>
+          <Button icon={<Download size={16} />} onClick={() => void exportLorebook()}>
             {t("common.export")}
           </Button>
           <Button icon={<ListChecks size={16} />} onClick={() => updateLorebook(fillEmptyLorebookEntryComments)}>

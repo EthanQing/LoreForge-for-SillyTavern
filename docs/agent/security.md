@@ -5,6 +5,9 @@
 - API key 通过 Rust 的 keyring 命令进入操作系统凭据库。前端加载 AI 设置时会清空 `apiKey`，非敏感设置才写入 localStorage。
 - 不要将密钥写入源码、角色卡、localStorage、Agent history SQLite、日志、事件、错误信息或测试夹具。
 - AI 请求经 `src-tauri/src/ai.rs` 的后端 HTTP/SSE 路径发起；URL 与凭据策略的最终实现以该模块为准。
+- ChatGPT 登录仅用于 `openai-codex` provider，不等同于通用 OpenAI Platform API OAuth。设备码 flow id 和一次性 user code 可进入前端状态；access token、refresh token 与 ChatGPT account id 不得进入 WebView、localStorage、SQLite、日志或事件。
+- OpenAI Codex OAuth 凭据以 JSON 形式保存在专用系统凭据条目 `openai-codex-oauth`。后端在请求前串行刷新即将过期的令牌，并将旋转后的 refresh token 重新写入系统凭据库。
+- `openai-codex` profile 固定为 `https://chatgpt.com/backend-api`，仅允许 `/backend-api/codex/responses`。通用 AI profile 也只能把凭据发送到其配置的同源 URL；前端提供的 Authorization、ChatGPT account id 与 originator 头一律由后端移除或覆盖。
 - Tauri CSP 定义在 `src-tauri/tauri.conf.json`，修改前应评估 IPC、资源图片与网络连接需求。
 
 ## Agent 写入边界

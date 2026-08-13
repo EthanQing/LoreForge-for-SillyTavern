@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { compactAgentMessages } from "./context";
 import { getAgentRunOutcome, getAgentRunStatusMessage } from "./runStatus";
 import { permissionForPreset, samePermission, type AgentPermission } from "./permissions";
+import { createCodexAuthPlaceholder } from "../ai";
 
 export interface AgentControllerEvent {
   type: AgentEvent["type"] | "status" | "proposal";
@@ -38,6 +39,7 @@ interface AgentRuntime {
   createModels: (options?: Record<string, unknown>) => ModelsLike;
   createProvider: (options: Record<string, unknown>) => ProviderLike;
   openAICompletionsApi: () => unknown;
+  openAICodexProvider: () => ProviderLike;
 }
 
 interface AgentLike {
@@ -65,6 +67,7 @@ interface ModelsLike {
 
 interface ProviderLike {
   id: string;
+  getModels(): readonly Model<any>[];
 }
 
 export class CardAgentController {
@@ -187,38 +190,29 @@ export class CardAgentController {
     await invoke("configure_ai_profile", {
       profile: {
         id: this.options.profile.id,
+        kind: this.options.profile.kind,
         baseUrl: this.options.profile.baseUrl,
         credentialId: this.options.profile.credentialId,
         allowInsecureHttp: this.options.profile.allowInsecureHttp
       }
     });
-    const [core, ai, api, toolModule] = await Promise.all([
+    const [core, ai, api, codexProviderModule, toolModule] = await Promise.all([
       import("@earendil-works/pi-agent-core"),
       import("@earendil-works/pi-ai"),
       import("@earendil-works/pi-ai/api/openai-completions.lazy"),
+      import("@earendil-works/pi-ai/providers/openai-codex"),
       import("./tools")
     ]);
     this.runtime = {
       Agent: core.Agent as unknown as AgentRuntime["Agent"],
       createModels: ai.createModels as unknown as AgentRuntime["createModels"],
       createProvider: ai.createProvider as unknown as AgentRuntime["createProvider"],
-      openAICompletionsApi: api.openAICompletionsApi
+      openAICompletionsApi: api.openAICompletionsApi,
+      openAICodexProvider: codexProviderModule.openaiCodexProvider as unknown as AgentRuntime["openAICodexProvider"]
     };
-    const model = createModel(this.options.profile);
     const models = this.runtime.createModels();
-    const provider = this.runtime.createProvider({
-      id: this.options.profile.id,
-      name: this.options.profile.kind === "deepseek" ? "DeepSeek" : "OpenAI-compatible",
-      baseUrl: this.options.profile.baseUrl,
-      auth: {
-        apiKey: {
-          name: "系统凭据库",
-          resolve: async () => ({ auth: { apiKey: "tauri-managed" }, source: "系统凭据库" })
-        }
-      },
-      models: [model],
-      api: this.runtime.openAICompletionsApi()
-    });
+    const provider = createRuntimeProvider(this.runtime, this.options.profile);
+    const model = findRuntimeModel(provider, this.options.profile);
     models.setProvider(provider);
     const tools = this.options.profile.toolCalling === "unsupported"
       ? []
@@ -299,10 +293,38 @@ function createModel(profile: AiConnectionProfile): Model<"openai-completions"> 
   };
 }
 
+function createRuntimeProvider(runtime: AgentRuntime, profile: AiConnectionProfile): ProviderLike {
+  if (profile.kind === "openai-codex") {
+    return runtime.openAICodexProvider();
+  }
+  const model = createModel(profile);
+  return runtime.createProvider({
+    id: profile.id,
+    name: profile.kind === "deepseek" ? "DeepSeek" : "OpenAI-compatible",
+    baseUrl: profile.baseUrl,
+    auth: {
+      apiKey: {
+        name: "系统凭据库",
+        resolve: async () => ({ auth: { apiKey: "tauri-managed" }, source: "系统凭据库" })
+      }
+    },
+    models: [model],
+    api: runtime.openAICompletionsApi()
+  });
+}
+
+function findRuntimeModel(provider: ProviderLike, profile: AiConnectionProfile): Model<any> {
+  const model = provider.getModels().find((candidate) => candidate.id === profile.model);
+  if (!model) {
+    throw new Error(`当前服务商不支持模型 ${profile.model}。`);
+  }
+  return model;
+}
+
 function createStreamFn(models: ModelsLike, profile: AiConnectionProfile): StreamFn {
   return (model, context, options) => models.streamSimple(model, context, {
     ...options,
-    apiKey: "tauri-managed",
+    apiKey: profile.kind === "openai-codex" ? createCodexAuthPlaceholder() : "tauri-managed",
     fetch: createTauriFetch(profile),
     transport: "sse",
     headers: {
@@ -311,7 +333,7 @@ function createStreamFn(models: ModelsLike, profile: AiConnectionProfile): Strea
       "x-card-agent-credential": profile.credentialId
     },
     timeoutMs: profile.timeoutMs,
-    temperature: profile.temperature,
+    temperature: profile.kind === "openai-codex" ? undefined : profile.temperature,
     maxTokens: profile.maxOutputTokens
   });
 }

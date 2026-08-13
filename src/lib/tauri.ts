@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { CharacterCardV3, ParsedCard, ValidationReport } from "./schema";
+import type { CharacterCardV3, Lorebook, ParsedCard, ValidationReport } from "./schema";
 import { translate } from "./i18n";
 
 export interface PngExportBase {
@@ -68,6 +68,14 @@ export async function pickCharxSavePath(): Promise<string | null> {
   });
 }
 
+export async function pickLorebookSavePath(defaultName: string): Promise<string | null> {
+  return await save({
+    title: translate("dialog.exportLorebook"),
+    filters: [{ name: translate("dialog.lorebookJson"), extensions: ["json"] }],
+    defaultPath: `${safeFileStem(defaultName) || "lorebook"}.json`
+  });
+}
+
 export async function openCardFile(path: string): Promise<ParsedCard> {
   return await invoke<ParsedCard>("open_card_file", { path });
 }
@@ -113,4 +121,12 @@ export async function importCharx(path: string): Promise<ParsedCard> {
 
 export async function validateCardCommand(card: CharacterCardV3): Promise<ValidationReport> {
   return await invoke<ValidationReport>("validate_card", { card });
+}
+
+export async function exportLorebookJson(path: string, book: Lorebook): Promise<void> {
+  await invoke("export_lorebook_json", { path, book });
+}
+
+function safeFileStem(value: string): string {
+  return value.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/gu, "-").replace(/[. ]+$/u, "").slice(0, 120);
 }

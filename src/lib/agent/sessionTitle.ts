@@ -37,9 +37,13 @@ export async function generateAgentSessionTitle(
   profile: AiConnectionProfile,
   source: AgentSessionTitleSource
 ): Promise<string> {
+  if (profile.kind === "openai-codex") {
+    return localAgentSessionTitle(source);
+  }
   await invoke("configure_ai_profile", {
     profile: {
       id: profile.id,
+      kind: profile.kind,
       baseUrl: profile.baseUrl,
       credentialId: profile.credentialId,
       allowInsecureHttp: profile.allowInsecureHttp
@@ -86,6 +90,11 @@ export async function generateAgentSessionTitle(
   } finally {
     globalThis.clearTimeout(timeout);
   }
+}
+
+export function localAgentSessionTitle(source: AgentSessionTitleSource): string {
+  const title = normalizeAgentSessionTitle(source.user);
+  return title && title !== PENDING_AGENT_SESSION_TITLE ? title : "角色卡编辑";
 }
 
 function truncate(value: string, maxLength: number): string {

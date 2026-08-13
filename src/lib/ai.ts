@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AiConnectionProfile } from "./agent/contracts";
 
-export type AiProviderProfile = "deepseek" | "openai-compatible";
+export type AiProviderProfile = "deepseek" | "openai-compatible" | "openai-codex";
 
 export interface AiModel {
   id: string;
@@ -34,9 +34,25 @@ export interface AiConnectionTestResult {
   toolCalling: "supported" | "unsupported";
 }
 
+export interface OpenAiOauthStatus {
+  configured: boolean;
+  expiresAt?: number;
+}
+
+export interface OpenAiOauthStart {
+  flowId: string;
+  userCode: string;
+  verificationUri: string;
+  intervalSeconds: number;
+  expiresAt: number;
+}
+
 export const AI_MAX_OUTPUT_TOKENS = 384_000;
 export const AI_MAX_TIMEOUT_MS = 1_800_000;
 export const AI_DEFAULT_CONTEXT_WINDOW = 128_000;
+export const OPENAI_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
+export const OPENAI_CODEX_PROFILE_ID = "openai-codex";
+export const OPENAI_CODEX_CREDENTIAL_ID = "openai-codex-oauth";
 
 export const defaultAiSettings: AiSettings = {
   enabled: true,
@@ -60,9 +76,9 @@ export const defaultAiSettings: AiSettings = {
 export function normalizeAiSettings(value: unknown): AiSettings {
   if (!value || typeof value !== "object") return { ...defaultAiSettings };
   const raw = value as Partial<AiSettings>;
-  const providerProfile = raw.providerProfile === "openai-compatible" ? "openai-compatible" : "deepseek";
+  const providerProfile = isProviderProfile(raw.providerProfile) ? raw.providerProfile : "deepseek";
   const fallbackProfileId = `${providerProfile}-default`;
-  return {
+  const normalized: AiSettings = {
     ...defaultAiSettings,
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : defaultAiSettings.enabled,
     providerProfile,
@@ -81,6 +97,22 @@ export function normalizeAiSettings(value: unknown): AiSettings {
     maxOutputTokens: Math.trunc(clampNumber(raw.maxOutputTokens, 1, AI_MAX_OUTPUT_TOKENS, defaultAiSettings.maxOutputTokens)),
     timeoutMs: Math.trunc(clampNumber(raw.timeoutMs, 1_000, AI_MAX_TIMEOUT_MS, defaultAiSettings.timeoutMs))
   };
+  if (providerProfile === "openai-codex") {
+    return {
+      ...normalized,
+      profileId: OPENAI_CODEX_PROFILE_ID,
+      credentialId: OPENAI_CODEX_CREDENTIAL_ID,
+      baseUrl: OPENAI_CODEX_BASE_URL,
+      apiKey: "",
+      model: typeof raw.model === "string" && raw.model.trim() ? raw.model : "gpt-5.6-luna",
+      manualModelInput: false,
+      toolCalling: "supported",
+      contextWindow: typeof raw.contextWindow === "number" ? normalized.contextWindow : 272_000,
+      maxOutputTokens: typeof raw.maxOutputTokens === "number" ? normalized.maxOutputTokens : 128_000,
+      allowInsecureHttp: false
+    };
+  }
+  return normalized;
 }
 
 export function toAiConnectionProfile(settings: AiSettings): AiConnectionProfile {
@@ -100,6 +132,46 @@ export function toAiConnectionProfile(settings: AiSettings): AiConnectionProfile
   };
 }
 
+export function settingsForProvider(
+  providerProfile: AiProviderProfile,
+  current: AiSettings
+): Partial<AiSettings> {
+  if (providerProfile === "openai-codex") {
+    return {
+      providerProfile,
+      profileId: OPENAI_CODEX_PROFILE_ID,
+      credentialId: OPENAI_CODEX_CREDENTIAL_ID,
+      baseUrl: OPENAI_CODEX_BASE_URL,
+      apiKey: "",
+      model: "gpt-5.6-luna",
+      manualModelInput: false,
+      availableModels: [],
+      contextWindow: 272_000,
+      maxOutputTokens: 128_000,
+      toolCalling: "supported",
+      allowInsecureHttp: false
+    };
+  }
+  const fallbackProfileId = `${providerProfile}-default`;
+  const continuingCompatibleProfile = providerProfile === "openai-compatible"
+    && current.providerProfile === "openai-compatible";
+  return {
+    providerProfile,
+    profileId: fallbackProfileId,
+    credentialId: fallbackProfileId,
+    baseUrl: providerProfile === "deepseek"
+      ? "https://api.deepseek.com"
+      : continuingCompatibleProfile ? current.baseUrl : "https://api.openai.com/v1",
+    apiKey: "",
+    availableModels: [],
+    model: providerProfile === "deepseek"
+      ? "deepseek-v4-flash"
+      : continuingCompatibleProfile ? current.model : "gpt-4o-mini",
+    toolCalling: "unknown",
+    allowInsecureHttp: providerProfile === "openai-compatible" ? current.allowInsecureHttp : false
+  };
+}
+
 export async function storeAiCredential(settings: AiSettings, secret = settings.apiKey): Promise<void> {
   if (!secret.trim()) throw new Error("API Key 不能为空。");
   await invoke("store_ai_credential", { request: { credentialId: settings.credentialId, secret: secret.trim() } });
@@ -111,11 +183,21 @@ export async function deleteAiCredential(settings: AiSettings): Promise<void> {
 
 export async function configureAiProfile(settings: AiSettings): Promise<void> {
   await invoke("configure_ai_profile", {
-    profile: { id: settings.profileId, baseUrl: settings.baseUrl, credentialId: settings.credentialId, allowInsecureHttp: settings.allowInsecureHttp }
+    profile: {
+      id: settings.profileId,
+      kind: settings.providerProfile,
+      baseUrl: settings.baseUrl,
+      credentialId: settings.credentialId,
+      allowInsecureHttp: settings.allowInsecureHttp
+    }
   });
 }
 
 export async function fetchAiModels(settings: AiSettings): Promise<AiModel[]> {
+  if (settings.providerProfile === "openai-codex") {
+    const { openaiCodexProvider } = await import("@earendil-works/pi-ai/providers/openai-codex");
+    return openaiCodexProvider().getModels().map((model) => ({ id: model.id }));
+  }
   await ensureCredential(settings);
   await configureAiProfile(settings);
   const models = await invoke<Array<{ id: string; ownedBy?: string; owned_by?: string }>>("fetch_ai_models", { profileId: settings.profileId });
@@ -130,6 +212,34 @@ export async function testAiConnection(settings: AiSettings): Promise<AiConnecti
 
 async function runConnectionProbe(settings: AiSettings): Promise<AiConnectionTestResult> {
   const { tauriFetch } = await import("./agent/tauriFetch");
+  if (settings.providerProfile === "openai-codex") {
+    const response = await tauriFetch(`${OPENAI_CODEX_BASE_URL}/codex/responses`, {
+      method: "POST",
+      profileId: settings.profileId,
+      headers: {
+        authorization: `Bearer ${createCodexAuthPlaceholder()}`,
+        "chatgpt-account-id": "tauri-managed",
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        "openai-beta": "responses=experimental",
+        "x-card-agent-profile": settings.profileId
+      },
+      body: JSON.stringify({
+        model: settings.model,
+        store: false,
+        stream: true,
+        instructions: "Respond with a short connection acknowledgement.",
+        input: [{ role: "user", content: [{ type: "input_text", text: "Connection test." }] }],
+        include: ["reasoning.encrypted_content"]
+      })
+    });
+    if (!response.ok) throw new Error(`OpenAI Codex request failed (${response.status}).`);
+    const payload = await response.text();
+    if (!payload.includes("response.completed") && !payload.includes("response.done")) {
+      throw new Error("OpenAI Codex connection closed before completion.");
+    }
+    return { content: "ChatGPT OAuth 连接成功。", model: settings.model, toolCalling: "supported" };
+  }
   const response = await tauriFetch(`${settings.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     profileId: settings.profileId,
@@ -167,6 +277,40 @@ async function runConnectionProbe(settings: AiSettings): Promise<AiConnectionTes
   };
 }
 
+export async function getOpenAiOauthStatus(
+  credentialId = OPENAI_CODEX_CREDENTIAL_ID
+): Promise<OpenAiOauthStatus> {
+  return await invoke<OpenAiOauthStatus>("openai_oauth_status", { credentialId });
+}
+
+export async function beginOpenAiOauth(
+  credentialId = OPENAI_CODEX_CREDENTIAL_ID
+): Promise<OpenAiOauthStart> {
+  return await invoke<OpenAiOauthStart>("begin_openai_oauth", { credentialId });
+}
+
+export async function completeOpenAiOauth(flowId: string): Promise<OpenAiOauthStatus> {
+  return await invoke<OpenAiOauthStatus>("complete_openai_oauth", { flowId });
+}
+
+export async function cancelOpenAiOauth(flowId: string): Promise<void> {
+  await invoke("cancel_openai_oauth", { flowId });
+}
+
+export async function logoutOpenAiOauth(
+  credentialId = OPENAI_CODEX_CREDENTIAL_ID
+): Promise<void> {
+  await invoke("logout_openai_oauth", { credentialId });
+}
+
+export function createCodexAuthPlaceholder(): string {
+  const header = globalThis.btoa(JSON.stringify({ alg: "none", typ: "JWT" }));
+  const payload = globalThis.btoa(JSON.stringify({
+    "https://api.openai.com/auth": { chatgpt_account_id: "tauri-managed" }
+  }));
+  return `${header}.${payload}.signature`;
+}
+
 async function ensureCredential(settings: AiSettings): Promise<void> {
   if (settings.apiKey.trim()) await storeAiCredential(settings);
 }
@@ -177,6 +321,10 @@ function isThinkingLevel(value: unknown): value is AiSettings["thinkingLevel"] {
 
 function isToolCalling(value: unknown): value is AiSettings["toolCalling"] {
   return value === "unknown" || value === "supported" || value === "unsupported";
+}
+
+function isProviderProfile(value: unknown): value is AiProviderProfile {
+  return value === "deepseek" || value === "openai-compatible" || value === "openai-codex";
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {

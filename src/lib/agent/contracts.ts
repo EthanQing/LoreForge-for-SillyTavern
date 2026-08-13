@@ -6,7 +6,7 @@ import { stableHash } from "./projection";
 
 export interface AiConnectionProfile {
   id: string;
-  kind: "deepseek" | "openai-compatible";
+  kind: "deepseek" | "openai-compatible" | "openai-codex";
   baseUrl: string;
   model: string;
   credentialId: string;

@@ -2,6 +2,8 @@
 mod agent_history;
 #[cfg(feature = "tauri-app")]
 mod ai;
+#[cfg(feature = "tauri-app")]
+mod openai_oauth;
 mod card_schema;
 mod charx;
 #[cfg(feature = "tauri-app")]
@@ -15,7 +17,9 @@ mod validation;
 pub fn run() {
     tauri::Builder::default()
         .manage(ai::AiRuntime::default())
+        .manage(openai_oauth::OpenAiOauthRuntime::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -27,6 +31,7 @@ pub fn run() {
             commands::export_charx,
             commands::import_charx,
             commands::validate_card,
+            commands::export_lorebook_json,
             ai::configure_ai_profile,
             ai::start_ai_http_stream,
             ai::cancel_ai_http_stream,
@@ -34,6 +39,11 @@ pub fn run() {
             ai::ai_credential_status,
             ai::delete_ai_credential,
             ai::fetch_ai_models,
+            openai_oauth::begin_openai_oauth,
+            openai_oauth::complete_openai_oauth,
+            openai_oauth::cancel_openai_oauth,
+            openai_oauth::openai_oauth_status,
+            openai_oauth::logout_openai_oauth,
             agent_history::list_agent_session_history,
             agent_history::list_agent_entries,
             agent_history::save_agent_session,

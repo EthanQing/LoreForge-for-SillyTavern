@@ -1,4 +1,4 @@
-use crate::card_schema::{current_unix_seconds, CharacterCardV3, ExtraFields, LorebookEntry};
+use crate::card_schema::{current_unix_seconds, CharacterCardV3, ExtraFields, Lorebook, LorebookEntry};
 use crate::errors::{CardError, CardResult};
 use serde_json::{Map, Value};
 
@@ -84,9 +84,18 @@ fn strip_inline_image_assets_for_export(card: &mut CharacterCardV3) {
 
 fn normalize_lorebook_for_export(card: &mut CharacterCardV3) {
     if let Some(book) = &mut card.data.character_book {
-        for (index, entry) in book.entries.iter_mut().enumerate() {
-            normalize_lorebook_entry_for_export(entry, index);
-        }
+        normalize_lorebook_in_place(book);
+    }
+}
+
+pub fn normalize_lorebook(mut book: Lorebook) -> Lorebook {
+    normalize_lorebook_in_place(&mut book);
+    book
+}
+
+fn normalize_lorebook_in_place(book: &mut Lorebook) {
+    for (index, entry) in book.entries.iter_mut().enumerate() {
+        normalize_lorebook_entry_for_export(entry, index);
     }
 }
 

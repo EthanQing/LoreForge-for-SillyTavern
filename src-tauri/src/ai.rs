@@ -1,4 +1,5 @@
 use base64::Engine;
+use crate::openai_oauth::{self, OpenAiOauthRuntime};
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use keyring::Entry;
 use reqwest::{redirect::Policy, Client, Method, Url};
@@ -22,6 +23,8 @@ pub struct AiRuntime {
 #[serde(rename_all = "camelCase")]
 pub struct AiProfile {
     pub id: String,
+    #[serde(default = "default_profile_kind")]
+    pub kind: String,
     pub base_url: String,
     #[serde(default)]
     pub allow_insecure_http: bool,
@@ -93,6 +96,7 @@ pub fn configure_ai_profile(state: State<'_, AiRuntime>, profile: AiProfile) -> 
     if profile.id.trim().is_empty() {
         return Err("AI profile id is required.".to_string());
     }
+    validate_profile(&profile)?;
     state
         .profiles
         .lock()
@@ -105,10 +109,12 @@ pub fn configure_ai_profile(state: State<'_, AiRuntime>, profile: AiProfile) -> 
 pub async fn start_ai_http_stream(
     app: AppHandle,
     state: State<'_, AiRuntime>,
+    oauth_state: State<'_, OpenAiOauthRuntime>,
     request: AiHttpStreamRequest,
 ) -> Result<AiHttpStreamStart, String> {
     let profile = profile_for_request(&state, &request)?;
     let url = validate_endpoint(&request.url, request.allow_insecure_http || profile.allow_insecure_http)?;
+    validate_request_url(&profile, &url)?;
     let method = Method::from_bytes(request.method.as_bytes()).map_err(|_| "Invalid AI HTTP method.".to_string())?;
     let body = request.body.clone().unwrap_or_default();
     if body.len() > MAX_REQUEST_BODY_BYTES {
@@ -123,7 +129,7 @@ pub async fn start_ai_http_stream(
         .insert(request.request_id.clone(), abort_handle);
 
     let client = build_client(url.origin().ascii_serialization())?;
-    let secret = read_credential(profile.credential_id.as_deref())?;
+    let auth = resolve_request_auth(&profile, &oauth_state).await?;
     let request_id = request.request_id.clone();
     let request_headers = sanitize_headers(&request.headers)?;
     let request_url = url.to_string();
@@ -132,8 +138,13 @@ pub async fn start_ai_http_stream(
     let app_for_task = app.clone();
     let send_future = async move {
         let mut builder = client.request(method, request_url).headers(request_headers);
-        if !secret.is_empty() {
-            builder = builder.bearer_auth(secret);
+        if !auth.access_token.is_empty() {
+            builder = builder.bearer_auth(&auth.access_token);
+        }
+        if let Some(account_id) = &auth.account_id {
+            builder = builder
+                .header("chatgpt-account-id", account_id)
+                .header("originator", "pi");
         }
         if !body.is_empty() {
             builder = builder.body(body);
@@ -228,6 +239,7 @@ pub fn delete_ai_credential(credential_id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn fetch_ai_models(
     state: State<'_, AiRuntime>,
+    oauth_state: State<'_, OpenAiOauthRuntime>,
     profile_id: String,
 ) -> Result<Vec<AiModel>, String> {
     let profile = state
@@ -237,13 +249,17 @@ pub async fn fetch_ai_models(
         .get(&profile_id)
         .cloned()
         .ok_or_else(|| "AI profile is not configured.".to_string())?;
-    let base = validate_endpoint(&profile.base_url, profile.allow_insecure_http)?;
+    if profile.kind == "openai-codex" {
+        return Err("OpenAI Codex uses the bundled model catalog.".to_string());
+    }
+    let base = normalized_base_url(&profile.base_url, profile.allow_insecure_http)?;
     let url = base.join("models").map_err(|_| "Invalid AI models endpoint.".to_string())?;
+    validate_request_url(&profile, &url)?;
     let client = build_client(url.origin().ascii_serialization())?;
-    let secret = read_credential(profile.credential_id.as_deref())?;
+    let auth = resolve_request_auth(&profile, &oauth_state).await?;
     let mut request = client.get(url);
-    if !secret.is_empty() {
-        request = request.bearer_auth(secret);
+    if !auth.access_token.is_empty() {
+        request = request.bearer_auth(auth.access_token);
     }
     let response = request.send().await.map_err(|error| format!("AI models request failed: {error}"))?;
     if !response.status().is_success() {
@@ -314,10 +330,38 @@ fn read_credential(credential_id: Option<&str>) -> Result<String, String> {
     }
 }
 
+struct RequestAuth {
+    access_token: String,
+    account_id: Option<String>,
+}
+
+async fn resolve_request_auth(
+    profile: &AiProfile,
+    oauth_state: &OpenAiOauthRuntime,
+) -> Result<RequestAuth, String> {
+    if profile.kind == "openai-codex" {
+        let credential_id = profile
+            .credential_id
+            .as_deref()
+            .ok_or_else(|| "OpenAI OAuth credential id is required.".to_string())?;
+        let auth = openai_oauth::request_auth(oauth_state, credential_id).await?;
+        return Ok(RequestAuth {
+            access_token: auth.access_token,
+            account_id: Some(auth.account_id),
+        });
+    }
+    Ok(RequestAuth {
+        access_token: read_credential(profile.credential_id.as_deref())?,
+        account_id: None,
+    })
+}
+
 fn sanitize_headers(headers: &HashMap<String, String>) -> Result<reqwest::header::HeaderMap, String> {
     let mut output = reqwest::header::HeaderMap::new();
     for (name, value) in headers {
         if name.eq_ignore_ascii_case("authorization")
+            || name.eq_ignore_ascii_case("chatgpt-account-id")
+            || name.eq_ignore_ascii_case("originator")
             || name.eq_ignore_ascii_case("x-card-agent-profile")
             || name.eq_ignore_ascii_case("x-card-agent-credential")
         {
@@ -356,6 +400,51 @@ fn validate_endpoint(value: &str, allow_insecure_http: bool) -> Result<Url, Stri
         "http" => Err("HTTP is only allowed for loopback endpoints unless explicitly enabled.".to_string()),
         _ => Err("AI URL must use HTTPS, or explicitly enabled loopback HTTP.".to_string()),
     }
+}
+
+fn normalized_base_url(value: &str, allow_insecure_http: bool) -> Result<Url, String> {
+    let mut base = validate_endpoint(value, allow_insecure_http)?;
+    if !base.path().ends_with('/') {
+        let path = format!("{}/", base.path());
+        base.set_path(&path);
+    }
+    Ok(base)
+}
+
+fn validate_profile(profile: &AiProfile) -> Result<(), String> {
+    if !matches!(profile.kind.as_str(), "deepseek" | "openai-compatible" | "openai-codex") {
+        return Err("AI profile kind is not supported.".to_string());
+    }
+    if profile.kind == "openai-codex" {
+        let url = validate_endpoint(&profile.base_url, false)?;
+        if url.scheme() != "https"
+            || url.host_str() != Some("chatgpt.com")
+            || url.path().trim_end_matches('/') != "/backend-api"
+        {
+            return Err("OpenAI Codex must use the fixed ChatGPT backend endpoint.".to_string());
+        }
+        if profile.allow_insecure_http {
+            return Err("OpenAI Codex does not allow insecure HTTP.".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn validate_request_url(profile: &AiProfile, request_url: &Url) -> Result<(), String> {
+    let base = validate_endpoint(&profile.base_url, profile.allow_insecure_http)?;
+    if request_url.origin() != base.origin() {
+        return Err("AI request URL must use the configured profile origin.".to_string());
+    }
+    if profile.kind == "openai-codex"
+        && request_url.path().trim_end_matches('/') != "/backend-api/codex/responses"
+    {
+        return Err("OpenAI Codex request path is not allowed.".to_string());
+    }
+    Ok(())
+}
+
+fn default_profile_kind() -> String {
+    "openai-compatible".to_string()
 }
 
 fn is_loopback(url: &Url) -> bool {
@@ -400,7 +489,10 @@ fn emit_http_event(app: &AppHandle, request_id: String, event: &str, data: Optio
 
 #[cfg(test)]
 mod tests {
-    use super::{is_loopback, normalize_credential_id, validate_endpoint, Url};
+    use super::{
+        is_loopback, normalize_credential_id, normalized_base_url, validate_endpoint,
+        validate_profile, validate_request_url, AiProfile, Url,
+    };
 
     #[test]
     fn rejects_remote_http_by_default() {
@@ -417,5 +509,33 @@ mod tests {
     fn validates_credential_ids() {
         assert!(normalize_credential_id("profile-key").is_ok());
         assert!(normalize_credential_id("../secret").is_err());
+    }
+
+    #[test]
+    fn appends_models_to_the_configured_v1_path() {
+        let base = normalized_base_url("https://api.openai.com/v1", false).unwrap();
+        assert_eq!(base.join("models").unwrap().as_str(), "https://api.openai.com/v1/models");
+    }
+
+    #[test]
+    fn restricts_openai_codex_to_its_fixed_endpoint() {
+        let profile = AiProfile {
+            id: "openai-codex".to_string(),
+            kind: "openai-codex".to_string(),
+            base_url: "https://chatgpt.com/backend-api".to_string(),
+            allow_insecure_http: false,
+            credential_id: Some("openai-codex-oauth".to_string()),
+        };
+        assert!(validate_profile(&profile).is_ok());
+        assert!(validate_request_url(
+            &profile,
+            &Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap()
+        )
+        .is_ok());
+        assert!(validate_request_url(
+            &profile,
+            &Url::parse("https://example.com/backend-api/codex/responses").unwrap()
+        )
+        .is_err());
     }
 }
