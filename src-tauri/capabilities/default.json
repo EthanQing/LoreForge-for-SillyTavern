@@ -8,7 +8,13 @@
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://auth.openai.com/oauth/authorize*" },
+        { "url": "https://auth.openai.com/codex/device*" }
+      ]
+    },
     "process:default",
     "updater:default"
   ]
