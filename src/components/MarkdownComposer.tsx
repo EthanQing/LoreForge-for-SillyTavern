@@ -2,7 +2,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { Prec, RangeSetBuilder } from "@codemirror/state";
 import CodeMirror, { type ReactCodeMirrorProps } from "@uiw/react-codemirror";
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from "react";
-import { Decoration, EditorView, keymap, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import { Decoration, EditorView, keymap, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { getMarkdownEnterResult } from "./markdownInput";
 
 export interface MarkdownComposerHandle {
@@ -31,17 +31,59 @@ interface PendingDecoration {
 
 const mentionPattern = /@(?:(?:"(?:\\.|[^"\\\n])*"(?:#\d+)?)|(?:字段|开场白)\/[^\s，。！？、；：,.!?;:]+|整张卡片|基础信息|提示词|开场白|世界书)/gu;
 
+class MentionWidget extends WidgetType {
+  constructor(private readonly token: string) {
+    super();
+  }
+
+  eq(widget: WidgetType): boolean {
+    return widget instanceof MentionWidget && widget.token === this.token;
+  }
+
+  toDOM(): HTMLElement {
+    const element = document.createElement("span");
+    element.className = "cm-live-mention";
+    element.textContent = getMentionLabel(this.token);
+    element.title = this.token;
+    element.setAttribute("aria-label", `已选择目标：${getMentionLabel(this.token)}`);
+    element.contentEditable = "false";
+    return element;
+  }
+
+  ignoreEvent(event: Event): boolean {
+    return event.type !== "mousedown";
+  }
+}
+
+function getMentionLabel(token: string): string {
+  const quoted = token.match(/^@"((?:\\.|[^"\\])*)"(#\d+)?$/u);
+  if (quoted) {
+    return `${quoted[1].replace(/\\(["\\])/gu, "$1")}${quoted[2] ?? ""}`;
+  }
+  return token.startsWith("@") ? token.slice(1) : token;
+}
+
+interface LiveMarkdownDecorationState {
+  decorations: DecorationSet;
+  atomicRanges: DecorationSet;
+}
+
 const liveMarkdownPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    atomicRanges: DecorationSet;
 
     constructor(view: EditorView) {
-      this.decorations = buildLiveMarkdownDecorations(view);
+      const next = buildLiveMarkdownDecorations(view);
+      this.decorations = next.decorations;
+      this.atomicRanges = next.atomicRanges;
     }
 
     update(update: ViewUpdate) {
       if (update.docChanged || update.selectionSet || update.viewportChanged) {
-        this.decorations = buildLiveMarkdownDecorations(update.view);
+        const next = buildLiveMarkdownDecorations(update.view);
+        this.decorations = next.decorations;
+        this.atomicRanges = next.atomicRanges;
       }
     }
   },
@@ -78,6 +120,7 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
     EditorView.lineWrapping,
     markdown(),
     liveMarkdownPlugin,
+    EditorView.atomicRanges.of((view) => view.plugin(liveMarkdownPlugin)?.atomicRanges ?? Decoration.none),
     Prec.high(keymap.of([{ key: "Enter", run: continueMarkdownLine }])),
     Prec.high(EditorView.domEventHandlers({
       keydown: (event, view) => {
@@ -230,7 +273,7 @@ function findMentionRangesAtLine(view: EditorView, lineNumber: number): MentionR
   });
 }
 
-function buildLiveMarkdownDecorations(view: EditorView): DecorationSet {
+function buildLiveMarkdownDecorations(view: EditorView): LiveMarkdownDecorationState {
   const doc = view.state.doc;
   const activeLines = new Set<number>();
   for (const selection of view.state.selection.ranges) {
@@ -239,18 +282,26 @@ function buildLiveMarkdownDecorations(view: EditorView): DecorationSet {
   }
 
   const pending: PendingDecoration[] = [];
+  const pendingAtomicRanges: PendingDecoration[] = [];
   const visitedLines = new Set<number>();
   for (const range of view.visibleRanges) {
     let line = doc.lineAt(range.from);
     const lastLineNumber = doc.lineAt(range.to).number;
     while (line.number <= lastLineNumber && !visitedLines.has(line.number)) {
       visitedLines.add(line.number);
-      addLineDecorations(pending, line.from, line.text, activeLines.has(line.number));
+      addLineDecorations(pending, pendingAtomicRanges, line.from, line.text, activeLines.has(line.number));
       if (line.to >= doc.length) break;
       line = doc.line(line.number + 1);
     }
   }
 
+  return {
+    decorations: finishDecorations(pending),
+    atomicRanges: finishDecorations(pendingAtomicRanges)
+  };
+}
+
+function finishDecorations(pending: PendingDecoration[]): DecorationSet {
   pending.sort((left, right) => left.from - right.from || left.to - right.to);
   const builder = new RangeSetBuilder<Decoration>();
   for (const item of pending) {
@@ -259,8 +310,14 @@ function buildLiveMarkdownDecorations(view: EditorView): DecorationSet {
   return builder.finish();
 }
 
-function addLineDecorations(pending: PendingDecoration[], lineFrom: number, text: string, active: boolean): void {
-  addMentionDecorations(pending, lineFrom, text);
+function addLineDecorations(
+  pending: PendingDecoration[],
+  pendingAtomicRanges: PendingDecoration[],
+  lineFrom: number,
+  text: string,
+  active: boolean
+): void {
+  addMentionDecorations(pending, pendingAtomicRanges, lineFrom, text);
 
   const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)(.*)$/);
   if (heading) {
@@ -310,21 +367,22 @@ function addLineDecorations(pending: PendingDecoration[], lineFrom: number, text
   }
 }
 
-function addMentionDecorations(pending: PendingDecoration[], lineFrom: number, text: string): void {
+function addMentionDecorations(
+  pending: PendingDecoration[],
+  pendingAtomicRanges: PendingDecoration[],
+  lineFrom: number,
+  text: string
+): void {
   for (const match of text.matchAll(mentionPattern)) {
     const index = match.index ?? 0;
     const tokenStart = lineFrom + index;
     const tokenEnd = tokenStart + match[0].length;
-    addMentionMark(pending, tokenStart, tokenEnd, match[0]);
-
-    const openingLength = match[0].startsWith('@"') ? 2 : 1;
-    addReplace(pending, tokenStart, tokenStart + openingLength);
-    if (openingLength === 2) {
-      const closingQuote = match[0].lastIndexOf('"');
-      if (closingQuote >= openingLength) {
-        addReplace(pending, tokenStart + closingQuote, tokenStart + closingQuote + 1);
-      }
-    }
+    const decoration = Decoration.replace({
+      widget: new MentionWidget(match[0]),
+      inclusive: false
+    });
+    pending.push({ from: tokenStart, to: tokenEnd, decoration });
+    pendingAtomicRanges.push({ from: tokenStart, to: tokenEnd, decoration });
   }
 }
 
@@ -365,17 +423,6 @@ function addDelimitedDecorations(
 
 function addMark(pending: PendingDecoration[], from: number, to: number, className: string): void {
   pending.push({ from, to, decoration: Decoration.mark({ class: className }) });
-}
-
-function addMentionMark(pending: PendingDecoration[], from: number, to: number, token: string): void {
-  pending.push({
-    from,
-    to,
-    decoration: Decoration.mark({
-      class: "cm-live-mention",
-      attributes: { title: token }
-    })
-  });
 }
 
 function addReplace(pending: PendingDecoration[], from: number, to: number): void {

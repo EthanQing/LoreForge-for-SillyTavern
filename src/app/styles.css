@@ -3672,6 +3672,7 @@ select.input {
 
 .agent-composer .cm-live-mention {
   box-sizing: border-box;
+  cursor: default;
   display: inline-block;
   max-width: min(28ch, 100%);
   overflow: hidden;
@@ -3684,6 +3685,7 @@ select.input {
   font-weight: 600;
   line-height: 1.45;
   text-overflow: ellipsis;
+  user-select: none;
   vertical-align: bottom;
   white-space: nowrap;
 }
