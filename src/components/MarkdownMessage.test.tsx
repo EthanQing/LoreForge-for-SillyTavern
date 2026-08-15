@@ -29,4 +29,13 @@ describe("MarkdownMessage", () => {
     expect(markup).toContain('class="language-json"');
     expect(markup).toContain("{&quot;name&quot;:&quot;樱井优香&quot;}");
   });
+
+  it("renders Agent mentions as compact non-editable tokens", () => {
+    const markup = renderToStaticMarkup(<MarkdownMessage text={'请查看 @"世界观规则"#2 和 @世界书。'} />);
+
+    expect(markup).toContain('class="markdown-mention"');
+    expect(markup).toContain('aria-label="已选择目标：世界观规则#2"');
+    expect(markup).toContain('contentEditable="false">世界观规则#2</span>');
+    expect(markup).toContain('contentEditable="false">世界书</span>');
+  });
 });

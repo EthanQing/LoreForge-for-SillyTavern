@@ -4,6 +4,7 @@ import CodeMirror, { type ReactCodeMirrorProps } from "@uiw/react-codemirror";
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from "react";
 import { Decoration, EditorView, keymap, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { getMarkdownEnterResult } from "./markdownInput";
+import { getMentionDisplayLabel, mentionPattern } from "./mentionTokens";
 
 export interface MarkdownComposerHandle {
   focus: () => void;
@@ -29,8 +30,6 @@ interface PendingDecoration {
   decoration: Decoration;
 }
 
-const mentionPattern = /@(?:(?:"(?:\\.|[^"\\\n])*"(?:#\d+)?)|(?:字段|开场白)\/[^\s，。！？、；：,.!?;:]+|整张卡片|基础信息|提示词|开场白|世界书)/gu;
-
 class MentionWidget extends WidgetType {
   constructor(private readonly token: string) {
     super();
@@ -43,9 +42,9 @@ class MentionWidget extends WidgetType {
   toDOM(): HTMLElement {
     const element = document.createElement("span");
     element.className = "cm-live-mention";
-    element.textContent = getMentionLabel(this.token);
+    element.textContent = getMentionDisplayLabel(this.token);
     element.title = this.token;
-    element.setAttribute("aria-label", `已选择目标：${getMentionLabel(this.token)}`);
+    element.setAttribute("aria-label", `已选择目标：${getMentionDisplayLabel(this.token)}`);
     element.contentEditable = "false";
     return element;
   }
@@ -53,14 +52,6 @@ class MentionWidget extends WidgetType {
   ignoreEvent(event: Event): boolean {
     return event.type !== "mousedown";
   }
-}
-
-function getMentionLabel(token: string): string {
-  const quoted = token.match(/^@"((?:\\.|[^"\\])*)"(#\d+)?$/u);
-  if (quoted) {
-    return `${quoted[1].replace(/\\(["\\])/gu, "$1")}${quoted[2] ?? ""}`;
-  }
-  return token.startsWith("@") ? token.slice(1) : token;
 }
 
 interface LiveMarkdownDecorationState {

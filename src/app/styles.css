@@ -3670,7 +3670,8 @@ select.input {
   opacity: 1;
 }
 
-.agent-composer .cm-live-mention {
+.agent-composer .cm-live-mention,
+.card-workshop-shell .markdown-message .markdown-mention {
   box-sizing: border-box;
   cursor: default;
   display: inline-block;

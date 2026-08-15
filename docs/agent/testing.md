@@ -16,7 +16,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - `pnpm tauri dev` 是完整桌面开发命令；Tauri 配置会先运行 `pnpm dev`。
 - Rust 测试位于 `src-tauri/src` 中的模块内，可通过指定 Cargo manifest 从仓库根目录运行。
 - `src/components/markdownInput.test.ts` 覆盖 Agent Markdown 输入框的有序列表、无序列表、引用续写和空列表退出规则。
-- `src/features/agent-studio/agentMention.test.ts` 覆盖 @ token 的格式、重复目标和候选范围；Agent 输入框手工检查时还应确认 token 显示为不可编辑方块、光标不能进入其内部，Backspace/Delete 会原子删除完整 token。
+- `src/features/agent-studio/agentMention.test.ts` 覆盖 @ token 的格式、重复目标和候选范围；Agent 输入框手工检查时还应确认 token 显示为不可编辑方块、光标不能进入其内部，Backspace/Delete 会原子删除完整 token，并确认发送后的用户消息仍以相同 token 样式显示。
 
 未在 `package.json`、根配置或 CI 中发现独立 lint、format、`typecheck` 脚本，也未发现单独的 Vitest 配置文件。不要将其写成项目命令。
 

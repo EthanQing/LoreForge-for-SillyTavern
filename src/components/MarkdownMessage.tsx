@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { getMentionDisplayLabel, mentionPattern } from "./mentionTokens";
 
 interface MarkdownMessageProps {
   text: string;
@@ -7,7 +8,16 @@ interface MarkdownMessageProps {
 
 type TableAlignment = "left" | "center" | "right";
 
-const INLINE_TOKEN_PATTERN = /(!?\[[^\]]+\]\([^\n]*?\)|\*\*[\s\S]+?\*\*|__[\s\S]+?__|~~[\s\S]+?~~|`[^`\n]+`|\*[^*\n]+\*|_[^_\n]+_)/g;
+const INLINE_TOKEN_PATTERN = new RegExp([
+  mentionPattern.source,
+  "!?\\[[^\\]]+\\]\\([^\\n]*?\\)",
+  "\\*\\*[\\s\\S]+?\\*\\*",
+  "__[\\s\\S]+?__",
+  "~~[\\s\\S]+?~~",
+  "`[^`\\n]+`",
+  "\\*[^*\\n]+\\*",
+  "_[^_\\n]+_"
+].join("|"), "gu");
 
 export function MarkdownMessage({ text, className }: MarkdownMessageProps): ReactNode {
   const classes = ["markdown-message", className].filter(Boolean).join(" ");
@@ -173,7 +183,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  const pattern = new RegExp(INLINE_TOKEN_PATTERN.source, "g");
+  const pattern = new RegExp(INLINE_TOKEN_PATTERN.source, "gu");
 
   while ((match = pattern.exec(text))) {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
@@ -185,6 +195,10 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
 }
 
 function renderInlineToken(token: string, key: string): ReactNode {
+  if (token.startsWith("@")) {
+    const label = getMentionDisplayLabel(token);
+    return <span className="markdown-mention" title={token} aria-label={`已选择目标：${label}`} contentEditable={false} key={key}>{label}</span>;
+  }
   if (token.startsWith("[") || token.startsWith("![")) {
     const link = parseLinkToken(token);
     if (!link) return token;
