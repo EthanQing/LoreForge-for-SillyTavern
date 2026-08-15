@@ -3670,6 +3670,24 @@ select.input {
   opacity: 1;
 }
 
+.agent-composer .cm-live-mention {
+  box-sizing: border-box;
+  display: inline-block;
+  max-width: min(28ch, 100%);
+  overflow: hidden;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--copper) 65%, var(--workshop-line));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--copper) 12%, var(--iron));
+  color: var(--copper);
+  font-size: 0.94em;
+  font-weight: 600;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 .card-workshop-shell .agent-composer .cm-editor.cm-focused {
   outline: 1px solid color-mix(in srgb, var(--copper) 72%, transparent);
   outline-offset: -1px;

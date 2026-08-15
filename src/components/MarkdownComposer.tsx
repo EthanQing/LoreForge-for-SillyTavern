@@ -29,6 +29,8 @@ interface PendingDecoration {
   decoration: Decoration;
 }
 
+const mentionPattern = /@(?:(?:"(?:\\.|[^"\\\n])*"(?:#\d+)?)|(?:字段|开场白)\/[^\s，。！？、；：,.!?;:]+|整张卡片|基础信息|提示词|开场白|世界书)/gu;
+
 const liveMarkdownPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
@@ -181,6 +183,8 @@ function buildLiveMarkdownDecorations(view: EditorView): DecorationSet {
 }
 
 function addLineDecorations(pending: PendingDecoration[], lineFrom: number, text: string, active: boolean): void {
+  addMentionDecorations(pending, lineFrom, text);
+
   const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)(.*)$/);
   if (heading) {
     const contentStart = heading[1].length + heading[2].length + heading[3].length;
@@ -229,6 +233,13 @@ function addLineDecorations(pending: PendingDecoration[], lineFrom: number, text
   }
 }
 
+function addMentionDecorations(pending: PendingDecoration[], lineFrom: number, text: string): void {
+  for (const match of text.matchAll(mentionPattern)) {
+    const index = match.index ?? 0;
+    addMentionMark(pending, lineFrom + index, lineFrom + index + match[0].length, match[0]);
+  }
+}
+
 function addSimpleEmphasisDecorations(pending: PendingDecoration[], lineFrom: number, text: string, active: boolean, pattern: RegExp): void {
   for (const match of text.matchAll(pattern)) {
     const index = match.index ?? 0;
@@ -266,6 +277,17 @@ function addDelimitedDecorations(
 
 function addMark(pending: PendingDecoration[], from: number, to: number, className: string): void {
   pending.push({ from, to, decoration: Decoration.mark({ class: className }) });
+}
+
+function addMentionMark(pending: PendingDecoration[], from: number, to: number, token: string): void {
+  pending.push({
+    from,
+    to,
+    decoration: Decoration.mark({
+      class: "cm-live-mention",
+      attributes: { title: token }
+    })
+  });
 }
 
 function addReplace(pending: PendingDecoration[], from: number, to: number): void {
