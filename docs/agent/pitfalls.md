@@ -10,7 +10,7 @@ OpenAI-compatible 消息中的 `tool` 必须紧跟声明对应 `tool_calls` 的 
 
 校验报告中的数组路径（例如世界书条目和资源索引）只对生成报告时的卡片顺序有效。Rust 复检结果在卡片 revision 改变后必须清除；导航前应重新基于当前 DOM 的 `data-validation-path` 查找目标，不要缓存节点或索引。
 
-世界书条目使用懒挂载折叠内容。定位 `data.character_book.entries.{index}.{field}` 时，先打开当前索引条目，再等待具体字段挂载；具体字段不存在时只能聚焦条目或校验项本身。重排和删除条目后继续依赖当前索引，不要复用旧的 DOM 引用。
+世界书条目使用懒挂载折叠内容。定位 `data.character_book.entries.{index}.{field}` 时，先打开当前索引条目，再等待具体字段挂载；具体字段不存在时只能聚焦条目或校验项本身。世界书预览按 `insertion_order` 排序，但底层数组索引仍是 Agent 与校验路径的来源；手动排序不得重排数组，并应在同值顺序变化时写入 `extensions.display_index`。删除条目后继续依赖当前索引，不要复用旧的 DOM 引用。
 
 ## 编辑台响应式断点看容器宽度
 

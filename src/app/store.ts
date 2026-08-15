@@ -180,17 +180,69 @@ function touch(card: CharacterCardV3): CharacterCardV3 {
   };
 }
 
+function getLorebookEntryDisplayIndex(entry: LorebookEntry, fallback: number): number {
+  const displayIndex = entry.extensions?.display_index;
+  return typeof displayIndex === "number" && Number.isFinite(displayIndex) ? displayIndex : fallback;
+}
+
+export function getLorebookEntryIndexesByInsertionOrder(entries: readonly LorebookEntry[]): number[] {
+  return entries.map((_, index) => index).sort((left, right) => {
+    const orderDifference = entries[left].insertion_order - entries[right].insertion_order;
+    if (orderDifference) {
+      return orderDifference;
+    }
+    const displayIndexDifference = getLorebookEntryDisplayIndex(entries[left], left) - getLorebookEntryDisplayIndex(entries[right], right);
+    return displayIndexDifference || left - right;
+  });
+}
+
 export function reorderLorebookEntriesForDisplay(entries: LorebookEntry[], from: number, to: number): LorebookEntry[] {
   if (from === to || from < 0 || to < 0 || from >= entries.length || to >= entries.length) {
     return entries;
   }
-  const movedEntries = [...entries];
-  const [moved] = movedEntries.splice(from, 1);
-  if (!moved) {
+  const displayIndexes = getLorebookEntryIndexesByInsertionOrder(entries);
+  const fromDisplayIndex = displayIndexes.indexOf(from);
+  const toDisplayIndex = displayIndexes.indexOf(to);
+  if (fromDisplayIndex < 0 || toDisplayIndex < 0) {
     return entries;
   }
-  movedEntries.splice(to, 0, moved);
-  return movedEntries;
+  const nextDisplayIndexes = [...displayIndexes];
+  const [movedIndex] = nextDisplayIndexes.splice(fromDisplayIndex, 1);
+  if (movedIndex === undefined) {
+    return entries;
+  }
+  nextDisplayIndexes.splice(toDisplayIndex, 0, movedIndex);
+
+  const insertionOrders = displayIndexes.map((index) => entries[index].insertion_order);
+  const duplicateInsertionOrders = new Set<number>();
+  const seenInsertionOrders = new Set<number>();
+  for (const insertionOrder of insertionOrders) {
+    if (seenInsertionOrders.has(insertionOrder)) {
+      duplicateInsertionOrders.add(insertionOrder);
+    }
+    seenInsertionOrders.add(insertionOrder);
+  }
+  const nextSlots = new Map(nextDisplayIndexes.map((index, displayIndex) => [
+    index,
+    { insertionOrder: insertionOrders[displayIndex], displayIndex }
+  ]));
+
+  return entries.map((entry, index) => {
+    const nextSlot = nextSlots.get(index);
+    if (!nextSlot) {
+      return entry;
+    }
+    const hasDuplicateInsertionOrder = duplicateInsertionOrders.has(nextSlot.insertionOrder);
+    const needsDisplayIndex = hasDuplicateInsertionOrder && entry.extensions.display_index !== nextSlot.displayIndex;
+    if (entry.insertion_order === nextSlot.insertionOrder && !needsDisplayIndex) {
+      return entry;
+    }
+    return {
+      ...entry,
+      insertion_order: nextSlot.insertionOrder,
+      extensions: needsDisplayIndex ? { ...entry.extensions, display_index: nextSlot.displayIndex } : entry.extensions
+    };
+  });
 }
 
 function createWorkspaceId(path?: string | null): string {

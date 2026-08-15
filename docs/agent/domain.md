@@ -4,7 +4,7 @@
 
 核心前端类型和 Zod schema 位于 `src/lib/schema.ts`：`CharacterCardV3`、卡片数据、`Lorebook`、`LorebookEntry`、资源和校验报告。schema 使用 passthrough 保留未知字段；编辑或迁移既有数据时不能无意丢失未知顶层字段或 `extensions` 字段。
 
-世界书位于 `card.data.character_book`。条目显示顺序是数组顺序，`insertion_order` 是独立的领域字段，重排界面条目时不应重写它。编辑器使用 `comment` 作为条目标题/memo；导出兼容层在 `src/lib/lorebookCompat.ts` 处理 SillyTavern 字段映射。
+世界书位于 `card.data.character_book`。编辑器的条目摘要和展开内容按 `insertion_order` 升序显示；相同值按 `extensions.display_index`（缺失时按底层数组位置）稳定排列。底层数组继续作为校验路径和 Agent 条目索引的来源；手动拖拽、上移或下移会重分配现有的 `insertion_order` 排序槽位，并在同值时同步 `extensions.display_index`，而不重排数组。编辑器使用 `comment` 作为条目标题/memo；导出兼容层在 `src/lib/lorebookCompat.ts` 处理 SillyTavern 字段映射。
 
 ## 卡片状态与持久化
 

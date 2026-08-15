@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Download, GripVertical, ListChecks, Plus, Sparkles, Trash2, Upload } from "lucide-react";
-import { type ChangeEvent, type DragEvent, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type DragEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectActions } from "../../app/useProjectActions";
-import { useCardStore } from "../../app/store";
+import { getLorebookEntryIndexesByInsertionOrder, useCardStore } from "../../app/store";
 import { AiFieldAssistant } from "../../components/AiFieldAssistant";
 import { Button } from "../../components/Button";
 import { ChipInput } from "../../components/ChipInput";
@@ -177,32 +177,6 @@ function summarizeEntryContent(content: string): string {
   return preview.length > 120 ? `${preview.slice(0, 120)}...` : preview;
 }
 
-function remapOpenEntriesAfterMove(openEntries: Record<number, boolean>, from: number, to: number): Record<number, boolean> {
-  const nextEntries: Record<number, boolean> = {};
-  const movedEntryOpen = openEntries[from];
-
-  for (const [rawIndex, isOpen] of Object.entries(openEntries)) {
-    const index = Number(rawIndex);
-    if (!Number.isInteger(index) || index === from) {
-      continue;
-    }
-
-    if (from < to && index > from && index <= to) {
-      nextEntries[index - 1] = isOpen;
-    } else if (from > to && index >= to && index < from) {
-      nextEntries[index + 1] = isOpen;
-    } else {
-      nextEntries[index] = isOpen;
-    }
-  }
-
-  if (movedEntryOpen !== undefined) {
-    nextEntries[to] = movedEntryOpen;
-  }
-
-  return nextEntries;
-}
-
 function remapOpenEntriesAfterRemove(openEntries: Record<number, boolean>, removedIndex: number): Record<number, boolean> {
   const nextEntries: Record<number, boolean> = {};
 
@@ -239,9 +213,12 @@ export function LorebookPanel() {
   const [draggedEntryIndex, setDraggedEntryIndex] = useState<number | null>(null);
   const [dragOverEntryIndex, setDragOverEntryIndex] = useState<number | null>(null);
   const book = card.data.character_book;
+  const displayEntryIndexes = useMemo(
+    () => book ? getLorebookEntryIndexesByInsertionOrder(book.entries) : [],
+    [book]
+  );
 
   const moveLorebookEntry = (from: number, to: number) => {
-    setOpenEntries((current) => remapOpenEntriesAfterMove(current, from, to));
     reorderLorebookEntry(from, to);
   };
 
@@ -435,19 +412,30 @@ export function LorebookPanel() {
       return undefined;
     }
 
-    const unregisters = book.entries.map((entry, index) => {
-      const entryTitle = deriveLorebookEntryComment(entry, index) || t("lorebook.entryNumber", { index: index + 1 });
+    const unregisters = displayEntryIndexes.map((index, displayIndex) => {
+      const entry = book.entries[index];
+      const previousIndex = displayEntryIndexes[displayIndex - 1];
+      const nextIndex = displayEntryIndexes[displayIndex + 1];
+      const entryTitle = deriveLorebookEntryComment(entry, displayIndex) || t("lorebook.entryNumber", { index: displayIndex + 1 });
       return registerContextMenuTarget(`${LOREBOOK_ENTRY_CONTEXT_ID_PREFIX}${index}`, () => ({
         kind: "lorebook-entry",
         title: entryTitle,
         index,
         isOpen: openEntries[index] ?? false,
         isEnabled: entry.enabled !== false,
-        canMoveUp: index > 0,
-        canMoveDown: index < book.entries.length - 1,
+        canMoveUp: previousIndex !== undefined,
+        canMoveDown: nextIndex !== undefined,
         setOpen: (open) => setLorebookEntryOpen(index, open),
-        moveUp: () => moveLorebookEntry(index, index - 1),
-        moveDown: () => moveLorebookEntry(index, index + 1),
+        moveUp: () => {
+          if (previousIndex !== undefined) {
+            moveLorebookEntry(index, previousIndex);
+          }
+        },
+        moveDown: () => {
+          if (nextIndex !== undefined) {
+            moveLorebookEntry(index, nextIndex);
+          }
+        },
         toggleEnabled: () => updateLorebookEntry(index, (item) => ({ ...item, enabled: item.enabled === false })),
         copyJson: () => copyArbitraryText(JSON.stringify(entry, null, 2)),
         deleteEntry: () => deleteLorebookEntry(index)
@@ -455,7 +443,7 @@ export function LorebookPanel() {
     });
 
     return () => unregisters.forEach((unregister) => unregister());
-  }, [book, copyArbitraryText, openEntries, t]);
+  }, [book, copyArbitraryText, displayEntryIndexes, openEntries, t]);
 
   if (!book) {
     entryRefs.current.length = 0;
@@ -573,14 +561,17 @@ export function LorebookPanel() {
         <span>{t("lorebook.recursiveScanning")}</span>
       </label>
       <div className="stack" data-validation-path="data.character_book.entries">
-        {book.entries.map((entry, index) => {
-          const entryTitle = deriveLorebookEntryComment(entry, index) || t("lorebook.entryNumber", { index: index + 1 });
+        {displayEntryIndexes.map((index, displayIndex) => {
+          const entry = book.entries[index];
+          const previousIndex = displayEntryIndexes[displayIndex - 1];
+          const nextIndex = displayEntryIndexes[displayIndex + 1];
+          const entryTitle = deriveLorebookEntryComment(entry, displayIndex) || t("lorebook.entryNumber", { index: displayIndex + 1 });
           const isOpen = openEntries[index] ?? false;
           const entryKeys = summarizeEntryKeys(entry.keys, t("lorebook.noKeys"));
           const entryPreview = isOpen ? "" : summarizeEntryContent(entry.content);
           return (
             <Collapsible
-              key={`${entry.insertion_order}-${index}`}
+              key={index}
               rootRef={(element) => {
                 entryRefs.current[index] = element;
               }}
@@ -642,14 +633,22 @@ export function LorebookPanel() {
                 <Button
                   aria-label={t("common.moveUp")}
                   icon={<ArrowUp size={16} />}
-                  disabled={index === 0}
-                  onClick={() => moveLorebookEntry(index, index - 1)}
+                  disabled={previousIndex === undefined}
+                  onClick={() => {
+                    if (previousIndex !== undefined) {
+                      moveLorebookEntry(index, previousIndex);
+                    }
+                  }}
                 />
                 <Button
                   aria-label={t("common.moveDown")}
                   icon={<ArrowDown size={16} />}
-                  disabled={index === book.entries.length - 1}
-                  onClick={() => moveLorebookEntry(index, index + 1)}
+                  disabled={nextIndex === undefined}
+                  onClick={() => {
+                    if (nextIndex !== undefined) {
+                      moveLorebookEntry(index, nextIndex);
+                    }
+                  }}
                 />
                 <Button icon={<Trash2 size={16} />} variant="danger" onClick={() => deleteLorebookEntry(index)}>
                   {t("common.delete")}

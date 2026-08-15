@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBlankCard, createBlankLorebook, type LorebookEntry } from "../lib/schema";
-import { promoteAlternateGreetingToFirst, reorderLorebookEntriesForDisplay, useCardStore } from "./store";
+import { getLorebookEntryIndexesByInsertionOrder, promoteAlternateGreetingToFirst, reorderLorebookEntriesForDisplay, useCardStore } from "./store";
 
 function entry(comment: string, order: number): LorebookEntry {
   return {
@@ -15,13 +15,46 @@ function entry(comment: string, order: number): LorebookEntry {
 }
 
 describe("store lorebook helpers", () => {
-  it("reorders entries without rewriting duplicate insertion orders", () => {
+  it("sorts entries by insertion order while preserving same-order array positions", () => {
+    const entries = [entry("Gamma", 20), entry("Alpha", 10), entry("Beta", 10)];
+
+    const displayIndexes = getLorebookEntryIndexesByInsertionOrder(entries);
+
+    expect(displayIndexes).toEqual([1, 2, 0]);
+    expect(displayIndexes.map((index) => entries[index].comment)).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
+  it("moves an entry in display order without changing backing array indexes", () => {
     const entries = [entry("Alpha", 10), entry("Beta", 10), entry("Gamma", 20)];
 
     const reordered = reorderLorebookEntriesForDisplay(entries, 0, 2);
+    const displayIndexes = getLorebookEntryIndexesByInsertionOrder(reordered);
 
-    expect(reordered.map((item) => item.comment)).toEqual(["Beta", "Gamma", "Alpha"]);
-    expect(reordered.map((item) => item.insertion_order)).toEqual([10, 20, 10]);
+    expect(reordered.map((item) => item.comment)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(reordered.map((item) => item.insertion_order)).toEqual([20, 10, 10]);
+    expect(displayIndexes.map((index) => reordered[index].comment)).toEqual(["Beta", "Gamma", "Alpha"]);
+    expect([...reordered.map((item) => item.insertion_order)].sort((left, right) => left - right)).toEqual([10, 10, 20]);
+    expect(reordered[1].extensions.display_index).toBe(0);
+    expect(reordered[2].extensions.display_index).toBe(1);
+  });
+
+  it("keeps a manual order within entries that share an insertion order", () => {
+    const entries = [entry("Alpha", 10), entry("Beta", 10), entry("Gamma", 20)];
+
+    const reordered = reorderLorebookEntriesForDisplay(entries, 1, 0);
+    const displayIndexes = getLorebookEntryIndexesByInsertionOrder(reordered);
+
+    expect(reordered.map((item) => item.comment)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(reordered.map((item) => item.insertion_order)).toEqual([10, 10, 20]);
+    expect(displayIndexes.map((index) => reordered[index].comment)).toEqual(["Beta", "Alpha", "Gamma"]);
+    expect(reordered[0].extensions.display_index).toBe(1);
+    expect(reordered[1].extensions.display_index).toBe(0);
+  });
+
+  it("leaves entries unchanged for an invalid manual move", () => {
+    const entries = [entry("Alpha", 10)];
+
+    expect(reorderLorebookEntriesForDisplay(entries, 0, 1)).toBe(entries);
   });
 });
 
