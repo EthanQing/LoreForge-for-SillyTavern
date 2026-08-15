@@ -268,16 +268,6 @@ export function fromSillyTavernWorldInfo(value: unknown): Lorebook | undefined {
   };
 }
 
-export function normalizeCardLorebookForSillyTavern(card: CharacterCardV3): CharacterCardV3 {
-  return {
-    ...card,
-    data: {
-      ...card.data,
-      character_book: normalizeLorebookForSillyTavern(card.data.character_book)
-    }
-  };
-}
-
 export function getSillyTavernPrimaryWorldName(card: CharacterCardV3): string | undefined {
   return readBindingName(card.data.extensions?.world);
 }
