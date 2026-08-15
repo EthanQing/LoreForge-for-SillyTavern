@@ -15,7 +15,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - `pnpm build` 执行 `tsc -b && vite build`，因此包含已配置的 TypeScript project-reference 类型检查和前端生产构建。
 - `pnpm tauri dev` 是完整桌面开发命令；Tauri 配置会先运行 `pnpm dev`。
 - Rust 测试位于 `src-tauri/src` 中的模块内，可通过指定 Cargo manifest 从仓库根目录运行。
-- `src/components/CodeEditor.test.tsx` 覆盖可编辑 Markdown 字段的实时预览，以及 plain、JSON 和只读编辑器不显示预览的边界行为。
+- `src/components/markdownInput.test.ts` 覆盖 Agent Markdown 输入框的有序列表、无序列表、引用续写和空列表退出规则。
 
 未在 `package.json`、根配置或 CI 中发现独立 lint、format、`typecheck` 脚本，也未发现单独的 Vitest 配置文件。不要将其写成项目命令。
 

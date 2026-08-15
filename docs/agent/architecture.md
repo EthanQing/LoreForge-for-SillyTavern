@@ -34,6 +34,8 @@ Agent Studio 左侧历史由 `src/features/agent-studio/AgentSessionHistory.tsx`
 
 `src/components/ContextMenu.tsx` 仍是全局菜单呈现层，但 Agent Studio 通过 `src/lib/contextMenuTargets.ts` 注册类型化目标，并在会话列表、消息、输入框和工具栏分别使用 `data-context-menu` 标记。菜单动作只能调用 Agent Studio 暴露的会话、消息或面板回调；菜单支持鼠标、Shift+F10/菜单键、方向键和 Escape，关闭后恢复触发元素焦点。
 
+Agent Studio 底部聊天输入使用懒加载的 `src/components/MarkdownComposer.tsx`。编辑器保留并提交原始 Markdown 文本，同时对常用标题、列表、引用、强调、删除线、行内代码和链接提供编辑态即时样式；在行尾按 Enter 时会续写有序列表、无序列表或引用，空列表再次按 Enter 则退出列表。通用 `src/components/CodeEditor.tsx` 继续服务卡片字段编辑，不承担聊天输入的 Markdown 交互。
+
 Agent Studio 输入框的 `@` 候选由当前页面上下文限制。`AgentStudio.tsx` 将基础信息、提示词、开场白和世界书编辑页分别映射到对应 section 权限；卡片纲要页才使用整卡上下文，预览、资源、设置和项目文件页暂不提供 `@` 候选。右侧编辑台关闭后保留最后一个业务页面上下文，不能因为 `focusedEditor` 被清空而把世界书或开场白权限扩大为整张卡片。候选插入后，`permissions.ts` 仍会按当前卡片重新解析目标，页面筛选不是唯一安全边界。
 
 模型不能从工具输入扩大权限。提案应用会检查工作区、卡片 revision、卡片哈希以及（适用时）世界书条目指纹，再重新编译与校验语义变更。

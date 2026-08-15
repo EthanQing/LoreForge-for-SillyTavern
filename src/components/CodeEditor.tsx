@@ -1,12 +1,9 @@
-import { useDeferredValue } from "react";
 import CodeMirror, { ReactCodeMirrorProps } from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { Decoration, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
-import { useI18n } from "../lib/i18n";
-import { MarkdownMessage } from "./MarkdownMessage";
 
 type EditorMode = "prompt" | "json" | "plain";
 
@@ -54,8 +51,6 @@ const macroHighlighter = ViewPlugin.fromClass(
 );
 
 export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px", maxHeight = "360px", readOnly = false, validationPath }: CodeEditorProps) {
-  const deferredValue = useDeferredValue(value);
-  const { t } = useI18n();
   const extensions: ReactCodeMirrorProps["extensions"] = [EditorView.lineWrapping];
   if (mode === "json") {
     extensions.push(json());
@@ -63,8 +58,6 @@ export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px
   if (mode === "prompt") {
     extensions.push(markdown(), macroHighlighter);
   }
-
-  const showMarkdownPreview = mode === "prompt" && !readOnly;
 
   return (
     <div className="code-editor-shell" data-context-menu={mode === "json" ? "json" : undefined} data-editor-readonly={readOnly ? "true" : undefined} data-validation-path={validationPath}>
@@ -82,16 +75,6 @@ export function CodeEditor({ value, onChange, mode = "plain", minHeight = "160px
         value={value}
         onChange={(next) => onChange?.(next)}
       />
-      {showMarkdownPreview ? (
-        <div className="code-editor-preview" role="region" aria-label={t("editor.markdownPreview")}>
-          <span className="code-editor-preview-title" aria-hidden="true">{t("editor.markdownPreview")}</span>
-          {deferredValue.trim() ? (
-            <MarkdownMessage className="code-editor-preview-content" text={deferredValue} />
-          ) : (
-            <p className="code-editor-preview-empty">{t("editor.markdownPreviewEmpty")}</p>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 }

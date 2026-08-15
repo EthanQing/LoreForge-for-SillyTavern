@@ -1117,172 +1117,6 @@ select.input {
   padding: 1px 3px;
 }
 
-.code-editor-shell {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.code-editor-preview {
-  min-width: 0;
-  max-height: 320px;
-  overflow: auto;
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--panel);
-  color: var(--text);
-}
-
-.code-editor-preview-title {
-  display: block;
-  margin-bottom: var(--space-2);
-  color: var(--muted-color);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.code-editor-preview-content {
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.code-editor-preview-content > :first-child {
-  margin-top: 0;
-}
-
-.code-editor-preview-content > :last-child {
-  margin-bottom: 0;
-}
-
-.code-editor-preview-content p {
-  margin: 0.65em 0;
-}
-
-.code-editor-preview-content h1,
-.code-editor-preview-content h2,
-.code-editor-preview-content h3,
-.code-editor-preview-content h4,
-.code-editor-preview-content h5,
-.code-editor-preview-content h6 {
-  margin: 0.8em 0 0.45em;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.code-editor-preview-content h1 { font-size: 1.45em; }
-.code-editor-preview-content h2 { font-size: 1.3em; }
-.code-editor-preview-content h3 { font-size: 1.16em; }
-.code-editor-preview-content h4,
-.code-editor-preview-content h5,
-.code-editor-preview-content h6 { font-size: 1em; }
-
-.code-editor-preview-content ul,
-.code-editor-preview-content ol {
-  max-width: 100%;
-  margin: 0.65em 0;
-  padding-left: 1.45em;
-}
-
-.code-editor-preview-content li + li {
-  margin-top: 0.25em;
-}
-
-.code-editor-preview-content blockquote {
-  max-width: 100%;
-  margin: 0.75em 0;
-  padding: 0.45em 0.85em;
-  border-left: 2px solid var(--accent);
-  background: var(--panel-strong);
-  color: var(--text-secondary);
-}
-
-.code-editor-preview-content blockquote p {
-  margin: 0.35em 0;
-}
-
-.code-editor-preview-content hr {
-  margin: 1em 0;
-  border: 0;
-  border-top: 1px solid var(--line);
-}
-
-.code-editor-preview-content a {
-  overflow-wrap: anywhere;
-  color: var(--accent);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
-.code-editor-preview-content > code,
-.code-editor-preview-content :not(pre) > code {
-  padding: 0.1em 0.35em;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--panel-strong);
-  font: 0.9em ui-monospace, SFMono-Regular, Consolas, monospace;
-  overflow-wrap: anywhere;
-}
-
-.code-editor-preview-content .markdown-table-wrap {
-  max-width: 100%;
-  margin: 0.8em 0;
-  overflow-x: auto;
-}
-
-.code-editor-preview-content table {
-  width: 100%;
-  max-width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.code-editor-preview-content th,
-.code-editor-preview-content td {
-  min-width: 0;
-  padding: 0.45em 0.6em;
-  border: 1px solid var(--line);
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  vertical-align: top;
-}
-
-.code-editor-preview-content th {
-  background: var(--panel-strong);
-  font-weight: var(--weight-bold);
-}
-
-.code-editor-preview-content .markdown-table-cell-left { text-align: left; }
-.code-editor-preview-content .markdown-table-cell-center { text-align: center; }
-.code-editor-preview-content .markdown-table-cell-right { text-align: right; }
-
-.code-editor-preview-content .markdown-code-block {
-  max-width: 100%;
-  margin: 0.8em 0;
-  padding: 0.75em;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--panel-strong);
-  overflow-x: auto;
-  white-space: pre;
-}
-
-.code-editor-preview-content .markdown-code-block code {
-  font: 0.86em/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
-}
-
-.code-editor-preview-empty {
-  margin: 0;
-  color: var(--muted-color);
-  font-size: var(--text-sm);
-}
-
 :root[data-theme="light"] .cm-macro-token {
   background: rgba(124, 58, 237, 0.1);
   color: var(--accent);
@@ -3780,21 +3614,127 @@ select.input {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-.agent-composer textarea {
+.agent-composer-editor {
+  width: 100%;
+  min-width: 0;
+}
+
+.agent-composer-editor-loading {
+  min-height: 88px;
+}
+
+.agent-composer .cm-editor {
   display: block;
   width: 100%;
   min-height: 88px;
-  resize: vertical;
   border: 0;
+  border-radius: 0;
   outline: none;
   background: transparent;
   color: var(--paper);
-  padding: 13px 14px;
+  box-shadow: none;
 }
 
-.card-workshop-shell .agent-composer textarea:focus-visible {
+.card-workshop-shell .agent-composer .cm-editor {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--paper);
+  box-shadow: none;
+}
+
+.agent-composer .cm-scroller {
+  max-height: 220px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.agent-composer .cm-content {
+  min-height: 88px;
+  padding: 13px 14px;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-composer .cm-line {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-composer .cm-placeholder {
+  color: var(--muted-color);
+  opacity: 1;
+}
+
+.card-workshop-shell .agent-composer .cm-editor.cm-focused {
   outline: 1px solid color-mix(in srgb, var(--copper) 72%, transparent);
   outline-offset: -1px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-composer .cm-live-list-marker {
+  color: var(--copper);
+  font-weight: 700;
+}
+
+.agent-composer .cm-live-heading-1,
+.agent-composer .cm-live-heading-2,
+.agent-composer .cm-live-heading-3,
+.agent-composer .cm-live-heading-4,
+.agent-composer .cm-live-heading-5,
+.agent-composer .cm-live-heading-6 {
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.agent-composer .cm-live-heading-1 { font-size: 1.45em; }
+.agent-composer .cm-live-heading-2 { font-size: 1.3em; }
+.agent-composer .cm-live-heading-3 { font-size: 1.16em; }
+.agent-composer .cm-live-heading-4,
+.agent-composer .cm-live-heading-5,
+.agent-composer .cm-live-heading-6 { font-size: 1em; }
+
+.agent-composer .cm-live-strong {
+  font-weight: 700;
+}
+
+.agent-composer .cm-live-emphasis {
+  font-style: italic;
+}
+
+.agent-composer .cm-live-strikethrough {
+  text-decoration: line-through;
+}
+
+.agent-composer .cm-live-inline-code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--workbench) 78%, var(--copper) 22%);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.agent-composer .cm-live-link {
+  color: var(--copper);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.agent-composer .cm-live-blockquote {
+  color: var(--sage);
+}
+
+.agent-composer .cm-live-code-fence,
+.agent-composer .cm-live-horizontal-rule {
+  color: var(--muted-color);
 }
 
 .agent-composer-scope-row {

@@ -6,6 +6,7 @@ import { useProjectActions } from "../../app/useProjectActions";
 import { getCardDisplayName, getCardIdentity } from "../../app/cardIdentity";
 import { Button } from "../../components/Button";
 import { MarkdownMessage } from "../../components/MarkdownMessage";
+import type { MarkdownComposerHandle } from "../../components/MarkdownComposer";
 import { useContextMenuTarget } from "../../lib/contextMenuTargets";
 import { buildCardTokenStats } from "../../lib/tokenStats";
 import { toAiConnectionProfile } from "../../lib/ai";
@@ -57,6 +58,7 @@ import { findLorebookMentionRange, getAgentMentionOptions, insertAgentMention, t
 
 const BasicInfoPanel = lazy(() => import("../card-editor/BasicInfoPanel").then((module) => ({ default: module.BasicInfoPanel })));
 const PromptPanel = lazy(() => import("../card-editor/PromptPanel").then((module) => ({ default: module.PromptPanel })));
+const MarkdownComposer = lazy(() => import("../../components/MarkdownComposer").then((module) => ({ default: module.MarkdownComposer })));
 const GreetingsPanel = lazy(() => import("../card-editor/GreetingsPanel").then((module) => ({ default: module.GreetingsPanel })));
 const LorebookPanel = lazy(() => import("../lorebook/LorebookPanel").then((module) => ({ default: module.LorebookPanel })));
 const AssetsPanel = lazy(() => import("../assets/AssetsPanel").then((module) => ({ default: module.AssetsPanel })));
@@ -132,7 +134,7 @@ export function AgentStudio(): ReactNode {
   const lastFocusRef = useRef<HTMLElement | null>(null);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerRef = useRef<MarkdownComposerHandle | null>(null);
   const actionLockRef = useRef(false);
   const conversationSnapshotsRef = useRef<ConversationSnapshot[]>([]);
   const titleAttemptedSessionIdsRef = useRef<Set<string>>(new Set());
@@ -281,28 +283,30 @@ export function AgentStudio(): ReactNode {
     });
   };
 
-  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleComposerKeyDown = (event: globalThis.KeyboardEvent): boolean => {
     if (mentionRange && mentionOptions.length > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
       const direction = event.key === "ArrowDown" ? 1 : -1;
       setMentionActiveIndex((current) => (current + direction + mentionOptions.length) % mentionOptions.length);
-      return;
+      return true;
     }
     if (mentionRange && activeMention && event.key === "Tab") {
       event.preventDefault();
       selectMention(activeMention);
-      return;
+      return true;
     }
     if (mentionRange && event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
       setMentionRange(undefined);
-      return;
+      return true;
     }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       void submit();
+      return true;
     }
+    return false;
   };
 
   useEffect(() => {
@@ -893,7 +897,7 @@ export function AgentStudio(): ReactNode {
   useEffect(() => {
     const handleSessionShortcut = (event: globalThis.KeyboardEvent) => {
       if (!event.ctrlKey || !["Tab", "PageUp", "PageDown"].includes(event.key) || event.isComposing) return;
-      if (event.target instanceof Element && (event.target.matches("input, textarea, select, [contenteditable='true']") || event.target.closest("[data-context-menu-root]"))) return;
+      if (event.target instanceof Element && (event.target.matches("input, textarea, select, [contenteditable='true']") || event.target.closest("input, textarea, select, [contenteditable='true'], [data-context-menu-root]"))) return;
       if (actionBusy || sessionBusy) return;
       event.preventDefault();
       const direction: -1 | 1 = event.key === "PageUp" || (event.key === "Tab" && event.shiftKey) ? -1 : 1;
@@ -1030,28 +1034,24 @@ export function AgentStudio(): ReactNode {
               onSelect={selectMention}
             />
           ) : null}
-          <textarea
-            ref={composerRef}
-            role="combobox"
-            aria-autocomplete="list"
-            aria-controls={mentionRange ? AGENT_MENTION_LISTBOX_ID : undefined}
-            aria-expanded={Boolean(mentionRange)}
-            aria-activedescendant={mentionRange && activeMention ? getAgentMentionOptionId(activeMention.optionId) : undefined}
-            aria-haspopup="listbox"
-            aria-label="Agent 请求"
-            aria-multiline="true"
-            value={input}
-            placeholder="描述你想检查、整理或提出的修改… 输入 @ 后选择当前页面目标"
-            rows={3}
-            disabled={editingLastUser || conversationOperation !== "idle"}
-            onBlur={() => setMentionRange(undefined)}
-            onChange={(event) => {
-              setInput(event.currentTarget.value);
-              syncMention(event.currentTarget.value, event.currentTarget.selectionStart);
-            }}
-            onKeyDown={handleComposerKeyDown}
-            onSelect={(event) => syncMention(event.currentTarget.value, event.currentTarget.selectionStart)}
-          />
+          <Suspense fallback={<div className="agent-composer-editor-loading" aria-hidden="true" />}>
+            <MarkdownComposer
+              ref={composerRef}
+              activeMentionId={mentionRange && activeMention ? getAgentMentionOptionId(activeMention.optionId) : undefined}
+              ariaLabel="Agent 请求"
+              mentionExpanded={Boolean(mentionRange)}
+              mentionListboxId={mentionRange ? AGENT_MENTION_LISTBOX_ID : undefined}
+              value={input}
+              placeholder="描述你想检查、整理或提出的修改… 输入 @ 后选择当前页面目标"
+              disabled={editingLastUser || conversationOperation !== "idle"}
+              onBlur={() => setMentionRange(undefined)}
+              onChange={(value, cursor) => {
+                setInput(value);
+                syncMention(value, cursor);
+              }}
+              onKeyDown={handleComposerKeyDown}
+            />
+          </Suspense>
           <div className="agent-composer-footer"><span><SquarePen size={14} />前端固定权限 · 用户确认后写入</span><div className="agent-composer-actions"><Button type="button" variant="ghost" icon={<MessageSquarePlus size={14} />} disabled={!input.trim() || !controller.isStreaming || editingLastUser || conversationOperation !== "idle"} onClick={() => void queueFollowUp()}>完成后继续</Button><Button type="submit" icon={<Send size={15} />} disabled={!input.trim() || editingLastUser || conversationOperation !== "idle"}>发送</Button></div></div>
         </form>
       </section>
