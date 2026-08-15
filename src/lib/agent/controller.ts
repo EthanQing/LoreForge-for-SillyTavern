@@ -68,6 +68,7 @@ interface ModelsLike {
 interface ProviderLike {
   id: string;
   getModels(): readonly Model<any>[];
+  streamSimple(model: Model<any>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream;
 }
 
 export class CardAgentController {
@@ -222,7 +223,7 @@ export class CardAgentController {
           getPermission: () => this.activePermission,
           setProposal: this.options.onProposal
         });
-    const streamFn = createStreamFn(models, this.options.profile);
+    const streamFn = createStreamFn(models, provider, this.options.profile);
     const systemPrompt = buildSystemPrompt(this.options.profile);
     const agent = new this.runtime.Agent({
       initialState: {
@@ -321,21 +322,27 @@ function findRuntimeModel(provider: ProviderLike, profile: AiConnectionProfile):
   return model;
 }
 
-function createStreamFn(models: ModelsLike, profile: AiConnectionProfile): StreamFn {
-  return (model, context, options) => models.streamSimple(model, context, {
-    ...options,
-    apiKey: profile.kind === "openai-codex" ? createCodexAuthPlaceholder() : "tauri-managed",
-    fetch: createTauriFetch(profile),
-    transport: "sse",
-    headers: {
-      ...(options?.headers ?? {}),
-      "x-card-agent-profile": profile.id,
-      "x-card-agent-credential": profile.credentialId
-    },
-    timeoutMs: profile.timeoutMs,
-    temperature: profile.kind === "openai-codex" ? undefined : profile.temperature,
-    maxTokens: profile.maxOutputTokens
-  });
+export function createStreamFn(models: ModelsLike, provider: ProviderLike, profile: AiConnectionProfile): StreamFn {
+  return (model, context, options) => {
+    const streamOptions = {
+      ...options,
+      apiKey: profile.kind === "openai-codex" ? createCodexAuthPlaceholder() : "tauri-managed",
+      fetch: createTauriFetch(profile),
+      transport: "sse" as const,
+      headers: {
+        ...(options?.headers ?? {}),
+        "x-card-agent-profile": profile.id,
+        "x-card-agent-credential": profile.credentialId
+      },
+      timeoutMs: profile.timeoutMs,
+      temperature: profile.kind === "openai-codex" ? undefined : profile.temperature,
+      maxTokens: profile.maxOutputTokens
+    };
+    if (profile.kind === "openai-codex") {
+      return provider.streamSimple(model, context, streamOptions);
+    }
+    return models.streamSimple(model, context, streamOptions);
+  };
 }
 
 function createTauriFetch(profile: AiConnectionProfile): typeof globalThis.fetch {

@@ -219,20 +219,7 @@ export function AgentStudio(): ReactNode {
 
   const controller = useMemo(() => {
     const next = new CardAgentController({
-      profile: {
-        id: aiSettings.profileId,
-        kind: aiSettings.providerProfile,
-        baseUrl: aiSettings.baseUrl,
-        model: aiSettings.model,
-        credentialId: aiSettings.credentialId,
-        contextWindow: aiSettings.contextWindow,
-        maxOutputTokens: aiSettings.maxOutputTokens,
-        timeoutMs: aiSettings.timeoutMs,
-        temperature: aiSettings.temperature,
-        thinkingLevel: aiSettings.thinkingLevel,
-        toolCalling: aiSettings.toolCalling,
-        allowInsecureHttp: aiSettings.allowInsecureHttp
-      },
+      profile: toAiConnectionProfile(aiSettings),
       sessionId,
       getSnapshot: () => ({
         card: useCardStore.getState().card,

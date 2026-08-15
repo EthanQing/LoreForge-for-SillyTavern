@@ -70,3 +70,5 @@ Agent 编辑台支持桌面拖拽调整宽度和窄屏抽屉。编辑台内需�
 `src-tauri/tauri.conf.json` 将 Tauri 开发流程连接到 `pnpm dev`，并将生产前端资源目录指定为 `../dist`。
 
 世界书单独导出使用与角色卡导出相同的原生文件边界：前端先显示 Tauri 保存对话框，再调用 Rust `export_lorebook_json` 写入 SillyTavern 原生 World Info JSON（顶层 `entries` 对象、UID 键），不依赖 WebView 的 Blob 下载行为。
+
+OpenAI Codex 的 Agent 请求继续使用 `src-tauri/src/ai.rs` 代理和系统凭据库。Pi AI 自带的 Codex provider 仅用于模型目录与 Responses 流解析；由于它的 OAuth 注册表不包含 Rust 凭据，Agent 运行时会直接调用该 provider 的流方法，避免把真实令牌复制到 WebView 或 Pi 的内存凭据存储中。
