@@ -11,7 +11,7 @@
 | `src/app/App.tsx` | 应用壳、主题、更新检查与全局快捷键。 |
 | `src-tauri/tauri.conf.json` | Tauri 应用、开发/构建命令、CSP、打包与 updater 配置。 |
 | `src-tauri/src/main.rs`、`src-tauri/src/lib.rs` | Rust 可执行入口与 Tauri 命令注册。 |
-| `src-tauri/src/openai_oauth.rs` | ChatGPT/OpenAI Codex 设备码 OAuth、系统凭据存储与自动刷新。 |
+| `src-tauri/src/openai_oauth.rs` | ChatGPT/OpenAI Codex 浏览器 PKCE OAuth、设备码回退、系统凭据存储与自动刷新。 |
 | `.github/workflows/release.yml` | 语义版本 tag 触发的 Windows 发布工作流。 |
 
 ## 源码模块

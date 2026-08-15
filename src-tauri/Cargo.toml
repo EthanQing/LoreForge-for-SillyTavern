@@ -25,9 +25,11 @@ futures-util = "0.3"
 keyring = { version = "4.1.5", features = ["windows-native-keyring-store"] }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rand = "0.9"
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
 tokio = { version = "1", features = ["sync", "time"] }
 tauri = { version = "2", features = [], optional = true }
 tauri-plugin-dialog = { version = "2", optional = true }
@@ -35,6 +37,7 @@ tauri-plugin-opener = { version = "2", optional = true }
 tauri-plugin-process = { version = "2.3.1", optional = true }
 tauri-plugin-updater = { version = "2.10.1", features = ["rustls-tls"], optional = true }
 thiserror = "2"
+url = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

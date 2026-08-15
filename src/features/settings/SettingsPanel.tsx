@@ -182,11 +182,20 @@ export function SettingsPanel() {
       flowId = start.flowId;
       activeOauthFlowRef.current = flowId;
       setOauthStart(start);
-      setPanelMessage(t("settings.openaiWaiting", { code: start.userCode }));
-      try {
-        await openUrl(start.verificationUri);
-      } catch {
-        setPanelMessage(t("settings.openaiOpenManually", { code: start.userCode }));
+      if (start.authUrl) {
+        setPanelMessage(t("settings.openaiWaitingBrowser"));
+        try {
+          await openUrl(start.authUrl);
+        } catch {
+          setPanelMessage(t("settings.openaiOpenBrowserManually"));
+        }
+      } else if (start.verificationUri && start.userCode) {
+        setPanelMessage(t("settings.openaiWaiting", { code: start.userCode }));
+        try {
+          await openUrl(start.verificationUri);
+        } catch {
+          setPanelMessage(t("settings.openaiOpenManually", { code: start.userCode }));
+        }
       }
       const status = await completeOpenAiOauth(start.flowId);
       if (activeOauthFlowRef.current !== flowId) return;
@@ -219,9 +228,15 @@ export function SettingsPanel() {
   const openOpenAiLoginPage = async () => {
     if (!oauthStart) return;
     try {
-      await openUrl(oauthStart.verificationUri);
+      const url = oauthStart.authUrl ?? oauthStart.verificationUri;
+      if (!url) return;
+      await openUrl(url);
     } catch {
-      setPanelMessage(t("settings.openaiOpenManually", { code: oauthStart.userCode }));
+      if (oauthStart.userCode) {
+        setPanelMessage(t("settings.openaiOpenManually", { code: oauthStart.userCode }));
+      } else {
+        setPanelMessage(t("settings.openaiOpenBrowserManually"));
+      }
     }
   };
 
@@ -334,8 +349,14 @@ export function SettingsPanel() {
               <p>{t("settings.openaiOauthDetail")}</p>
               {oauthStart ? (
                 <div className="oauth-device-code" role="status" aria-live="polite">
-                  <span>{t("settings.openaiDeviceCode")}</span>
-                  <strong>{oauthStart.userCode}</strong>
+                  {oauthStart.userCode ? (
+                    <>
+                      <span>{t("settings.openaiDeviceCode")}</span>
+                      <strong>{oauthStart.userCode}</strong>
+                    </>
+                  ) : (
+                    <span>{t("settings.openaiWaitingBrowser")}</span>
+                  )}
                   <div className="inline-row compact">
                     <Button icon={<ExternalLink size={16} />} onClick={() => void openOpenAiLoginPage()}>
                       {t("settings.openaiOpenLogin")}

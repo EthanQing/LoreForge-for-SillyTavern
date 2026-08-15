@@ -41,9 +41,11 @@ export interface OpenAiOauthStatus {
 
 export interface OpenAiOauthStart {
   flowId: string;
-  userCode: string;
-  verificationUri: string;
-  intervalSeconds: number;
+  method: "browser" | "device-code";
+  authUrl?: string;
+  userCode?: string;
+  verificationUri?: string;
+  intervalSeconds?: number;
   expiresAt: number;
 }
 

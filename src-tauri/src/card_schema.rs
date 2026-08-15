@@ -101,12 +101,6 @@ pub struct Lorebook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LorebookEnvelope {
-    pub spec: String,
-    pub data: Lorebook,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LorebookEntry {
     #[serde(default)]
     pub keys: Vec<String>,

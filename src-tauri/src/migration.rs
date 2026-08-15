@@ -88,11 +88,6 @@ fn normalize_lorebook_for_export(card: &mut CharacterCardV3) {
     }
 }
 
-pub fn normalize_lorebook(mut book: Lorebook) -> Lorebook {
-    normalize_lorebook_in_place(&mut book);
-    book
-}
-
 fn normalize_lorebook_in_place(book: &mut Lorebook) {
     for (index, entry) in book.entries.iter_mut().enumerate() {
         normalize_lorebook_entry_for_export(entry, index);

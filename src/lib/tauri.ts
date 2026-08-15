@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { CharacterCardV3, Lorebook, ParsedCard, ValidationReport } from "./schema";
+import type { CharacterCardV3, ParsedCard, ValidationReport } from "./schema";
+import type { SillyTavernWorldInfo } from "./lorebookCompat";
 import { translate } from "./i18n";
 
 export interface PngExportBase {
@@ -123,7 +124,7 @@ export async function validateCardCommand(card: CharacterCardV3): Promise<Valida
   return await invoke<ValidationReport>("validate_card", { card });
 }
 
-export async function exportLorebookJson(path: string, book: Lorebook): Promise<void> {
+export async function exportLorebookJson(path: string, book: SillyTavernWorldInfo): Promise<void> {
   await invoke("export_lorebook_json", { path, book });
 }
 

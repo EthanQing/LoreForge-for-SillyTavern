@@ -1,7 +1,7 @@
-use crate::card_schema::{CardAsset, CharacterCardV3, Lorebook, LorebookEnvelope, ParsedCard, ValidationReport};
+use crate::card_schema::{CardAsset, CharacterCardV3, ParsedCard, ValidationReport};
 use crate::charx::{export_charx_file, import_charx_file, CharxAssetInput};
 use crate::errors::{command_error, CardError, CardResult};
-use crate::migration::{migrate_value_to_v3, normalize_lorebook, touch_for_export};
+use crate::migration::{migrate_value_to_v3, touch_for_export};
 use crate::png_card::{read_card_value, write_card_chunks};
 use crate::validation::{ensure_valid_for_export, validate_card_report};
 use base64::engine::general_purpose::STANDARD;
@@ -66,7 +66,7 @@ pub fn validate_card(card: CharacterCardV3) -> ValidationReport {
 }
 
 #[tauri::command]
-pub fn export_lorebook_json(path: String, book: Lorebook) -> Result<(), String> {
+pub fn export_lorebook_json(path: String, book: Value) -> Result<(), String> {
     export_lorebook_json_inner(PathBuf::from(path), book).map_err(command_error)
 }
 
@@ -94,12 +94,16 @@ fn save_card_json_inner(path: PathBuf, card: CharacterCardV3) -> CardResult<Pars
     Ok(parsed(card, Vec::new(), "v3".to_string(), None))
 }
 
-fn export_lorebook_json_inner(path: PathBuf, book: Lorebook) -> CardResult<()> {
-    let envelope = LorebookEnvelope {
-        spec: "lorebook_v3".to_string(),
-        data: normalize_lorebook(book),
-    };
-    fs::write(path, serde_json::to_string_pretty(&envelope)?)?;
+fn export_lorebook_json_inner(path: PathBuf, book: Value) -> CardResult<()> {
+    let entries = book
+        .as_object()
+        .and_then(|value| value.get("entries"))
+        .and_then(Value::as_object)
+        .ok_or_else(|| CardError::Invalid("SillyTavern World Info must contain an entries object.".to_string()))?;
+    if entries.values().any(|entry| !entry.is_object()) {
+        return Err(CardError::Invalid("SillyTavern World Info entries must be objects.".to_string()));
+    }
+    fs::write(path, serde_json::to_string_pretty(&book)?)?;
     Ok(())
 }
 
@@ -222,30 +226,29 @@ fn extension(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::export_lorebook_json_inner;
-    use crate::card_schema::Lorebook;
     use serde_json::{json, Value};
 
     #[test]
-    fn exports_a_standalone_lorebook_envelope() {
+    fn exports_a_sillytavern_world_info_file() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("world.json");
-        let book: Lorebook = serde_json::from_value(json!({
-            "name": "World",
-            "entries": [{
-                "keys": ["alpha"],
-                "content": "Entry content",
-                "enabled": true,
-                "use_regex": false,
-                "custom_field": "preserved"
-            }]
-        }))
-        .unwrap();
+        let book = json!({
+            "entries": {
+                "0": {
+                    "uid": 0,
+                    "key": ["alpha"],
+                    "content": "Entry content",
+                    "disable": false,
+                    "custom_field": "preserved"
+                }
+            }
+        });
 
         export_lorebook_json_inner(path.clone(), book).unwrap();
 
         let value: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(value["spec"], "lorebook_v3");
-        assert_eq!(value["data"]["entries"][0]["comment"], "alpha");
-        assert_eq!(value["data"]["entries"][0]["custom_field"], "preserved");
+        assert!(value["entries"].is_object());
+        assert_eq!(value["entries"]["0"]["key"][0], "alpha");
+        assert_eq!(value["entries"]["0"]["custom_field"], "preserved");
     }
 }

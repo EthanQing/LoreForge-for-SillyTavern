@@ -38,7 +38,7 @@ Agent Studio 输入框的 `@` 候选由当前页面上下文限制。`AgentStudi
 
 模型不能从工具输入扩大权限。提案应用会检查工作区、卡片 revision、卡片哈希以及（适用时）世界书条目指纹，再重新编译与校验语义变更。
 
-Agent 模型连接支持 DeepSeek、通用 OpenAI-compatible API 与 `openai-codex`。后者使用 ChatGPT 设备码登录：`SettingsPanel` 调用 Rust OAuth 命令，浏览器只接收一次性设备码，完整 access/refresh token 保存在系统凭据库。Pi AI 在 WebView 中负责 Codex Responses 请求与流事件解析，但只持有不可用的占位 JWT；`src-tauri/src/ai.rs` 在固定的 ChatGPT backend 请求上移除前端认证头、刷新真实令牌并注入 Bearer 与 account id。
+Agent 模型连接支持 DeepSeek、通用 OpenAI-compatible API 与 `openai-codex`。后者默认使用 ChatGPT 浏览器 PKCE 登录并监听本地回调，端口不可用时回退设备码：`SettingsPanel` 调用 Rust OAuth 命令，浏览器只接收授权 URL 或一次性设备码，完整 access/refresh token 保存在系统凭据库。Pi AI 在 WebView 中负责 Codex Responses 请求与流事件解析，但只持有不可用的占位 JWT；`src-tauri/src/ai.rs` 在固定的 ChatGPT backend 请求上移除前端认证头、刷新真实令牌并注入 Bearer 与 account id。
 
 长会话在发送给模型前由 `src/lib/agent/context.ts` 压缩。带工具调用的 assistant 消息与其连续工具结果必须作为整体保留或整体省略，避免向 OpenAI-compatible 接口发送孤立的 `tool` 消息。
 
@@ -64,9 +64,9 @@ Agent 编辑台支持桌面拖拽调整宽度和窄屏抽屉。编辑台内需�
 - `card_schema.rs`、`migration.rs`、`validation.rs`：Rust 侧数据结构、格式迁移、导出准备与校验。
 - `png_card.rs`、`charx.rs`：PNG 元数据和 CHARX 归档处理。
 - `ai.rs`：AI HTTP/SSE 代理、取消、模型列表与凭据命令。
-- `openai_oauth.rs`：OpenAI Codex 设备码登录、系统凭据存储、状态、退出与令牌刷新。
+- `openai_oauth.rs`：OpenAI Codex 浏览器 PKCE 登录（本地回调）、设备码回退、系统凭据存储、状态、退出与令牌刷新。
 - `agent_history.rs`：Agent 工作区、会话、条目和提案的 SQLite 持久化。
 
 `src-tauri/tauri.conf.json` 将 Tauri 开发流程连接到 `pnpm dev`，并将生产前端资源目录指定为 `../dist`。
 
-世界书单独导出使用与角色卡导出相同的原生文件边界：前端先显示 Tauri 保存对话框，再调用 Rust `export_lorebook_json` 写入文件，不依赖 WebView 的 Blob 下载行为。
+世界书单独导出使用与角色卡导出相同的原生文件边界：前端先显示 Tauri 保存对话框，再调用 Rust `export_lorebook_json` 写入 SillyTavern 原生 World Info JSON（顶层 `entries` 对象、UID 键），不依赖 WebView 的 Blob 下载行为。

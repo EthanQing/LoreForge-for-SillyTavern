@@ -3749,11 +3749,13 @@ dependencies = [
  "crc32fast",
  "futures-util",
  "keyring",
+ "rand",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -3763,6 +3765,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "url",
  "zip 2.4.2",
 ]
 

@@ -13,14 +13,16 @@ import { useI18n } from "../../lib/i18n";
 import {
   deriveLorebookEntryComment,
   fillEmptyLorebookEntryComments,
+  fromSillyTavernWorldInfo,
   getSillyTavernLorebookBinding,
   normalizeLorebookForSillyTavern,
   sillyTavernPromptRoles,
   sillyTavernWorldInfoLogic,
   sillyTavernWorldInfoPositions,
+  toSillyTavernWorldInfo,
   type SillyTavernLorebookEntryExtensions
 } from "../../lib/lorebookCompat";
-import { createBlankLorebook, lorebookEnvelopeSchema, type LorebookEntry } from "../../lib/schema";
+import { createBlankLorebook, lorebookEnvelopeSchema, lorebookSchema, type LorebookEntry } from "../../lib/schema";
 import { useAgentStudioActions } from "../../lib/agent/uiContext";
 import { listenForValidationNavigation } from "../../lib/validationIssueNavigation";
 import { exportLorebookJson, pickLorebookSavePath } from "../../lib/tauri";
@@ -388,8 +390,14 @@ export function LorebookPanel() {
     if (!file) {
       return;
     }
-    const parsed = lorebookEnvelopeSchema.parse(JSON.parse(await file.text()));
-    updateData("character_book", normalizeLorebookForSillyTavern(parsed.data) ?? parsed.data);
+    const raw = JSON.parse(await file.text()) as unknown;
+    const standalone = fromSillyTavernWorldInfo(raw);
+    const parsed = standalone
+      ? standalone
+      : typeof raw === "object" && raw !== null && !Array.isArray(raw) && "spec" in raw && raw.spec === "lorebook_v3"
+        ? lorebookEnvelopeSchema.parse(raw).data
+        : lorebookSchema.parse(raw);
+    updateData("character_book", normalizeLorebookForSillyTavern(parsed) ?? parsed);
     event.target.value = "";
   };
 
@@ -403,7 +411,7 @@ export function LorebookPanel() {
         return;
       }
       const exportBook = normalizeLorebookForSillyTavern(book) ?? book;
-      await exportLorebookJson(path, exportBook);
+      await exportLorebookJson(path, toSillyTavernWorldInfo(exportBook));
       setStatus(t("status.lorebookExported"));
     } catch (error) {
       setStatus(t("status.lorebookExportFailed", {
