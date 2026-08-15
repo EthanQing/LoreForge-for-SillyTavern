@@ -236,7 +236,18 @@ function addLineDecorations(pending: PendingDecoration[], lineFrom: number, text
 function addMentionDecorations(pending: PendingDecoration[], lineFrom: number, text: string): void {
   for (const match of text.matchAll(mentionPattern)) {
     const index = match.index ?? 0;
-    addMentionMark(pending, lineFrom + index, lineFrom + index + match[0].length, match[0]);
+    const tokenStart = lineFrom + index;
+    const tokenEnd = tokenStart + match[0].length;
+    addMentionMark(pending, tokenStart, tokenEnd, match[0]);
+
+    const openingLength = match[0].startsWith('@"') ? 2 : 1;
+    addReplace(pending, tokenStart, tokenStart + openingLength);
+    if (openingLength === 2) {
+      const closingQuote = match[0].lastIndexOf('"');
+      if (closingQuote >= openingLength) {
+        addReplace(pending, tokenStart + closingQuote, tokenStart + closingQuote + 1);
+      }
+    }
   }
 }
 
