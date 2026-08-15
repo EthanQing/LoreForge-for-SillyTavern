@@ -77,9 +77,9 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
     markdown(),
     liveMarkdownPlugin,
     Prec.high(keymap.of([{ key: "Enter", run: continueMarkdownLine }])),
-    EditorView.domEventHandlers({
+    Prec.high(EditorView.domEventHandlers({
       keydown: (event, view) => onKeyDownRef.current(event, view)
-    }),
+    })),
     EditorView.contentAttributes.of({
       role: "combobox",
       "aria-autocomplete": "list",
