@@ -80,7 +80,10 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
     liveMarkdownPlugin,
     Prec.high(keymap.of([{ key: "Enter", run: continueMarkdownLine }])),
     Prec.high(EditorView.domEventHandlers({
-      keydown: (event, view) => onKeyDownRef.current(event, view)
+      keydown: (event, view) => {
+        if (deleteMentionAtCursor(event, view)) return true;
+        return onKeyDownRef.current(event, view);
+      }
     })),
     EditorView.contentAttributes.of({
       role: "combobox",
@@ -151,6 +154,80 @@ function continueMarkdownLine(view: EditorView): boolean {
     userEvent: "input"
   });
   return true;
+}
+
+function deleteMentionAtCursor(event: globalThis.KeyboardEvent, view: EditorView): boolean {
+  if (event.isComposing || (event.key !== "Backspace" && event.key !== "Delete") || event.altKey || event.ctrlKey || event.metaKey) {
+    return false;
+  }
+
+  const selection = view.state.selection.main;
+  const ranges = selection.empty
+    ? findMentionRangesAtLine(view, selection.head)
+    : findMentionRanges(view, selection.from, selection.to);
+  let deletion: { from: number; to: number } | undefined;
+
+  if (!selection.empty) {
+    const overlapping = ranges.filter((range) => range.to > selection.from && range.from < selection.to);
+    if (overlapping.length > 0) {
+      deletion = {
+        from: Math.min(selection.from, ...overlapping.map((range) => range.from)),
+        to: Math.max(selection.to, ...overlapping.map((range) => range.to))
+      };
+    }
+  } else {
+    const position = selection.head;
+    const mention = ranges.find((range) => {
+      if (event.key === "Backspace") {
+        return (position > range.from && position <= range.to)
+          || (position === range.to + 1 && view.state.doc.sliceString(range.to, position) === " ");
+      }
+      return position >= range.from && position < range.to;
+    });
+    if (mention) {
+      deletion = { from: mention.from, to: mention.to };
+      if (view.state.doc.sliceString(mention.to, mention.to + 1) === " ") {
+        deletion.to += 1;
+      }
+    }
+  }
+
+  if (!deletion) return false;
+
+  event.preventDefault();
+  view.dispatch({
+    changes: deletion,
+    selection: { anchor: deletion.from },
+    scrollIntoView: true,
+    userEvent: event.key === "Backspace" ? "delete.backward" : "delete.forward"
+  });
+  return true;
+}
+
+interface MentionRange {
+  from: number;
+  to: number;
+}
+
+function findMentionRanges(view: EditorView, from: number, to: number): MentionRange[] {
+  const doc = view.state.doc;
+  const firstLine = doc.lineAt(from);
+  const lastLine = doc.lineAt(to);
+  const ranges: MentionRange[] = [];
+  for (let lineNumber = firstLine.number; lineNumber <= lastLine.number; lineNumber += 1) {
+    for (const range of findMentionRangesAtLine(view, lineNumber)) {
+      if (range.to > from && range.from < to) ranges.push(range);
+    }
+  }
+  return ranges;
+}
+
+function findMentionRangesAtLine(view: EditorView, lineNumber: number): MentionRange[] {
+  const line = view.state.doc.line(lineNumber);
+  return Array.from(line.text.matchAll(mentionPattern), (match) => {
+    const from = line.from + (match.index ?? 0);
+    return { from, to: from + match[0].length };
+  });
 }
 
 function buildLiveMarkdownDecorations(view: EditorView): DecorationSet {
