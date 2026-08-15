@@ -61,7 +61,6 @@ interface CardStore {
   updateLorebookEntry: (index: number, updater: (entry: LorebookEntry) => LorebookEntry) => void;
   removeLorebookEntry: (index: number) => void;
   reorderLorebookEntry: (from: number, to: number) => void;
-  addAsset: (asset: CardAsset) => void;
   addAssets: (assets: CardAsset[]) => void;
   updateAsset: (index: number, updater: (asset: CardAsset) => CardAsset) => void;
   removeAsset: (index: number) => void;
@@ -378,7 +377,6 @@ export const useCardStore = create<CardStore>((set, get) => ({
       };
     });
   },
-  addAsset: (asset) => get().updateData("assets", [...(get().card.data.assets ?? []), asset]),
   addAssets: (assets) => {
     if (assets.length === 0) {
       return;

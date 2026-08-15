@@ -211,7 +211,7 @@ export function AssetsPanel() {
       </div>
 
       <div className="asset-overview">
-        <article className={`asset-cover-card ${coverAsset ? "has-cover" : "is-empty"}`}>
+        <article className={`asset-cover-card${coverAsset ? "" : " is-empty"}`}>
           <div className="asset-cover-preview">
             {coverAsset && isDataImageUri(coverAsset.uri) ? (
               <img alt={coverAsset.name} decoding="async" src={coverAsset.uri} />
