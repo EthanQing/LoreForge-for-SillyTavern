@@ -18,7 +18,7 @@ Zustand store 维护当前卡片、文件路径/来源、工作区 ID、卡片 r
 
 - 支持打开 JSON、PNG/APNG 和 CHARX。
 - JSON、PNG/APNG、CHARX 保存分别调用 Rust 的 `save_card_json`、`export_card_png`、`export_charx`。
-- 世界书可单独导出为 SillyTavern 原生 World Info JSON：顶层必须是 `entries` 对象，条目以 UID 为键并使用 `key`、`keysecondary`、`order`、`position`、`disable` 等酒馆字段。导出调用 Rust `export_lorebook_json`，由 `src/lib/lorebookCompat.ts` 完成 CCv3 数组到酒馆对象的映射并保留未知字段；该操作不修改当前卡片、dirty、revision 或酒馆外部绑定。导入同时接受旧的 `lorebook_v3` envelope、裸编辑器 Lorebook JSON 和 SillyTavern 原生对象。
+- 世界书可单独导出为 SillyTavern 原生 World Info JSON：顶层必须是 `entries` 对象，条目以 UID 为键并使用 `key`、`keysecondary`、`order`、`position`、`disable` 等酒馆字段。导出调用 Rust `export_lorebook_json`，由 `src/lib/lorebookCompat.ts` 完成 CCv3 数组到酒馆对象的映射并保留未知字段；该操作不修改当前卡片、dirty、revision 或酒馆外部绑定。导入同时接受旧的 `lorebook_v3` envelope、裸编辑器 Lorebook JSON 和 SillyTavern 原生对象。无论内嵌或单独导出，条目 `id` 经字符串化后都必须唯一：保留首个有效显式 ID，为缺失或重复值分配未占用的非负整数；不能以数组位置、`insertion_order` 或 `display_index` 临时充当 UID。
 - PNG 导出需要基础 PNG；没有可用主封面时，前端先提示选择封面图片，再显示导出保存路径，避免保存路径确认后再次弹出文件选择窗口。后端写入兼容的角色卡元数据，导出前执行迁移/规范化与校验。
 - PNG 中的 `data.character_book` 是卡片内嵌 Lorebook。SillyTavern 导入角色后不会自动将它创建为已绑定世界书；用户需在角色面板的“更多”中执行“导入卡片世界书”。包含世界书的 PNG 导出完成后，前端应明确提示这一后续步骤。
 - SillyTavern 的世界书名称与绑定分为两层：`data.character_book.name` 是卡片内嵌 Lorebook 名称，`data.extensions.world` 是酒馆用于查找主世界书的绑定名称。store 只有在明确的内嵌名称重命名 action 中才会自动同步空绑定或原本跟随旧内嵌名称的绑定；整本导入/替换会保留现有绑定并显示不一致警告，如果它指向另一份外部世界书也不会自动覆盖，用户可明确执行同步。导出不会替换酒馆数据库中的外部世界书，导入卡片世界书后仍需在酒馆中确认导入/绑定。

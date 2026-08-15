@@ -1,6 +1,7 @@
 use crate::card_schema::{current_unix_seconds, CharacterCardV3, ExtraFields, Lorebook, LorebookEntry};
 use crate::errors::{CardError, CardResult};
 use serde_json::{Map, Value};
+use std::collections::HashSet;
 
 const LOREBOOK_ENTRY_COMMENT_MAX_LENGTH: usize = 100;
 
@@ -89,8 +90,58 @@ fn normalize_lorebook_for_export(card: &mut CharacterCardV3) {
 }
 
 fn normalize_lorebook_in_place(book: &mut Lorebook) {
+    normalize_lorebook_entry_ids(book);
     for (index, entry) in book.entries.iter_mut().enumerate() {
         normalize_lorebook_entry_for_export(entry, index);
+    }
+}
+
+fn normalize_lorebook_entry_ids(book: &mut Lorebook) {
+    let mut used_ids = HashSet::new();
+    let normalized_ids = book
+        .entries
+        .iter()
+        .map(|entry| {
+            let id = normalize_lorebook_entry_id(entry.id.as_ref())?;
+            if used_ids.insert(lorebook_entry_id_key(&id)) {
+                Some(id)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut next_id = 0_i64;
+
+    for (entry, id) in book.entries.iter_mut().zip(normalized_ids) {
+        let id = id.unwrap_or_else(|| {
+            while used_ids.contains(&next_id.to_string()) {
+                next_id += 1;
+            }
+            let id = Value::from(next_id);
+            used_ids.insert(next_id.to_string());
+            next_id += 1;
+            id
+        });
+        entry.id = Some(id);
+    }
+}
+
+fn normalize_lorebook_entry_id(value: Option<&Value>) -> Option<Value> {
+    match value? {
+        Value::String(value) if !value.trim().is_empty() => Some(Value::String(value.clone())),
+        Value::Number(value) => value
+            .as_i64()
+            .map(Value::from)
+            .or_else(|| value.as_u64().map(Value::from)),
+        _ => None,
+    }
+}
+
+fn lorebook_entry_id_key(value: &Value) -> String {
+    match value {
+        Value::String(value) => value.clone(),
+        Value::Number(value) => value.to_string(),
+        _ => unreachable!("normalized lorebook entry IDs must be strings or numbers"),
     }
 }
 
@@ -340,6 +391,69 @@ mod tests {
             entry.extensions.get("probability").and_then(Value::as_i64),
             Some(80)
         );
+    }
+
+    #[test]
+    fn export_assigns_unique_lorebook_entry_ids() {
+        let ids = [None, Some(0), None, Some(1), Some(2), None, Some(19), Some(3), Some(4), Some(15), None, Some(18)];
+        let entries = ids
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| {
+                let mut entry = Map::new();
+                entry.insert("keys".to_string(), json!([format!("entry-{index}")]));
+                entry.insert("content".to_string(), Value::String(format!("Entry {index}")));
+                entry.insert("extensions".to_string(), json!({}));
+                entry.insert("enabled".to_string(), Value::Bool(true));
+                entry.insert("insertion_order".to_string(), Value::from(index as i64));
+                entry.insert("use_regex".to_string(), Value::Bool(false));
+                if let Some(id) = id {
+                    entry.insert("id".to_string(), Value::from(id));
+                }
+                Value::Object(entry)
+            })
+            .collect::<Vec<_>>();
+        let (card, _, _) = migrate_value_to_v3(json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {
+                "name": "Test",
+                "character_book": { "extensions": {}, "entries": entries }
+            }
+        }))
+        .unwrap();
+
+        let card = touch_for_export(card);
+        let entries = &card.data.character_book.as_ref().unwrap().entries;
+        let actual_ids = entries
+            .iter()
+            .map(|entry| entry.id.as_ref().and_then(Value::as_i64).unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual_ids, vec![5, 0, 6, 1, 2, 7, 19, 3, 4, 15, 8, 18]);
+        assert_eq!(actual_ids.iter().collect::<std::collections::HashSet<_>>().len(), entries.len());
+    }
+
+    #[test]
+    fn export_treats_numeric_and_string_ids_with_the_same_key_as_duplicates() {
+        let mut book: Lorebook = serde_json::from_value(json!({
+            "extensions": {},
+            "entries": [
+                { "id": 0, "keys": [], "content": "First", "extensions": {}, "enabled": true, "insertion_order": 0, "use_regex": false },
+                { "id": "0", "keys": [], "content": "Second", "extensions": {}, "enabled": true, "insertion_order": 1, "use_regex": false },
+                { "keys": [], "content": "Third", "extensions": {}, "enabled": true, "insertion_order": 2, "use_regex": false }
+            ]
+        }))
+        .unwrap();
+
+        normalize_lorebook_entry_ids(&mut book);
+
+        let ids = book
+            .entries
+            .iter()
+            .map(|entry| entry.id.as_ref().and_then(Value::as_i64).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec![0, 1, 2]);
     }
 
     #[test]

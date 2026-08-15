@@ -115,10 +115,11 @@ export function normalizeLorebookForSillyTavern(book: Lorebook | undefined): Lor
   if (!book) {
     return undefined;
   }
+  const entries = book.entries.map(normalizeLorebookEntryForSillyTavern);
   return {
     ...book,
     extensions: isRecord(book.extensions) ? book.extensions : {},
-    entries: book.entries.map(normalizeLorebookEntryForSillyTavern)
+    entries: normalizeLorebookEntryIdsForSillyTavern(entries)
   };
 }
 
@@ -336,6 +337,42 @@ export function normalizeLorebookEntryForSillyTavern(entry: LorebookEntry, index
 
   delete normalizedEntry.name;
   return normalizedEntry;
+}
+
+function normalizeLorebookEntryIdsForSillyTavern(entries: LorebookEntry[]): LorebookEntry[] {
+  const usedIds = new Set<string>();
+  const normalizedIds = entries.map((entry) => {
+    const id = normalizeLorebookEntryId(entry.id);
+    if (id === undefined || usedIds.has(String(id))) {
+      return undefined;
+    }
+    usedIds.add(String(id));
+    return id;
+  });
+  let nextId = 0;
+
+  return entries.map((entry, index) => {
+    let id = normalizedIds[index];
+    if (id === undefined) {
+      while (usedIds.has(String(nextId))) {
+        nextId += 1;
+      }
+      id = nextId;
+      usedIds.add(String(id));
+      nextId += 1;
+    }
+    return entry.id === id ? entry : { ...entry, id };
+  });
+}
+
+function normalizeLorebookEntryId(value: unknown): number | string | undefined {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  return undefined;
 }
 
 function copyNumberExtension(

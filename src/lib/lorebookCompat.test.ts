@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createBlankCard, createBlankLorebook } from "./schema";
+import { createBlankCard, createBlankLorebook, createBlankLorebookEntry } from "./schema";
 import {
   fromSillyTavernWorldInfo,
   getSillyTavernLorebookBinding,
+  normalizeLorebookForSillyTavern,
   toSillyTavernWorldInfo,
   syncSillyTavernLorebookBinding,
   syncSillyTavernLorebookBindingAfterRename
@@ -95,6 +96,38 @@ describe("SillyTavern lorebook binding", () => {
       group: "cities"
     });
     expect(exported.entries["12"]).not.toHaveProperty("keys");
+  });
+
+  it("assigns unique entry IDs before exporting an embedded or standalone lorebook", () => {
+    const book = createBlankLorebook();
+    const ids = [undefined, 0, undefined, 1, 2, undefined, 19, 3, 4, 15, undefined, 18];
+    book.entries = ids.map((id, index) => {
+      const entry = createBlankLorebookEntry(index);
+      if (id !== undefined) {
+        entry.id = id;
+      }
+      return entry;
+    });
+
+    const normalized = normalizeLorebookForSillyTavern(book);
+    const exported = toSillyTavernWorldInfo(book);
+
+    expect(normalized?.entries.map((entry) => entry.id)).toEqual([5, 0, 6, 1, 2, 7, 19, 3, 4, 15, 8, 18]);
+    expect(Object.keys(exported.entries)).toHaveLength(12);
+    expect(new Set(Object.values(exported.entries).map((entry) => String(entry.uid))).size).toBe(12);
+  });
+
+  it("treats numeric and string entry IDs with the same key as duplicates", () => {
+    const book = createBlankLorebook();
+    book.entries = [0, "0", undefined].map((id, index) => {
+      const entry = createBlankLorebookEntry(index);
+      if (id !== undefined) {
+        entry.id = id;
+      }
+      return entry;
+    });
+
+    expect(normalizeLorebookForSillyTavern(book)?.entries.map((entry) => entry.id)).toEqual([0, 1, 2]);
   });
 
   it("imports a standalone SillyTavern entries object", () => {

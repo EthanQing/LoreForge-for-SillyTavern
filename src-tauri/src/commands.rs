@@ -225,8 +225,14 @@ fn extension(path: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::export_lorebook_json_inner;
+    use super::{export_card_png_inner, export_lorebook_json_inner};
+    use crate::card_schema::CharacterCardV3;
+    use crate::png_card::text_chunks;
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
     use serde_json::{json, Value};
+
+    const ONE_PIXEL_PNG_DATA_URL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
     #[test]
     fn exports_a_sillytavern_world_info_file() {
@@ -250,5 +256,42 @@ mod tests {
         assert!(value["entries"].is_object());
         assert_eq!(value["entries"]["0"]["key"][0], "alpha");
         assert_eq!(value["entries"]["0"]["custom_field"], "preserved");
+    }
+
+    #[test]
+    fn png_export_keeps_embedded_lorebook_entries_with_colliding_ids() {
+        let card: CharacterCardV3 = serde_json::from_value(json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {
+                "name": "Test",
+                "character_book": {
+                    "extensions": {},
+                    "entries": [
+                        { "keys": ["first"], "content": "First", "extensions": {}, "enabled": true, "insertion_order": 0, "use_regex": false },
+                        { "id": 0, "keys": ["second"], "content": "Second", "extensions": {}, "enabled": true, "insertion_order": 1, "use_regex": false },
+                        { "keys": ["third"], "content": "Third", "extensions": {}, "enabled": true, "insertion_order": 2, "use_regex": false }
+                    ]
+                }
+            }
+        }))
+        .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("card.png");
+
+        export_card_png_inner(path.clone(), None, Some(ONE_PIXEL_PNG_DATA_URL.to_string()), card).unwrap();
+
+        let chunks = text_chunks(&std::fs::read(path).unwrap()).unwrap();
+        for key in ["chara", "ccv3"] {
+            let value: Value = serde_json::from_slice(&STANDARD.decode(&chunks[key]).unwrap()).unwrap();
+            let entries = value["data"]["character_book"]["entries"].as_array().unwrap();
+            let ids = entries
+                .iter()
+                .map(|entry| entry["id"].as_i64().unwrap())
+                .collect::<Vec<_>>();
+
+            assert_eq!(entries.len(), 3);
+            assert_eq!(ids.iter().collect::<std::collections::HashSet<_>>().len(), 3);
+        }
     }
 }
