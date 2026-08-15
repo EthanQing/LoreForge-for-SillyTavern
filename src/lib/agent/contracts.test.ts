@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { prepareCardForExport } from "../migrations";
 import { createBlankCard } from "../schema";
 import { applyCardProposal, createCardProposal, isCardProposal } from "./contracts";
-import { permissionForPreset } from "./permissions";
-import { stableHash } from "./projection";
+import { permissionForLorebookEntry, permissionForPreset } from "./permissions";
+import { getLorebookEntryFingerprint } from "./projection";
 
 describe("semantic card proposals", () => {
   it("applies a card edit only after confirmation", () => {
@@ -49,19 +50,22 @@ describe("semantic card proposals", () => {
     };
     const entries = card.data.character_book.entries;
     const first = createCardProposal({
-      workspaceId: "workspace-test", sessionId: "session-test", toolCallId: "tool-first", summary: "修改东京", permission: permissionForPreset("worldbook"),
-      changes: [{ kind: "lorebookEntryEdit", edit: { index: 0, fingerprint: stableHash(entries[0]), fields: { content: "东京新内容" } } }], card, cardRevision: 0
+      workspaceId: "workspace-test", sessionId: "session-test", toolCallId: "tool-first", summary: "修改东京", permission: permissionForLorebookEntry(card, 0, ["content"]),
+      changes: [{ kind: "lorebookEntryEdit", edit: { index: 0, fingerprint: getLorebookEntryFingerprint(entries[0], 0), fields: { content: "东京新内容" } } }], card, cardRevision: 0
     });
     const second = createCardProposal({
-      workspaceId: "workspace-test", sessionId: "session-test", toolCallId: "tool-second", summary: "修改大阪", permission: permissionForPreset("worldbook"),
-      changes: [{ kind: "lorebookEntryEdit", edit: { index: 1, fingerprint: stableHash(entries[1]), fields: { content: "大阪新内容" } } }], card, cardRevision: 0
+      workspaceId: "workspace-test", sessionId: "session-test", toolCallId: "tool-second", summary: "修改大阪", permission: permissionForLorebookEntry(card, 1, ["content"]),
+      changes: [{ kind: "lorebookEntryEdit", edit: { index: 1, fingerprint: getLorebookEntryFingerprint(entries[1], 1), fields: { content: "大阪新内容" } } }], card, cardRevision: 0
     });
 
     const firstResult = applyCardProposal(first, card, 0);
     expect(firstResult.state).toBe("applied");
     if (firstResult.state !== "applied") return;
 
-    const secondResult = applyCardProposal(second, firstResult.card, 1);
+    const normalizedAfterFirstResult = prepareCardForExport(firstResult.card, 1);
+    expect(normalizedAfterFirstResult.data.character_book?.entries[1].extensions.display_index).toBe(1);
+
+    const secondResult = applyCardProposal(second, normalizedAfterFirstResult, 1);
     expect(secondResult.state).toBe("applied");
     if (secondResult.state !== "applied") return;
     expect(secondResult.card.data.character_book?.entries.map((entry) => entry.content)).toEqual(["东京新内容", "大阪新内容"]);
@@ -76,7 +80,7 @@ describe("semantic card proposals", () => {
     const entry = card.data.character_book.entries[0];
     const proposal = createCardProposal({
       workspaceId: "workspace-test", sessionId: "session-test", toolCallId: "tool-test", summary: "修改东京", permission: permissionForPreset("worldbook"),
-      changes: [{ kind: "lorebookEntryEdit", edit: { index: 0, fingerprint: stableHash(entry), fields: { content: "提案内容" } } }], card, cardRevision: 0
+      changes: [{ kind: "lorebookEntryEdit", edit: { index: 0, fingerprint: getLorebookEntryFingerprint(entry, 0), fields: { content: "提案内容" } } }], card, cardRevision: 0
     });
     const changed = { ...card, data: { ...card.data, character_book: { ...card.data.character_book, entries: [{ ...entry, content: "用户修改" }] } } };
 

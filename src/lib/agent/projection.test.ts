@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { prepareCardForExport } from "../migrations";
 import { createBlankCard, createBlankLorebook } from "../schema";
 import { permissionForPreset } from "./permissions";
-import { projectCard, projectCardForPermission } from "./projection";
+import { getLorebookEntryFingerprint, projectCard, projectCardForPermission } from "./projection";
 
 function cardWithBinding() {
   const card = createBlankCard(1);
@@ -27,5 +28,29 @@ describe("agent card projection", () => {
         linkedWorldName: "Linked World"
       }
     });
+  });
+
+  it("keeps entry fingerprints stable through export normalization", () => {
+    const card = createBlankCard(1);
+    card.data.character_book = {
+      extensions: {},
+      entries: [{
+        id: 1,
+        name: "City",
+        keys: ["city"],
+        content: "Lore",
+        extensions: {},
+        enabled: true,
+        insertion_order: 0,
+        use_regex: false
+      }]
+    };
+    const entry = card.data.character_book.entries[0];
+    const fingerprint = getLorebookEntryFingerprint(entry, 0);
+    const normalizedEntry = prepareCardForExport(card, 2).data.character_book?.entries[0];
+
+    expect(normalizedEntry?.extensions.display_index).toBe(0);
+    expect(normalizedEntry && getLorebookEntryFingerprint(normalizedEntry, 0)).toBe(fingerprint);
+    expect(projectCard(card, 0).lorebook.entries[0]?.fingerprint).toBe(fingerprint);
   });
 });

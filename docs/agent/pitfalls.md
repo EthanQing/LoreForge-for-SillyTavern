@@ -47,3 +47,5 @@ Agent 编辑台通过 `document` 监听 `Escape` 关闭卡片纲要。输入框�
 ## 并行世界书提案不能只看卡片 revision
 
 多个 Agent 提案可能读取同一版本后分别编辑不同的既有世界书条目。确认第一项会递增卡片 revision，但不应让其余未受影响条目的提案全部失效。仅当提案全部是既有条目编辑，且每个目标条目的 fingerprint 仍一致时，才可以在新 revision 上应用；卡片字段、候选注入、混合提案或目标条目已改变时仍必须拒绝。
+
+条目 fingerprint 必须基于迁移后的 `normalizeLorebookEntry()` 与 `normalizeLorebookEntryForSillyTavern()` 的规范化等价形态计算。`applyAgentCard` 和导出写回会补齐兼容字段（如 `extensions.display_index`）或迁移旧字段，这类技术性变化不能让未改业务内容的并行提案误判冲突；旧版未规范化的持久化提案仅可在原始条目仍完全一致时通过 raw hash 兼容。

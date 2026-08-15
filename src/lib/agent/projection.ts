@@ -1,5 +1,6 @@
 import type { CharacterCardV3, LorebookEntry } from "../schema";
-import { deriveLorebookEntryComment, getSillyTavernPrimaryWorldName } from "../lorebookCompat";
+import { deriveLorebookEntryComment, getSillyTavernPrimaryWorldName, normalizeLorebookEntryForSillyTavern } from "../lorebookCompat";
+import { normalizeLorebookEntry } from "../migrations";
 import type { AgentPermission, CardFieldPath } from "./permissions";
 
 export interface AgentCardProjection {
@@ -111,7 +112,7 @@ export function projectLorebookEntry(entry: LorebookEntry, index: number): Agent
   return {
     index,
     id: entry.id,
-    fingerprint: stableHash(entry),
+    fingerprint: getLorebookEntryFingerprint(entry, index),
     comment: deriveLorebookEntryComment(entry, index),
     keys: [...entry.keys],
     secondaryKeys: [...(entry.secondary_keys ?? [])],
@@ -129,6 +130,14 @@ export function projectLorebookEntry(entry: LorebookEntry, index: number): Agent
     caseSensitive: typeof entry.case_sensitive === "boolean" ? entry.case_sensitive : undefined,
     outletName: typeof extensions.outlet_name === "string" ? extensions.outlet_name : undefined
   };
+}
+
+export function getLorebookEntryFingerprint(entry: LorebookEntry, index: number): string {
+  return stableHash(normalizeLorebookEntryForSillyTavern(normalizeLorebookEntry(entry, index), index));
+}
+
+export function matchesLorebookEntryFingerprint(entry: LorebookEntry, index: number, fingerprint: string): boolean {
+  return fingerprint === getLorebookEntryFingerprint(entry, index) || fingerprint === stableHash(entry);
 }
 
 export function stableHash(value: unknown): string {

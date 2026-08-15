@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createBlankCard } from "../schema";
 import { canEditCardField, canEditCardPath, canEditLorebookEntry, canInjectLorebook, decodeAgentRequest, encodeAgentRequest, getEffectiveAgentMentionSurface, permissionForField, permissionForPreset, resolveAgentRequest, resolveReplacementAgentRequest } from "./permissions";
-import { projectCardForPermission, stableHash } from "./projection";
+import { getLorebookEntryFingerprint, projectCardForPermission } from "./projection";
 
 describe("agent request permissions", () => {
   it("intersects the page surface with the selected scope", () => {
@@ -69,10 +69,10 @@ describe("agent request permissions", () => {
 
     expect(request.instruction).toBe("同时修改");
     expect(request.permission.scope).toMatchObject({ kind: "lorebookEntries", entries: [{ index: 0 }, { index: 1 }, { index: 2 }] });
-    expect(canEditLorebookEntry(request.permission, 0, entries[0] ? stableHash(entries[0]) : "")).toBe(true);
-    expect(canEditLorebookEntry(request.permission, 1, entries[1] ? stableHash(entries[1]) : "")).toBe(true);
-    expect(canEditLorebookEntry(request.permission, 2, entries[2] ? stableHash(entries[2]) : "")).toBe(true);
-    expect(canEditLorebookEntry(request.permission, 3, entries[3] ? stableHash(entries[3]) : "")).toBe(false);
+    expect(canEditLorebookEntry(request.permission, 0, entries[0] ? getLorebookEntryFingerprint(entries[0], 0) : "")).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 1, entries[1] ? getLorebookEntryFingerprint(entries[1], 1) : "")).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 2, entries[2] ? getLorebookEntryFingerprint(entries[2], 2) : "")).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 3, entries[3] ? getLorebookEntryFingerprint(entries[3], 3) : "")).toBe(false);
   });
 
   it("roundtrips persisted request scope envelopes", () => {
@@ -142,7 +142,7 @@ describe("agent request permissions", () => {
       entries: [{ index: 0 }]
     });
     expect(canEditCardPath(request.permission, "/alternateGreetings/0")).toBe(true);
-    expect(canEditLorebookEntry(request.permission, 0, stableHash(card.data.character_book.entries[0]))).toBe(true);
+    expect(canEditLorebookEntry(request.permission, 0, getLorebookEntryFingerprint(card.data.character_book.entries[0], 0))).toBe(true);
     expect(canInjectLorebook(request.permission)).toBe(false);
   });
 

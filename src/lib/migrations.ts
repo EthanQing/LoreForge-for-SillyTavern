@@ -45,7 +45,7 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : undefined;
 }
 
-function normalizeLorebookEntry(raw: unknown, index: number): LorebookEntry {
+export function normalizeLorebookEntry(raw: unknown, index: number): LorebookEntry {
   const base: LorebookEntry = {
     keys: [],
     content: "",

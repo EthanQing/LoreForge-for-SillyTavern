@@ -2,7 +2,7 @@ import type { CharacterCardV3, ValidationReport } from "../schema";
 import { validateCard } from "../validation";
 import { applyAgentChanges, assertAgentChangesAllowed, buildAgentDiff, type AgentChange, type AgentDiff } from "./changes";
 import { normalizeAgentPermission, samePermission, type AgentPermission } from "./permissions";
-import { stableHash } from "./projection";
+import { matchesLorebookEntryFingerprint, stableHash } from "./projection";
 
 export interface AiConnectionProfile {
   id: string;
@@ -156,7 +156,7 @@ function canRebaseLorebookEntryProposal(proposal: CardProposal, card: CharacterC
   return proposal.changes.every((change) => {
     if (change.kind !== "lorebookEntryEdit") return false;
     const entry = card.data.character_book?.entries[change.edit.index];
-    return Boolean(entry && stableHash(entry) === change.edit.fingerprint);
+    return Boolean(entry && matchesLorebookEntryFingerprint(entry, change.edit.index, change.edit.fingerprint));
   });
 }
 

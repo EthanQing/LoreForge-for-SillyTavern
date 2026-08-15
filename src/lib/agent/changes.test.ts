@@ -19,7 +19,7 @@ describe("agent semantic changes", () => {
     expect(entries[0].extensions).toMatchObject({ position: 4, role: 2, depth: 6, probability: 80 });
   });
 
-  it("preserves unknown entry and extension fields on edit", () => {
+  it("preserves unknown entry and extension fields on a legacy raw-fingerprint edit", () => {
     const card = createBlankCard();
     card.data.character_book = { extensions: { keepBook: true }, entries: [{
       id: "city", keys: ["city"], content: "Old", extensions: { keep: true }, enabled: true,

@@ -1,6 +1,6 @@
 import type { CharacterCardV3 } from "../schema";
 import { deriveLorebookEntryComment } from "../lorebookCompat";
-import { stableHash } from "./projection";
+import { getLorebookEntryFingerprint } from "./projection";
 
 export type AgentSection = "basic" | "prompts" | "greetings";
 export type AgentCapability = "read" | "edit" | "inject";
@@ -111,7 +111,7 @@ function createLorebookEntryScope(card: CharacterCardV3, index: number, fields?:
   if (fields?.some((field) => !LOREBOOK_ENTRY_FIELDS.includes(field as typeof LOREBOOK_ENTRY_FIELDS[number]))) {
     throw new Error("世界书条目字段不受 Agent 支持。");
   }
-  return { index, label: deriveLorebookEntryComment(entry, index), fingerprint: stableHash(entry), fields };
+  return { index, label: deriveLorebookEntryComment(entry, index), fingerprint: getLorebookEntryFingerprint(entry, index), fields };
 }
 
 export function permissionForLorebookEntries(card: CharacterCardV3, indexes: readonly number[]): AgentPermission {

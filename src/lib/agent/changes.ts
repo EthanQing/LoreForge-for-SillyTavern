@@ -2,7 +2,7 @@ import type { CharacterCardV3, Lorebook, LorebookEntry } from "../schema";
 import { createBlankLorebook } from "../schema";
 import { normalizeLorebookEntryComment, sillyTavernPromptRoles, sillyTavernWorldInfoPositions } from "../lorebookCompat";
 import { canEditCardPath, canEditLorebookEntryFields, canInjectLorebook, type AgentPermission, type CardFieldPath } from "./permissions";
-import { projectCard, stableHash } from "./projection";
+import { matchesLorebookEntryFingerprint, projectCard, stableHash } from "./projection";
 
 export type CardFieldValue = string | string[];
 
@@ -152,8 +152,7 @@ function applyLorebookEntryEdit(card: CharacterCardV3, edit: LorebookEntryEdit, 
   const book = card.data.character_book;
   const entry = book?.entries[edit.index];
   if (!book || !entry) throw new Error("目标世界书条目不存在。");
-  const currentFingerprint = stableHash(entry);
-  if (currentFingerprint !== edit.fingerprint) throw new Error("目标世界书条目已发生变化，请重新读取。");
+  if (!matchesLorebookEntryFingerprint(entry, edit.index, edit.fingerprint)) throw new Error("目标世界书条目已发生变化，请重新读取。");
   if (!canEditLorebookEntryFields(permission, edit.index, edit.fingerprint, Object.keys(edit.fields))) throw new Error("世界书条目字段超出当前权限范围。");
   if (Object.keys(edit.fields).length === 0) throw new Error("世界书条目编辑至少需要一个字段。");
   const nextEntry = applyLorebookFields(entry, edit.fields, edit.index);
