@@ -7,7 +7,7 @@
 - AI 请求经 `src-tauri/src/ai.rs` 的后端 HTTP/SSE 路径发起；URL 与凭据策略的最终实现以该模块为准。
 - ChatGPT 登录仅用于 `openai-codex` provider，不等同于通用 OpenAI Platform API OAuth。浏览器授权 URL、回调 flow id 和一次性 user code 可进入前端状态；access token、refresh token 与 ChatGPT account id 不得进入 WebView、localStorage、SQLite、日志或事件。浏览器回调只绑定本机 `127.0.0.1:1455`，并校验 PKCE state。
 - Tauri 的系统默认浏览器打开权限仅允许 OpenAI OAuth 授权地址（`auth.openai.com/oauth/authorize`）和设备码地址（`auth.openai.com/codex/device`），不开放任意外部 URL。
-- OpenAI Codex OAuth 凭据以 JSON 形式保存在专用系统凭据条目 `openai-codex-oauth`。后端在请求前串行刷新即将过期的令牌，并将旋转后的 refresh token 重新写入系统凭据库。
+- OpenAI Codex OAuth 凭据以带版本前缀的 UTF-8 JSON 二进制值保存在专用系统凭据条目 `openai-codex-oauth`，避免 Windows Credential Manager 的密码编码限制；不回退到明文文件、SQLite 或前端存储。后端在请求前串行刷新即将过期的令牌，并将旋转后的 refresh token 重新写入系统凭据库。
 - `openai-codex` profile 固定为 `https://chatgpt.com/backend-api`，仅允许 `/backend-api/codex/responses`。通用 AI profile 也只能把凭据发送到其配置的同源 URL；前端提供的 Authorization、ChatGPT account id 与 originator 头一律由后端移除或覆盖。
 - Tauri CSP 定义在 `src-tauri/tauri.conf.json`，修改前应评估 IPC、资源图片与网络连接需求。
 

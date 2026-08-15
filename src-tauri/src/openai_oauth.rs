@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use keyring::Entry;
+use keyring::{Entry, Error as KeyringError};
 use rand::{rngs::OsRng, TryRngCore};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,7 @@ use tauri::State;
 use url::Url;
 
 const KEYRING_SERVICE: &str = "sillytavern-card-creator";
+const OAUTH_CREDENTIAL_FORMAT_PREFIX: &[u8] = b"stcc-oauth-v1:";
 const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTHORIZE_URL: &str = "https://auth.openai.com/oauth/authorize";
 const DEVICE_USER_CODE_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/usercode";
@@ -394,7 +395,11 @@ fn read_browser_callback(mut stream: TcpStream, expected_state: &str) -> Result<
         write_callback_response(&mut stream, false, "Authorization code was missing.")?;
         return Err("OpenAI browser login did not return an authorization code.".to_string());
     };
-    write_callback_response(&mut stream, true, "OpenAI authentication completed. You can close this window.")?;
+    write_callback_response(
+        &mut stream,
+        true,
+        "OpenAI authorization returned. Return to the app to finish signing in.",
+    )?;
     Ok(Some(code))
 }
 
@@ -550,20 +555,62 @@ fn store_credential(
     credential_id: &str,
     credential: &OpenAiOauthCredential,
 ) -> Result<(), String> {
-    let value = serde_json::to_string(credential)
-        .map_err(|_| "Could not serialize the OpenAI credential.".to_string())?;
+    let value = encode_stored_credential(credential)?;
+    // Windows Credential Manager encodes password values as UTF-16.
+    // OAuth uses raw bytes to avoid that expansion.
     Entry::new(KEYRING_SERVICE, credential_id)
-        .map_err(|_| "Could not access the system credential store.".to_string())?
-        .set_password(&value)
-        .map_err(|_| "Could not store the OpenAI credential in the system credential store.".to_string())
+        .map_err(keyring_access_error)?
+        .set_secret(&value)
+        .map_err(keyring_store_error)
 }
 
 fn read_credential(credential_id: &str) -> Result<OpenAiOauthCredential, String> {
-    let value = Entry::new(KEYRING_SERVICE, credential_id)
-        .map_err(|_| "Could not access the system credential store.".to_string())?
-        .get_password()
-        .map_err(|_| "OpenAI credential is not configured.".to_string())?;
+    let entry = Entry::new(KEYRING_SERVICE, credential_id).map_err(keyring_access_error)?;
+    let value = match entry.get_secret() {
+        Ok(value) => match decode_stored_credential(&value) {
+            Ok(credential) => return Ok(credential),
+            Err(_) => entry
+                .get_password()
+                .map_err(|_| "Stored OpenAI credential is invalid.".to_string())?,
+        },
+        Err(KeyringError::NoEntry) => {
+            return Err("OpenAI credential is not configured.".to_string())
+        }
+        Err(_) => return Err("Could not access the system credential store.".to_string()),
+    };
     serde_json::from_str(&value).map_err(|_| "Stored OpenAI credential is invalid.".to_string())
+}
+
+fn decode_stored_credential(value: &[u8]) -> Result<OpenAiOauthCredential, String> {
+    let payload = value
+        .strip_prefix(OAUTH_CREDENTIAL_FORMAT_PREFIX)
+        .unwrap_or(value);
+    serde_json::from_slice(payload).map_err(|_| "Stored OpenAI credential is invalid.".to_string())
+}
+
+fn encode_stored_credential(credential: &OpenAiOauthCredential) -> Result<Vec<u8>, String> {
+    let serialized = serde_json::to_vec(credential)
+        .map_err(|_| "Could not serialize the OpenAI credential.".to_string())?;
+    let mut value = Vec::with_capacity(OAUTH_CREDENTIAL_FORMAT_PREFIX.len() + serialized.len());
+    value.extend_from_slice(OAUTH_CREDENTIAL_FORMAT_PREFIX);
+    value.extend_from_slice(&serialized);
+    Ok(value)
+}
+
+fn keyring_access_error(_error: KeyringError) -> String {
+    "Could not access the system credential store.".to_string()
+}
+
+fn keyring_store_error(error: KeyringError) -> String {
+    match error {
+        KeyringError::TooLong(_, _) => {
+            "The OpenAI credential is too large for the system credential store.".to_string()
+        }
+        KeyringError::NoStorageAccess(_) => {
+            "Could not access the system credential store.".to_string()
+        }
+        _ => "Could not store the OpenAI credential in the system credential store.".to_string(),
+    }
 }
 
 fn status_for_credential(credential: Option<&OpenAiOauthCredential>) -> OpenAiOauthStatus {
@@ -676,8 +723,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        account_id_from_token, create_browser_flow, deserialize_interval, device_poll_is_pending,
-        oauth_error_code,
+        account_id_from_token, create_browser_flow, decode_stored_credential, deserialize_interval,
+        device_poll_is_pending, encode_stored_credential, keyring_store_error, oauth_error_code,
+        OpenAiOauthCredential,
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use serde::Deserialize;
@@ -731,5 +779,42 @@ mod tests {
         assert_eq!(url.query_pairs().find(|(key, _)| key == "code_challenge_method").map(|(_, value)| value), Some("S256".into()));
         assert!(url.query_pairs().any(|(key, value)| key == "code_challenge" && !value.is_empty()));
         assert!(url.query_pairs().any(|(key, value)| key == "state" && !value.is_empty()));
+    }
+
+    #[test]
+    fn stores_oauth_credentials_as_binary_secret_with_legacy_read_support() {
+        let credential = OpenAiOauthCredential {
+            credential_type: "oauth".to_string(),
+            access: "access-placeholder".to_string(),
+            refresh: "refresh-placeholder".to_string(),
+            expires: 123,
+            account_id: "account-placeholder".to_string(),
+        };
+        let encoded = encode_stored_credential(&credential).unwrap();
+        assert!(encoded.starts_with(super::OAUTH_CREDENTIAL_FORMAT_PREFIX));
+
+        let decoded = decode_stored_credential(&encoded).unwrap();
+        assert_eq!(decoded.access, credential.access);
+        assert_eq!(decoded.refresh, credential.refresh);
+        assert_eq!(decoded.account_id, credential.account_id);
+
+        let legacy = serde_json::to_vec(&credential).unwrap();
+        let decoded_legacy = decode_stored_credential(&legacy).unwrap();
+        assert_eq!(decoded_legacy.expires, credential.expires);
+    }
+
+    #[test]
+    fn rejects_corrupt_oauth_credential_bytes() {
+        let corrupt = [super::OAUTH_CREDENTIAL_FORMAT_PREFIX, b"not-json"].concat();
+        assert!(decode_stored_credential(&corrupt).is_err());
+    }
+
+    #[test]
+    fn classifies_oversized_credential_store_errors() {
+        let message = keyring_store_error(keyring::Error::TooLong("secret".to_string(), 2560));
+        assert_eq!(
+            message,
+            "The OpenAI credential is too large for the system credential store."
+        );
     }
 }

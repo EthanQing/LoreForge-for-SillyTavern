@@ -24,7 +24,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - React UI：运行 `pnpm build`；在可用环境中通过 `pnpm tauri dev` 进行手工界面检查。
 - Rust 命令、迁移、PNG/CHARX 或后端校验：运行 Rust 测试；若改动 Tauri 边界，也运行 `pnpm build`。
 - Agent 权限、提案或会话：覆盖权限解析、语义变更、冲突校验、候选选择与会话显示的既有测试模式。
-- OpenAI Codex OAuth：Rust 单测覆盖 token claim、浏览器 PKCE 授权 URL、设备码响应与 endpoint 限制；前端覆盖 provider 配置迁移。真实登录需要在 ChatGPT 账户上手工验收，自动测试不得保存真实令牌。
+- OpenAI Codex OAuth：Rust 单测覆盖 token claim、浏览器 PKCE 授权 URL、设备码响应、endpoint 限制和二进制凭据编码兼容；前端覆盖 provider 配置迁移。真实登录需要在 ChatGPT 账户上手工验收，自动测试不得保存真实令牌。
 - 世界书单独导出：Rust 单测验证 SillyTavern `entries` 对象、条目字段与未知字段保留；前端单测覆盖 CCv3 ↔ SillyTavern 映射。桌面手工检查保存取消、成功状态、在 SillyTavern 导入及重新导入编辑器。
 - 发布工作流或 updater：核对 `.github/workflows/release.yml` 与 `src-tauri/tauri.conf.json`；完整打包与签名依赖本地/CI 凭据和 Windows 原生工具链。
 
