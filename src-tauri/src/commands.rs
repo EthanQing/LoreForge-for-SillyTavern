@@ -51,8 +51,15 @@ pub fn export_charx(
     path: String,
     card: CharacterCardV3,
     assets: Vec<CharxAssetInput>,
+    source_charx_path: Option<String>,
 ) -> Result<ParsedCard, String> {
-    export_charx_inner(PathBuf::from(path), card, assets).map_err(command_error)
+    export_charx_inner(
+        PathBuf::from(path),
+        card,
+        assets,
+        source_charx_path.map(PathBuf::from),
+    )
+    .map_err(command_error)
 }
 
 #[tauri::command]
@@ -179,9 +186,10 @@ fn export_charx_inner(
     path: PathBuf,
     card: CharacterCardV3,
     assets: Vec<CharxAssetInput>,
+    source_charx_path: Option<PathBuf>,
 ) -> CardResult<ParsedCard> {
     let card = prepare_export_card(card)?;
-    export_charx_file(&path, &card, &assets)?;
+    export_charx_file(&path, &card, &assets, source_charx_path.as_deref())?;
     Ok(parsed(card, Vec::new(), "charx".to_string(), None))
 }
 

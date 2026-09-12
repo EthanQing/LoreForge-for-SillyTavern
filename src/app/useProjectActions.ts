@@ -212,14 +212,15 @@ export function useProjectActions() {
       }
 
       if (isCharxPath(path)) {
-        const parsed = await exportCharx(path, cardToSave, []);
+        const sourceCharxPath = isCharxPath(currentPath) ? currentPath : null;
+        const parsed = await exportCharx(path, cardToSave, [], sourceCharxPath);
         markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, cardToSave), path);
         return;
       }
 
       await savePngToPath(defaultToPngPath(path), null, cardToSave);
     },
-    [card, markSaved, savePngToPath]
+    [card, currentPath, markSaved, savePngToPath]
   );
 
   const saveCardSnapshot = useCallback(async (cardToSave: CharacterCardV3, options: SaveCurrentCardOptions = {}): Promise<SaveCardSnapshotResult> => {
@@ -285,12 +286,13 @@ export function useProjectActions() {
       if (!path) {
         return;
       }
-      const parsed = await exportCharx(path, card, []);
+      const sourceCharxPath = isCharxPath(currentPath) ? currentPath : null;
+      const parsed = await exportCharx(path, card, [], sourceCharxPath);
       markSaved(keepEditorAssetsAfterMetadataExport(parsed.card, card), path);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
-  }, [card, markSaved, setStatus]);
+  }, [card, currentPath, markSaved, setStatus]);
 
   const showDraftStatus = useCallback(() => {
     setStatus(t("status.draftAutosaved"));

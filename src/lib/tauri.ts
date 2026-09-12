@@ -111,9 +111,10 @@ export async function importCardPng(path: string): Promise<ParsedCard> {
 export async function exportCharx(
   path: string,
   card: CharacterCardV3,
-  assets: CharxAssetInput[] = []
+  assets: CharxAssetInput[] = [],
+  sourceCharxPath: string | null = null
 ): Promise<ParsedCard> {
-  return await invoke<ParsedCard>("export_charx", { path, card, assets });
+  return await invoke<ParsedCard>("export_charx", { path, card, assets, sourceCharxPath });
 }
 
 export async function importCharx(path: string): Promise<ParsedCard> {

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
+use tempfile::NamedTempFile;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -18,22 +19,50 @@ pub fn export_charx_file(
     path: &Path,
     card: &CharacterCardV3,
     assets: &[CharxAssetInput],
+    source_charx_path: Option<&Path>,
 ) -> CardResult<()> {
-    let file = File::create(path)?;
-    let mut zip = ZipWriter::new(file);
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut temp_file = NamedTempFile::new_in(parent)?;
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
-    zip.start_file("card.json", options)?;
-    zip.write_all(serde_json::to_string_pretty(card)?.as_bytes())?;
+    {
+        let mut zip = ZipWriter::new(temp_file.as_file_mut());
+        zip.start_file("card.json", options)?;
+        zip.write_all(serde_json::to_string_pretty(card)?.as_bytes())?;
 
-    for asset in assets {
-        validate_asset_path(&asset.target_path)?;
-        zip.start_file(asset.target_path.as_str(), options)?;
-        let mut source = File::open(&asset.source_path)?;
-        std::io::copy(&mut source, &mut zip)?;
+        if let Some(source_path) = source_charx_path {
+            let source_file = File::open(source_path)?;
+            let mut source_archive = ZipArchive::new(source_file)?;
+            for index in 0..source_archive.len() {
+                let source_entry = source_archive.by_index(index)?;
+                if source_entry.name() != "card.json" {
+                    zip.raw_copy_file(source_entry)?;
+                }
+            }
+        }
+
+        for asset in assets {
+            validate_asset_path(&asset.target_path)?;
+            if asset.target_path == "card.json" {
+                return Err(CardError::Invalid(
+                    "CHARX assets cannot replace card.json.".to_string(),
+                ));
+            }
+            zip.start_file(asset.target_path.as_str(), options)?;
+            let mut source = File::open(&asset.source_path)?;
+            std::io::copy(&mut source, &mut zip)?;
+        }
+
+        zip.finish()?;
     }
 
-    zip.finish()?;
+    temp_file.as_file().sync_all()?;
+    temp_file
+        .persist(path)
+        .map_err(|error| CardError::Io(error.error))?;
     Ok(())
 }
 
@@ -104,10 +133,118 @@ mod tests {
         let path = dir.path().join("card.charx");
         let card = CharacterCardV3::blank(100);
 
-        export_charx_file(&path, &card, &[]).unwrap();
+        export_charx_file(&path, &card, &[], None).unwrap();
         let (parsed, _, assets) = import_charx_file(&path).unwrap();
 
         assert_eq!(parsed.spec, "chara_card_v3");
         assert!(assets.is_empty());
+    }
+
+    fn create_source_archive(dir: &Path) -> (std::path::PathBuf, Vec<u8>) {
+        let path = dir.join("source.charx");
+        let asset_path = dir.join("example.png");
+        let asset_bytes = vec![0, 1, 2, 3, 255, 128, 64];
+        std::fs::write(&asset_path, &asset_bytes).unwrap();
+        let card = CharacterCardV3::blank(100);
+        export_charx_file(
+            &path,
+            &card,
+            &[CharxAssetInput {
+                source_path: asset_path.to_string_lossy().into_owned(),
+                target_path: "assets/example.png".to_string(),
+            }],
+            None,
+        )
+        .unwrap();
+        (path, asset_bytes)
+    }
+
+    fn assert_archive_contents(path: &Path, expected_name: &str, expected_asset: &[u8]) {
+        let file = File::open(path).unwrap();
+        let mut archive = ZipArchive::new(file).unwrap();
+        let mut card_json = String::new();
+        archive
+            .by_name("card.json")
+            .unwrap()
+            .read_to_string(&mut card_json)
+            .unwrap();
+        let card: CharacterCardV3 = serde_json::from_str(&card_json).unwrap();
+        assert_eq!(card.data.name, expected_name);
+
+        let mut asset = Vec::new();
+        archive
+            .by_name("assets/example.png")
+            .unwrap()
+            .read_to_end(&mut asset)
+            .unwrap();
+        assert_eq!(asset, expected_asset);
+    }
+
+    #[test]
+    fn save_as_preserves_source_assets() {
+        let dir = tempdir().unwrap();
+        let (source_path, asset_bytes) = create_source_archive(dir.path());
+        let target_path = dir.path().join("target.charx");
+        let mut card = CharacterCardV3::blank(200);
+        card.data.name = "Updated".to_string();
+
+        export_charx_file(&target_path, &card, &[], Some(&source_path)).unwrap();
+
+        assert_archive_contents(&target_path, "Updated", &asset_bytes);
+    }
+
+    #[test]
+    fn overwrite_preserves_source_assets() {
+        let dir = tempdir().unwrap();
+        let (path, asset_bytes) = create_source_archive(dir.path());
+        let mut card = CharacterCardV3::blank(200);
+        card.data.name = "Updated in place".to_string();
+
+        export_charx_file(&path, &card, &[], Some(&path)).unwrap();
+
+        assert_archive_contents(&path, "Updated in place", &asset_bytes);
+    }
+
+    #[test]
+    fn failed_overwrite_preserves_original_archive() {
+        let dir = tempdir().unwrap();
+        let (path, _) = create_source_archive(dir.path());
+        let original = std::fs::read(&path).unwrap();
+        let missing_path = dir.path().join("missing.png");
+        let card = CharacterCardV3::blank(200);
+
+        let result = export_charx_file(
+            &path,
+            &card,
+            &[CharxAssetInput {
+                source_path: missing_path.to_string_lossy().into_owned(),
+                target_path: "assets/missing.png".to_string(),
+            }],
+            Some(&path),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
+
+    #[test]
+    fn rejects_asset_that_replaces_card_json() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("card.charx");
+        let asset_path = dir.path().join("asset.json");
+        std::fs::write(&asset_path, b"{}").unwrap();
+
+        let result = export_charx_file(
+            &path,
+            &CharacterCardV3::blank(100),
+            &[CharxAssetInput {
+                source_path: asset_path.to_string_lossy().into_owned(),
+                target_path: "card.json".to_string(),
+            }],
+            None,
+        );
+
+        assert!(matches!(result, Err(CardError::Invalid(_))));
+        assert!(!path.exists());
     }
 }
