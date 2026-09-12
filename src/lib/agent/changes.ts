@@ -255,8 +255,7 @@ function integerBetween(value: number, minimum: number, maximum: number, label: 
 }
 
 function formatDiffValue(value: unknown): string {
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  return text.length > 700 ? `${text.slice(0, 700)}…` : text;
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function clone<T>(value: T): T {

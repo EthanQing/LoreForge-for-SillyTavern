@@ -1,10 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { createBlankCard } from "../schema";
-import { applyAgentChanges } from "./changes";
+import { applyAgentChanges, buildAgentDiff } from "./changes";
 import { permissionForLorebookEntry, permissionForPreset } from "./permissions";
 import { stableHash } from "./projection";
 
 describe("agent semantic changes", () => {
+  it("preserves complete before and after values when a long field changes only at the end", () => {
+    const before = createBlankCard();
+    const prefix = "第一行\n".repeat(200);
+    before.data.description = `${prefix}原始结尾`;
+    const after = structuredClone(before);
+    after.data.description = `${prefix}修改后的结尾`;
+
+    expect(buildAgentDiff(before, after)).toEqual([{
+      path: "/description",
+      label: "description",
+      before: before.data.description,
+      after: after.data.description
+    }]);
+  });
+
   it("injects selected candidates atomically with SillyTavern extensions", () => {
     const card = createBlankCard();
     const candidates = [

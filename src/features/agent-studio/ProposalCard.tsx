@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import { Button } from "../../components/Button";
-import { estimateCandidateTokens, validateCandidate, type LorebookCandidate } from "../../lib/agent/changes";
+import { estimateCandidateTokens, validateCandidate, type AgentDiff, type LorebookCandidate } from "../../lib/agent/changes";
 import type { CardProposal } from "../../lib/agent/contracts";
 import { getProposalSummary } from "../../lib/agent/proposalPresentation";
 
@@ -26,9 +26,52 @@ export function ProposalCard({ proposal, disabled, onApply, onDiscard, onToggleC
         disabled={disabled || proposal.state !== "pending"}
         onCheckedChange={(checked) => onToggleCandidate(candidate.candidateId, checked)}
       />)}
-    </div> : <div className="agent-proposal-diffs">{proposal.diffs.slice(0, 4).map((diff) => <div key={diff.path}><code>{diff.path}</code><span>{diff.after}</span></div>)}</div>}
+    </div> : <ProposalDiffs diffs={proposal.diffs} />}
     {proposal.state === "conflicted" ? <p className="agent-danger">当前卡片已被修改，请重新读取后生成提案。</p> : null}
     <div className="agent-proposal-actions"><Button variant="ghost" disabled={disabled} onClick={onDiscard}>丢弃</Button>{proposal.state === "pending" ? <Button disabled={disabled || (candidates.length > 0 && selectedCount === 0)} icon={<Check size={14} />} onClick={onApply}>{candidates.length ? `确认注入所选（${selectedCount}）` : "确认应用"}</Button> : null}</div>
+  </article>;
+}
+
+const DIFF_LABELS: Record<string, string> = {
+  "/name": "名称",
+  "/description": "角色描述",
+  "/personality": "性格",
+  "/scenario": "场景",
+  "/firstMessage": "首条开场白",
+  "/alternateGreetings": "备用开场白",
+  "/exampleDialogue": "示例对话",
+  "/creatorNotes": "创作者备注",
+  "/systemPrompt": "系统提示词",
+  "/postHistoryInstructions": "历史消息指令",
+  "/tags": "标签",
+  "/creator": "创作者",
+  "/characterVersion": "角色版本",
+  "/worldBook": "世界书"
+};
+
+function ProposalDiffs({ diffs }: { diffs: AgentDiff[] }) {
+  const visibleDiffs = diffs.slice(0, 2);
+  const remainingDiffs = diffs.slice(2);
+  return <section className="agent-proposal-diffs" aria-label={`共 ${diffs.length} 处修改`}>
+    <p className="agent-proposal-diff-count">共 {diffs.length} 处修改</p>
+    {visibleDiffs.map((diff) => <ProposalDiffRow key={diff.path} diff={diff} />)}
+    {remainingDiffs.length ? <details className="agent-proposal-diff-details">
+      <summary><span className="agent-proposal-diff-expand">展开其余 {remainingDiffs.length} 项</span><span className="agent-proposal-diff-collapse">收起</span></summary>
+      <div className="agent-proposal-diff-remainder">
+        {remainingDiffs.map((diff) => <ProposalDiffRow key={diff.path} diff={diff} />)}
+      </div>
+    </details> : null}
+  </section>;
+}
+
+function ProposalDiffRow({ diff }: { diff: AgentDiff }) {
+  const label = DIFF_LABELS[diff.path] ?? (diff.label || diff.path);
+  return <article className="agent-proposal-diff-row">
+    <header className="agent-proposal-diff-heading"><strong>{label}</strong><code>{diff.path}</code></header>
+    <div className="agent-proposal-diff-values">
+      <div><span>修改前</span><pre className={diff.before === "" ? "is-empty" : undefined} tabIndex={0} aria-label={`${label}修改前`}>{diff.before === "" ? "（空值）" : diff.before}</pre></div>
+      <div><span>修改后</span><pre className={diff.after === "" ? "is-empty" : undefined} tabIndex={0} aria-label={`${label}修改后`}>{diff.after === "" ? "（空值）" : diff.after}</pre></div>
+    </div>
   </article>;
 }
 
