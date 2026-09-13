@@ -73,6 +73,29 @@ const RAW_FIELD_BY_PATH: Record<CardFieldPath, keyof CharacterCardV3["data"]> = 
   "/characterVersion": "character_version"
 };
 
+type LorebookDiffField = keyof LorebookEntryFields;
+
+const LOREBOOK_DIFF_FIELD_LABELS: Record<LorebookDiffField, string> = {
+  comment: "标题",
+  keys: "关键词",
+  secondaryKeys: "次要关键词",
+  content: "正文",
+  enabled: "启用状态",
+  useRegex: "正则匹配",
+  selective: "选择性匹配",
+  triggerStrategy: "触发策略",
+  insertionPosition: "插入位置",
+  role: "角色",
+  depth: "深度",
+  insertionOrder: "插入顺序",
+  probability: "概率",
+  priority: "优先级",
+  caseSensitive: "区分大小写",
+  outletName: "出口名称"
+};
+
+const LOREBOOK_DIFF_FIELDS = Object.keys(LOREBOOK_DIFF_FIELD_LABELS) as LorebookDiffField[];
+
 export function applyAgentChanges(
   card: CharacterCardV3,
   changes: AgentChange[],
@@ -103,13 +126,38 @@ export function buildAgentDiff(before: CharacterCardV3, after: CharacterCardV3):
       diffs.push({ path, label: path.slice(1), before: formatDiffValue(beforeValue), after: formatDiffValue(afterValue) });
     }
   }
-  if (stableHash(beforeProjection.lorebook) !== stableHash(afterProjection.lorebook)) {
-    diffs.push({
-      path: "/worldBook",
-      label: "World Book",
-      before: `${beforeProjection.lorebook.entries.length} 个条目`,
-      after: `${afterProjection.lorebook.entries.length} 个条目`
-    });
+  const worldbookChanged = stableHash(beforeProjection.lorebook) !== stableHash(afterProjection.lorebook)
+    || stableHash(before.data.character_book ?? null) !== stableHash(after.data.character_book ?? null);
+  if (worldbookChanged) {
+    const lorebookDiffs: AgentDiff[] = [];
+    if (beforeProjection.lorebook.entries.length === afterProjection.lorebook.entries.length) {
+      beforeProjection.lorebook.entries.forEach((beforeEntry, index) => {
+        const afterEntry = afterProjection.lorebook.entries[index];
+        const entryName = afterEntry.comment.trim() || `条目 ${index + 1}`;
+        for (const field of LOREBOOK_DIFF_FIELDS) {
+          const beforeValue = beforeEntry[field];
+          const afterValue = afterEntry[field];
+          if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+            lorebookDiffs.push({
+              path: `/worldBook/entries/${index}/${field}`,
+              label: `世界书「${entryName}」· ${LOREBOOK_DIFF_FIELD_LABELS[field]}`,
+              before: formatDiffValue(beforeValue),
+              after: formatDiffValue(afterValue)
+            });
+          }
+        }
+      });
+    }
+    if (lorebookDiffs.length > 0) {
+      diffs.push(...lorebookDiffs);
+    } else {
+      diffs.push({
+        path: "/worldBook",
+        label: "World Book",
+        before: `${beforeProjection.lorebook.entries.length} 个条目`,
+        after: `${afterProjection.lorebook.entries.length} 个条目`
+      });
+    }
   }
   return diffs;
 }
@@ -255,6 +303,7 @@ function integerBetween(value: number, minimum: number, maximum: number, label: 
 }
 
 function formatDiffValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 

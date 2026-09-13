@@ -58,6 +58,19 @@ describe("semantic card proposals", () => {
       changes: [{ kind: "lorebookEntryEdit", edit: { index: 1, fingerprint: getLorebookEntryFingerprint(entries[1], 1), fields: { content: "大阪新内容" } } }], card, cardRevision: 0
     });
 
+    expect(first.diffs).toEqual([{
+      path: "/worldBook/entries/0/content",
+      label: "世界书「东京」· 正文",
+      before: "旧内容",
+      after: "东京新内容"
+    }]);
+    expect(second.diffs).toEqual([{
+      path: "/worldBook/entries/1/content",
+      label: "世界书「大阪」· 正文",
+      before: "旧内容",
+      after: "大阪新内容"
+    }]);
+
     const firstResult = applyCardProposal(first, card, 0);
     expect(firstResult.state).toBe("applied");
     if (firstResult.state !== "applied") return;

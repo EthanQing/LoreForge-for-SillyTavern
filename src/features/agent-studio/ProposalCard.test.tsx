@@ -46,6 +46,17 @@ describe("ProposalCard", () => {
     }
   });
 
+  it("uses the supplied label for a dynamic lorebook field path", () => {
+    const markup = renderProposal([
+      { path: "/worldBook/entries/0/probability", label: "世界书「王都」· 概率", before: "", after: "80" }
+    ]);
+
+    expect(markup).toContain("世界书「王都」· 概率");
+    expect(markup).toContain("/worldBook/entries/0/probability");
+    expect(markup).toContain("（空值）");
+    expect(markup).toContain(">80</pre>");
+  });
+
   it("marks empty values clearly in both directions", () => {
     const markup = renderProposal([
       { path: "/description", label: "description", before: "", after: "新增内容" },
