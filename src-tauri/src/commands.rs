@@ -8,7 +8,9 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use serde_json::Value;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 #[tauri::command]
 pub fn open_card_file(path: String) -> Result<ParsedCard, String> {
@@ -97,8 +99,26 @@ fn import_json(path: &Path) -> CardResult<ParsedCard> {
 
 fn save_card_json_inner(path: PathBuf, card: CharacterCardV3) -> CardResult<ParsedCard> {
     let card = prepare_export_card(card)?;
-    fs::write(&path, serde_json::to_string_pretty(&card)?)?;
+    let json = serde_json::to_string_pretty(&card)?;
+    write_card_json_atomically(&path, |file| file.write_all(json.as_bytes()))?;
     Ok(parsed(card, Vec::new(), "v3".to_string(), None))
+}
+
+fn write_card_json_atomically(
+    path: &Path,
+    write_json: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
+) -> CardResult<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut temp_file = NamedTempFile::new_in(parent)?;
+    write_json(temp_file.as_file_mut())?;
+    temp_file.as_file().sync_all()?;
+    temp_file
+        .persist(path)
+        .map_err(|error| CardError::Io(error.error))?;
+    Ok(())
 }
 
 fn export_lorebook_json_inner(path: PathBuf, book: Value) -> CardResult<()> {
@@ -233,14 +253,91 @@ fn extension(path: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{export_card_png_inner, export_lorebook_json_inner};
-    use crate::card_schema::CharacterCardV3;
+    use super::{export_card_png_inner, export_lorebook_json_inner, save_card_json_inner, write_card_json_atomically};
+    use crate::card_schema::{CardAsset, CharacterCardV3};
+    use crate::errors::CardError;
     use crate::png_card::text_chunks;
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use serde_json::{json, Value};
+    use std::io::Write;
 
     const ONE_PIXEL_PNG_DATA_URL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+    #[test]
+    fn creates_a_complete_card_json_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("card.json");
+        let mut card = CharacterCardV3::blank(1);
+        card.data.name = "Aster".to_string();
+
+        let saved = save_card_json_inner(path.clone(), card).unwrap();
+
+        let bytes = std::fs::read(path).unwrap();
+        let value: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(value["data"]["name"], "Aster");
+        assert_eq!(bytes, serde_json::to_vec_pretty(&saved.card).unwrap());
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn replaces_an_existing_card_json_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("card.json");
+        let mut card = CharacterCardV3::blank(1);
+        card.data.name = "Old".to_string();
+        std::fs::write(&path, serde_json::to_vec_pretty(&card).unwrap()).unwrap();
+        card.data.name = "New".to_string();
+
+        save_card_json_inner(path.clone(), card).unwrap();
+
+        let value: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(value["data"]["name"], "New");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_temporary_json_write_preserves_the_original_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("card.json");
+        let original = serde_json::to_vec_pretty(&CharacterCardV3::blank(1)).unwrap();
+        std::fs::write(&path, &original).unwrap();
+
+        let result = write_card_json_atomically(&path, |file| {
+            file.write_all(b"{\"data\":")?;
+            Err(std::io::Error::other("simulated write failure"))
+        });
+
+        assert!(matches!(result, Err(CardError::Io(_))));
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn rejects_invalid_card_json_before_creating_a_temporary_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("card.json");
+        let original = serde_json::to_vec_pretty(&CharacterCardV3::blank(1)).unwrap();
+        std::fs::write(&path, &original).unwrap();
+        let mut card = CharacterCardV3::blank(1);
+        card.data.assets = Some(vec![CardAsset {
+            r#type: "icon".to_string(),
+            uri: "ccdefault:".to_string(),
+            name: "side".to_string(),
+            ext: "png".to_string(),
+            extra: Default::default(),
+        }]);
+
+        let result = save_card_json_inner(path.clone(), card.clone());
+        assert!(matches!(result, Err(CardError::Invalid(_))));
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+
+        let missing_parent = directory.path().join("missing");
+        let result = save_card_json_inner(missing_parent.join("card.json"), card);
+        assert!(matches!(result, Err(CardError::Invalid(_))));
+        assert!(!missing_parent.exists());
+    }
 
     #[test]
     fn exports_a_sillytavern_world_info_file() {
