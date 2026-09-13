@@ -12,7 +12,8 @@ import { buildCardTokenStats } from "../../lib/tokenStats";
 import { toAiConnectionProfile } from "../../lib/ai";
 import { applyCardProposal, type CardProposal } from "../../lib/agent/contracts";
 import { CardAgentController, type AgentControllerEvent } from "../../lib/agent/controller";
-import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser } from "../../lib/agent/conversationActions";
+import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser, saveRollbackCard } from "../../lib/agent/conversationActions";
+import { getAppliedProposalSaveStatus } from "../../lib/agent/proposalPresentation";
 import { buildAgentTranscript, formatAgentToolContent, readAgentMessageContent, type AgentTranscriptTool, type AgentTranscriptTurn } from "../../lib/agent/transcript";
 import type { CharacterCardV3, ValidationIssue, ValidationReport } from "../../lib/schema";
 import { useI18n } from "../../lib/i18n";
@@ -382,9 +383,10 @@ export function AgentStudio(): ReactNode {
     applyAgentCard(outcome.card, "已应用 Agent 提案，等待保存。");
     const appliedProposal = { ...proposal, rollbackCard: cloneValue(current.card), state: "applied" as const, saveState: "not-needed" as const, updatedAt: Date.now() };
     setProposals((items) => items.map((item) => item.id === proposal.id ? appliedProposal : item));
-    const saveState = await saveCardSnapshot(outcome.card, { promptIfUnbound: false, savedStatus: "Agent 提案已应用。" });
-    const savedProposal = { ...appliedProposal, saveState, updatedAt: Date.now() };
+    const saveResult = await saveCardSnapshot(outcome.card, { promptIfUnbound: false });
+    const savedProposal = { ...appliedProposal, saveState: saveResult.state, updatedAt: Date.now() };
     setProposals((items) => items.map((item) => item.id === proposal.id ? savedProposal : item));
+    setStatus(getAppliedProposalSaveStatus(saveResult));
     void persistAgentProposal(savedProposal);
   }, [applyAgentCard, conversationOperation, saveCardSnapshot, setStatus]);
 
@@ -436,12 +438,7 @@ export function AgentStudio(): ReactNode {
         throw new Error("上一轮 Agent 提案缺少回退快照，无法安全重新生成。");
       }
       const rollbackCard = cloneValue(firstApplied.rollbackCard);
-      applyAgentCard(rollbackCard, "正在回退上一轮 Agent 应用。");
-      const saveState = await saveCardSnapshot(rollbackCard, { promptIfUnbound: false, savedStatus: "已回退上一轮 Agent 应用。" });
-      if (saveState === "failed") {
-        applyAgentCard(originalCard, "回退保存失败，已恢复重新生成前的卡片状态。");
-        throw new Error("上一轮 Agent 应用已回退到内存，但保存回退结果失败，已停止重新生成。");
-      }
+      await saveRollbackCard(rollbackCard, originalCard, applyAgentCard, saveCardSnapshot);
     }
 
     const discardedProposals = relatedProposals.map((proposal) => ({ ...proposal, state: "discarded" as const, updatedAt: Date.now() }));

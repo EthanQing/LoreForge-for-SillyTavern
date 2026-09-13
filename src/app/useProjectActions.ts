@@ -74,7 +74,10 @@ interface SaveCurrentCardOptions {
   unboundStatus?: string;
 }
 
-export type SaveCardSnapshotResult = "saved" | "draft-only" | "failed";
+export type SaveCardSnapshotResult =
+  | { state: "saved" }
+  | { state: "draft-only" }
+  | { state: "failed"; error: string };
 
 export function useProjectActions() {
   const { t } = useI18n();
@@ -230,7 +233,7 @@ export function useProjectActions() {
         if (options.savedStatus) {
           setStatus(options.savedStatus);
         }
-        return "saved";
+        return { state: "saved" };
       }
 
       if (isPngPath(currentPath)) {
@@ -238,26 +241,27 @@ export function useProjectActions() {
         if (options.savedStatus) {
           setStatus(options.savedStatus);
         }
-        return "saved";
+        return { state: "saved" };
       }
 
       if (options.promptIfUnbound === false) {
         setStatus(options.unboundStatus ?? t("status.draftAutosaved"));
-        return "draft-only";
+        return { state: "draft-only" };
       }
 
       const path = await pickCardSavePath();
       if (!path) {
-        return "draft-only";
+        return { state: "draft-only" };
       }
       await saveToPath(path, undefined, cardToSave);
       if (options.savedStatus) {
         setStatus(options.savedStatus);
       }
-      return "saved";
+      return { state: "saved" };
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-      return "failed";
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus(message);
+      return { state: "failed", error: message };
     }
   }, [card, currentPath, saveToPath, setStatus, t]);
 

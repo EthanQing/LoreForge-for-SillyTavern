@@ -1,4 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { SaveCardSnapshotResult } from "../../app/useProjectActions";
+import type { CharacterCardV3 } from "../schema";
 
 interface MessageRecord {
   role?: string;
@@ -63,6 +65,23 @@ export function getLatestTurnToolCallIds(messages: readonly AgentMessage[]): str
     });
   });
   return [...ids];
+}
+
+export async function saveRollbackCard(
+  rollbackCard: CharacterCardV3,
+  originalCard: CharacterCardV3,
+  applyAgentCard: (card: CharacterCardV3, status: string) => void,
+  saveCardSnapshot: (
+    card: CharacterCardV3,
+    options: { promptIfUnbound: false; savedStatus: string }
+  ) => Promise<SaveCardSnapshotResult>
+): Promise<void> {
+  applyAgentCard(rollbackCard, "正在回退上一轮 Agent 应用。");
+  const saveResult = await saveCardSnapshot(rollbackCard, { promptIfUnbound: false, savedStatus: "已回退上一轮 Agent 应用。" });
+  if (saveResult.state === "failed") {
+    applyAgentCard(originalCard, "回退保存失败，已恢复重新生成前的卡片状态。");
+    throw new Error(`保存回退结果失败，已恢复操作前的卡片状态，已停止重新生成或重发：${saveResult.error}`);
+  }
 }
 
 function toMessageRecord(message: AgentMessage | undefined): MessageRecord {

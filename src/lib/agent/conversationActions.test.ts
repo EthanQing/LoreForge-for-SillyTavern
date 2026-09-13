@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser } from "./conversationActions";
+import { createBlankCard } from "../schema";
+import { getConversationActionTarget, getLatestTurnToolCallIds, getMessagesBeforeLastUser, saveRollbackCard } from "./conversationActions";
 
 function messages(value: unknown[]): AgentMessage[] {
   return value as AgentMessage[];
@@ -50,5 +51,42 @@ describe("conversation actions", () => {
     const input = messages([{ role: "user", content: "正在生成", timestamp: 1 }]);
 
     expect(getConversationActionTarget(input, { role: "assistant", content: [], timestamp: 2 } as unknown as AgentMessage).canRegenerate).toBe(true);
+  });
+
+  it.each(["saved", "draft-only"] as const)("keeps a %s rollback result", async (state) => {
+    const rollbackCard = createBlankCard();
+    rollbackCard.data.name = "Before Agent";
+    const originalCard = createBlankCard();
+    originalCard.data.name = "After Agent";
+    const applyAgentCard = vi.fn();
+    const saveCardSnapshot = vi.fn().mockResolvedValue({ state });
+
+    await saveRollbackCard(rollbackCard, originalCard, applyAgentCard, saveCardSnapshot);
+
+    expect(applyAgentCard).toHaveBeenCalledTimes(1);
+    expect(applyAgentCard).toHaveBeenCalledWith(rollbackCard, "正在回退上一轮 Agent 应用。");
+    expect(saveCardSnapshot).toHaveBeenCalledWith(rollbackCard, {
+      promptIfUnbound: false,
+      savedStatus: "已回退上一轮 Agent 应用。"
+    });
+  });
+
+  it("restores the original card and reports the file error when rollback saving fails", async () => {
+    const rollbackCard = createBlankCard();
+    rollbackCard.data.name = "Before Agent";
+    const originalCard = createBlankCard();
+    originalCard.data.name = "After Agent";
+    const applyAgentCard = vi.fn();
+    const saveCardSnapshot = vi.fn().mockResolvedValue({ state: "failed", error: "Access denied" });
+
+    await expect(saveRollbackCard(rollbackCard, originalCard, applyAgentCard, saveCardSnapshot))
+      .rejects.toThrow("保存回退结果失败，已恢复操作前的卡片状态，已停止重新生成或重发：Access denied");
+    expect(applyAgentCard).toHaveBeenNthCalledWith(1, rollbackCard, "正在回退上一轮 Agent 应用。");
+    expect(applyAgentCard).toHaveBeenNthCalledWith(2, originalCard, "回退保存失败，已恢复重新生成前的卡片状态。");
+    expect(saveCardSnapshot).toHaveBeenCalledTimes(1);
+    expect(saveCardSnapshot).toHaveBeenCalledWith(rollbackCard, {
+      promptIfUnbound: false,
+      savedStatus: "已回退上一轮 Agent 应用。"
+    });
   });
 });
